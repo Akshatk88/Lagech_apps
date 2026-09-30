@@ -1138,36 +1138,6 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           ),
           Divider(height: 1, color: isDark ? AppColors.borderDark : const Color(0xFFF3F4F6)),
 
-          // 2. Delivery fleet row
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.two_wheeler_rounded,
-                  size: 20,
-                  color: Color(0xFF1E1E1E),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Text(
-                    'Choose delivery fleet type',
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF1E1E1E),
-                    ),
-                  ),
-                ),
-                const Icon(
-                  Icons.keyboard_arrow_down_rounded,
-                  color: Color(0xFF6B7280),
-                  size: 22,
-                ),
-              ],
-            ),
-          ),
-          Divider(height: 1, color: isDark ? AppColors.borderDark : const Color(0xFFF3F4F6)),
 
           // 3. Delivery address row
           InkWell(

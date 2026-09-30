@@ -165,33 +165,75 @@ class _CategoryDetailsScreenState extends ConsumerState<CategoryDetailsScreen> {
 
   String _getCategoryFallbackImage(String name) {
     final n = name.toLowerCase();
-    if (n.contains('biryani')) {
+    if (n.contains('biryani') || n.contains('pulao') || n.contains('rice')) {
       return 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=300&auto=format&fit=crop';
     }
     if (n.contains('pizza')) {
       return 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=300&auto=format&fit=crop';
     }
-    if (n.contains('north') || n.contains('thali')) {
-      return 'https://images.unsplash.com/photo-1610192244261-3f33de3f55e4?w=300&auto=format&fit=crop';
-    }
     if (n.contains('burger')) {
       return 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=300&auto=format&fit=crop';
     }
-    if (n.contains('south') || n.contains('dosa')) {
-      return 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=300&auto=format&fit=crop';
-    }
-    if (n.contains('cake') || n.contains('dessert')) {
-      return 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=300&auto=format&fit=crop';
-    }
-    if (n.contains('sandwich')) {
+    if (n.contains('sandwich') || n.contains('toast') || n.contains('sub')) {
       return 'https://images.unsplash.com/photo-1528735602780-2552fd46c7af?w=300&auto=format&fit=crop';
     }
-    return 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=300&auto=format&fit=crop';
+    if (n.contains('chinese') || n.contains('noodle') || n.contains('chowmein') || n.contains('manchurian') || n.contains('fried rice')) {
+      return 'https://images.unsplash.com/photo-1585032226651-759b368d7246?w=300&auto=format&fit=crop';
+    }
+    if (n.contains('roll') || n.contains('shawarma') || n.contains('wrap') || n.contains('kathi') || n.contains('frankie')) {
+      return 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=300&auto=format&fit=crop';
+    }
+    if (n.contains('momo') || n.contains('dimsum') || n.contains('dumpling')) {
+      return 'https://images.unsplash.com/photo-1625246333195-78d9c38ad449?w=300&auto=format&fit=crop';
+    }
+    if (n.contains('north') || n.contains('thali') || n.contains('paneer') || n.contains('curry') || n.contains('dal') || n.contains('sabzi')) {
+      return 'https://images.unsplash.com/photo-1610192244261-3f33de3f55e4?w=300&auto=format&fit=crop';
+    }
+    if (n.contains('south') || n.contains('dosa') || n.contains('idli') || n.contains('vada') || n.contains('sambar') || n.contains('uttapam')) {
+      return 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=300&auto=format&fit=crop';
+    }
+    if (n.contains('pasta') || n.contains('spaghetti') || n.contains('macaroni') || n.contains('italian')) {
+      return 'https://images.unsplash.com/photo-1621996346565-e3d5d6281691?w=300&auto=format&fit=crop';
+    }
+    if (n.contains('cake') || n.contains('pastry') || n.contains('bakery') || n.contains('cupcake') || n.contains('muffin')) {
+      return 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=300&auto=format&fit=crop';
+    }
+    if (n.contains('dessert') || n.contains('sweet') || n.contains('mithai') || n.contains('gulab') || n.contains('halwa') || n.contains('jalebi')) {
+      return 'https://images.unsplash.com/photo-1541781774459-bb2af2f05b55?w=300&auto=format&fit=crop';
+    }
+    if (n.contains('ice cream') || n.contains('icecream') || n.contains('sundae') || n.contains('kulfi') || n.contains('gelato')) {
+      return 'https://images.unsplash.com/photo-1501443762994-82bd5dace89a?w=300&auto=format&fit=crop';
+    }
+    if (n.contains('shake') || n.contains('beverage') || n.contains('juice') || n.contains('smoothie') || n.contains('drink') || n.contains('lassi')) {
+      return 'https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=300&auto=format&fit=crop';
+    }
+    if (n.contains('coffee') || n.contains('cafe') || n.contains('latte') || n.contains('cappuccino') || n.contains('espresso')) {
+      return 'https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?w=300&auto=format&fit=crop';
+    }
+    if (n.contains('tea') || n.contains('chai')) {
+      return 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=300&auto=format&fit=crop';
+    }
+    if (n.contains('chaat') || n.contains('pani puri') || n.contains('golgappa') || n.contains('bhel') || n.contains('street food')) {
+      return 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=300&auto=format&fit=crop';
+    }
+    if (n.contains('paratha') || n.contains('roti') || n.contains('naan') || n.contains('kulcha') || n.contains('chole')) {
+      return 'https://images.unsplash.com/photo-1626082927389-6cd097cdc6ec?w=300&auto=format&fit=crop';
+    }
+    if (n.contains('snack') || n.contains('samosa') || n.contains('pakoda') || n.contains('kachori')) {
+      return 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=300&auto=format&fit=crop';
+    }
+    if (n.contains('chicken') || n.contains('non-veg') || n.contains('non veg') || n.contains('kebab') || n.contains('tandoor') || n.contains('tikka') || n.contains('mutton') || n.contains('fish')) {
+      return 'https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?w=300&auto=format&fit=crop';
+    }
+    if (n.contains('healthy') || n.contains('salad') || n.contains('diet') || n.contains('bowl') || n.contains('soup')) {
+      return 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=300&auto=format&fit=crop';
+    }
+    return 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=300&auto=format&fit=crop';
   }
 
   String _getPromoBannerLeftImage(String name) {
     final n = name.toLowerCase();
-    if (n.contains('biryani')) {
+    if (n.contains('biryani') || n.contains('pulao') || n.contains('rice')) {
       return 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=500&auto=format&fit=crop';
     }
     if (n.contains('pizza')) {
@@ -200,18 +242,66 @@ class _CategoryDetailsScreenState extends ConsumerState<CategoryDetailsScreen> {
     if (n.contains('burger')) {
       return 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&auto=format&fit=crop';
     }
-    if (n.contains('sandwich')) {
+    if (n.contains('sandwich') || n.contains('toast') || n.contains('sub')) {
       return 'https://images.unsplash.com/photo-1528735602780-2552fd46c7af?w=500&auto=format&fit=crop';
     }
-    if (n.contains('dosa') || n.contains('south')) {
+    if (n.contains('chinese') || n.contains('noodle') || n.contains('chowmein') || n.contains('manchurian') || n.contains('fried rice')) {
+      return 'https://images.unsplash.com/photo-1585032226651-759b368d7246?w=500&auto=format&fit=crop';
+    }
+    if (n.contains('roll') || n.contains('shawarma') || n.contains('wrap') || n.contains('kathi') || n.contains('frankie')) {
+      return 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=500&auto=format&fit=crop';
+    }
+    if (n.contains('momo') || n.contains('dimsum') || n.contains('dumpling')) {
+      return 'https://images.unsplash.com/photo-1625246333195-78d9c38ad449?w=500&auto=format&fit=crop';
+    }
+    if (n.contains('north') || n.contains('thali') || n.contains('paneer') || n.contains('curry') || n.contains('dal') || n.contains('sabzi')) {
+      return 'https://images.unsplash.com/photo-1610192244261-3f33de3f55e4?w=500&auto=format&fit=crop';
+    }
+    if (n.contains('south') || n.contains('dosa') || n.contains('idli') || n.contains('vada') || n.contains('sambar') || n.contains('uttapam')) {
       return 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=500&auto=format&fit=crop';
     }
-    return 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=500&auto=format&fit=crop';
+    if (n.contains('pasta') || n.contains('spaghetti') || n.contains('macaroni') || n.contains('italian')) {
+      return 'https://images.unsplash.com/photo-1621996346565-e3d5d6281691?w=500&auto=format&fit=crop';
+    }
+    if (n.contains('cake') || n.contains('pastry') || n.contains('bakery') || n.contains('cupcake') || n.contains('muffin')) {
+      return 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=500&auto=format&fit=crop';
+    }
+    if (n.contains('dessert') || n.contains('sweet') || n.contains('mithai') || n.contains('gulab') || n.contains('halwa') || n.contains('jalebi')) {
+      return 'https://images.unsplash.com/photo-1541781774459-bb2af2f05b55?w=500&auto=format&fit=crop';
+    }
+    if (n.contains('ice cream') || n.contains('icecream') || n.contains('sundae') || n.contains('kulfi') || n.contains('gelato')) {
+      return 'https://images.unsplash.com/photo-1501443762994-82bd5dace89a?w=500&auto=format&fit=crop';
+    }
+    if (n.contains('shake') || n.contains('beverage') || n.contains('juice') || n.contains('smoothie') || n.contains('drink') || n.contains('lassi')) {
+      return 'https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=500&auto=format&fit=crop';
+    }
+    if (n.contains('coffee') || n.contains('cafe') || n.contains('latte') || n.contains('cappuccino') || n.contains('espresso')) {
+      return 'https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?w=500&auto=format&fit=crop';
+    }
+    if (n.contains('tea') || n.contains('chai')) {
+      return 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=500&auto=format&fit=crop';
+    }
+    if (n.contains('chaat') || n.contains('pani puri') || n.contains('golgappa') || n.contains('bhel') || n.contains('street food')) {
+      return 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=500&auto=format&fit=crop';
+    }
+    if (n.contains('paratha') || n.contains('roti') || n.contains('naan') || n.contains('kulcha') || n.contains('chole')) {
+      return 'https://images.unsplash.com/photo-1626082927389-6cd097cdc6ec?w=500&auto=format&fit=crop';
+    }
+    if (n.contains('snack') || n.contains('samosa') || n.contains('pakoda') || n.contains('kachori')) {
+      return 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=500&auto=format&fit=crop';
+    }
+    if (n.contains('chicken') || n.contains('non-veg') || n.contains('non veg') || n.contains('kebab') || n.contains('tandoor') || n.contains('tikka') || n.contains('mutton') || n.contains('fish')) {
+      return 'https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?w=500&auto=format&fit=crop';
+    }
+    if (n.contains('healthy') || n.contains('salad') || n.contains('diet') || n.contains('bowl') || n.contains('soup')) {
+      return 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&auto=format&fit=crop';
+    }
+    return 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=500&auto=format&fit=crop';
   }
 
   String _getPromoBannerRightImage(String name) {
     final n = name.toLowerCase();
-    if (n.contains('biryani')) {
+    if (n.contains('biryani') || n.contains('pulao') || n.contains('rice')) {
       return 'https://images.unsplash.com/photo-1589302168068-964664d93dc0?w=500&auto=format&fit=crop';
     }
     if (n.contains('pizza')) {
@@ -220,13 +310,122 @@ class _CategoryDetailsScreenState extends ConsumerState<CategoryDetailsScreen> {
     if (n.contains('burger')) {
       return 'https://images.unsplash.com/photo-1550547660-d9450f859349?w=500&auto=format&fit=crop';
     }
-    if (n.contains('sandwich')) {
+    if (n.contains('sandwich') || n.contains('toast') || n.contains('sub')) {
       return 'https://images.unsplash.com/photo-1621996346565-e3d5d6281691?w=500&auto=format&fit=crop';
     }
-    if (n.contains('dosa') || n.contains('south')) {
+    if (n.contains('chinese') || n.contains('noodle') || n.contains('chowmein') || n.contains('manchurian') || n.contains('fried rice')) {
+      return 'https://images.unsplash.com/photo-1525755662778-989d0524087e?w=500&auto=format&fit=crop';
+    }
+    if (n.contains('roll') || n.contains('shawarma') || n.contains('wrap') || n.contains('kathi') || n.contains('frankie')) {
+      return 'https://images.unsplash.com/photo-1561651823-34feb02250e4?w=500&auto=format&fit=crop';
+    }
+    if (n.contains('momo') || n.contains('dimsum') || n.contains('dumpling')) {
+      return 'https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?w=500&auto=format&fit=crop';
+    }
+    if (n.contains('north') || n.contains('thali') || n.contains('paneer') || n.contains('curry') || n.contains('dal') || n.contains('sabzi')) {
+      return 'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?w=500&auto=format&fit=crop';
+    }
+    if (n.contains('south') || n.contains('dosa') || n.contains('idli') || n.contains('vada') || n.contains('sambar') || n.contains('uttapam')) {
       return 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=500&auto=format&fit=crop';
     }
-    return 'https://images.unsplash.com/photo-1631515243349-e0cb75fb8d3a?w=500&auto=format&fit=crop';
+    if (n.contains('pasta') || n.contains('spaghetti') || n.contains('macaroni') || n.contains('italian')) {
+      return 'https://images.unsplash.com/photo-1551183053-bf91a1d81141?w=500&auto=format&fit=crop';
+    }
+    if (n.contains('cake') || n.contains('pastry') || n.contains('bakery') || n.contains('cupcake') || n.contains('muffin')) {
+      return 'https://images.unsplash.com/photo-1587314168485-3236d6710814?w=500&auto=format&fit=crop';
+    }
+    if (n.contains('dessert') || n.contains('sweet') || n.contains('mithai') || n.contains('gulab') || n.contains('halwa') || n.contains('jalebi')) {
+      return 'https://images.unsplash.com/photo-1589119908995-c6837fa14d48?w=500&auto=format&fit=crop';
+    }
+    if (n.contains('ice cream') || n.contains('icecream') || n.contains('sundae') || n.contains('kulfi') || n.contains('gelato')) {
+      return 'https://images.unsplash.com/photo-1563805042-7684c019e1cb?w=500&auto=format&fit=crop';
+    }
+    if (n.contains('shake') || n.contains('beverage') || n.contains('juice') || n.contains('smoothie') || n.contains('drink') || n.contains('lassi')) {
+      return 'https://images.unsplash.com/photo-1613478223719-2ab802602423?w=500&auto=format&fit=crop';
+    }
+    if (n.contains('coffee') || n.contains('cafe') || n.contains('latte') || n.contains('cappuccino') || n.contains('espresso')) {
+      return 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=500&auto=format&fit=crop';
+    }
+    if (n.contains('tea') || n.contains('chai')) {
+      return 'https://images.unsplash.com/photo-1544787219-7f47ccb76574?w=500&auto=format&fit=crop';
+    }
+    if (n.contains('chaat') || n.contains('pani puri') || n.contains('golgappa') || n.contains('bhel') || n.contains('street food')) {
+      return 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=500&auto=format&fit=crop';
+    }
+    if (n.contains('paratha') || n.contains('roti') || n.contains('naan') || n.contains('kulcha') || n.contains('chole')) {
+      return 'https://images.unsplash.com/photo-1606491956689-2ea866880c84?w=500&auto=format&fit=crop';
+    }
+    if (n.contains('snack') || n.contains('samosa') || n.contains('pakoda') || n.contains('kachori')) {
+      return 'https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?w=500&auto=format&fit=crop';
+    }
+    if (n.contains('chicken') || n.contains('non-veg') || n.contains('non veg') || n.contains('kebab') || n.contains('tandoor') || n.contains('tikka') || n.contains('mutton') || n.contains('fish')) {
+      return 'https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?w=500&auto=format&fit=crop';
+    }
+    if (n.contains('healthy') || n.contains('salad') || n.contains('diet') || n.contains('bowl') || n.contains('soup')) {
+      return 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=500&auto=format&fit=crop';
+    }
+    return 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=500&auto=format&fit=crop';
+  }
+
+  ({List<Color> gradient, Color border, Color titleColor}) _getCategoryBannerColors(String name, bool isDark) {
+    if (isDark) {
+      return (
+        gradient: [const Color(0xFF1E293B), const Color(0xFF0F172A)],
+        border: const Color(0xFF334155),
+        titleColor: const Color(0xFF93C5FD),
+      );
+    }
+
+    final n = name.toLowerCase();
+    if (n.contains('pizza') || n.contains('burger') || n.contains('fast food') || n.contains('snack')) {
+      return (
+        gradient: [const Color(0xFFFFF1F2), const Color(0xFFFFE4E6)],
+        border: const Color(0xFFFECDD3),
+        titleColor: const Color(0xFF9F1239),
+      );
+    }
+    if (n.contains('biryani') || n.contains('chicken') || n.contains('non-veg') || n.contains('kebab') || n.contains('tandoor')) {
+      return (
+        gradient: [const Color(0xFFFFFBEB), const Color(0xFFFEF3C7)],
+        border: const Color(0xFFFDE68A),
+        titleColor: const Color(0xFF92400E),
+      );
+    }
+    if (n.contains('chinese') || n.contains('noodle') || n.contains('momo') || n.contains('chowmein')) {
+      return (
+        gradient: [const Color(0xFFFEF2F2), const Color(0xFFFEE2E2)],
+        border: const Color(0xFFFECACA),
+        titleColor: const Color(0xFFB91C1C),
+      );
+    }
+    if (n.contains('south') || n.contains('dosa') || n.contains('healthy') || n.contains('salad')) {
+      return (
+        gradient: [const Color(0xFFF0FDF4), const Color(0xFFDCFCE7)],
+        border: const Color(0xFFBBF7D0),
+        titleColor: const Color(0xFF166534),
+      );
+    }
+    if (n.contains('dessert') || n.contains('cake') || n.contains('sweet') || n.contains('ice cream') || n.contains('bakery')) {
+      return (
+        gradient: [const Color(0xFFFDF2F8), const Color(0xFFFCE7F3)],
+        border: const Color(0xFFFBCFE8),
+        titleColor: const Color(0xFF9D174D),
+      );
+    }
+    if (n.contains('coffee') || n.contains('tea') || n.contains('chai') || n.contains('beverage') || n.contains('shake')) {
+      return (
+        gradient: [const Color(0xFFFFF7ED), const Color(0xFFFFEDD5)],
+        border: const Color(0xFFFED7AA),
+        titleColor: const Color(0xFF9A3412),
+      );
+    }
+
+    // Default / All
+    return (
+      gradient: [const Color(0xFFFEF3C7).withValues(alpha: 0.55), const Color(0xFFE0F2FE)],
+      border: const Color(0xFFBAE6FD),
+      titleColor: const Color(0xFF1E3A8A),
+    );
   }
 
   List<RestaurantModel> _buildCategoryRecommendedList(List<RestaurantModel> apiRestaurants) {
@@ -833,23 +1032,50 @@ class _CategoryDetailsScreenState extends ConsumerState<CategoryDetailsScreen> {
         ? 'MEALS UNDER ₹250'
         : '${catName.toUpperCase()} UNDER ₹250';
 
-    final leftImg = _getPromoBannerLeftImage(catName);
-    final rightImg = _getPromoBannerRightImage(catName);
+    // 1. Look for actual restaurant dishes in this category first
+    final categoryFoods = ref.watch(categoryFoodsProvider(_selectedCategory)).asData?.value ?? const [];
+    final dishesWithImages = categoryFoods
+        .where((f) => f.imageUrl.trim().isNotEmpty)
+        .map((f) => f.imageUrl.trim())
+        .toList();
+
+    String leftImg = '';
+    String rightImg = '';
+
+    if (dishesWithImages.isNotEmpty) {
+      leftImg = dishesWithImages[0];
+      rightImg = dishesWithImages.length > 1
+          ? dishesWithImages[1]
+          : _getPromoBannerRightImage(catName);
+    }
+
+    // 2. If left image is still empty, check category imageUrl from admin
+    if (leftImg.isEmpty && _selectedCategory.imageUrl.trim().isNotEmpty) {
+      leftImg = _selectedCategory.imageUrl.trim();
+    }
+
+    // 3. Fallback to tailored category images
+    if (leftImg.isEmpty) {
+      leftImg = _getPromoBannerLeftImage(catName);
+    }
+    if (rightImg.isEmpty) {
+      rightImg = _getPromoBannerRightImage(catName);
+    }
+
+    final theme = _getCategoryBannerColors(catName, isDark);
 
     return Container(
       margin: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
       height: 122.h,
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: isDark
-              ? [const Color(0xFF1E293B), const Color(0xFF0F172A)]
-              : [const Color(0xFFFEF3C7).withValues(alpha: 0.55), const Color(0xFFE0F2FE)],
+          colors: theme.gradient,
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16.r),
         border: Border.all(
-          color: isDark ? const Color(0xFF334155) : const Color(0xFFBAE6FD),
+          color: theme.border,
           width: 1,
         ),
         boxShadow: [
@@ -1016,7 +1242,7 @@ class _CategoryDetailsScreenState extends ConsumerState<CategoryDetailsScreen> {
                       style: TextStyle(
                         fontSize: 14.sp,
                         fontWeight: FontWeight.w900,
-                        color: const Color(0xFF1E3A8A),
+                        color: theme.titleColor,
                         letterSpacing: 0.3,
                       ),
                     ),
