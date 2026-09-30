@@ -22,6 +22,8 @@ import 'viewmodels/home_scroll_provider.dart';
 import 'viewmodels/veg_filter_provider.dart';
 import 'widgets/category_list.dart';
 import 'widgets/home_header_banner.dart';
+import 'widgets/location_picker_sheet.dart';
+import 'viewmodels/zone_viewmodel.dart';
 import 'widgets/restaurant_card.dart';
 import 'widgets/explore_more_section.dart';
 import 'widgets/home_filter_chips_row.dart';
@@ -108,6 +110,47 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
+  /// Shown for an address outside every delivery zone.
+  Widget _buildOutOfServiceNotice(BuildContext context, bool isDark) {
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 32.w, vertical: 48.h),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.location_off_rounded,
+            size: 56.sp,
+            color: isDark ? Colors.white38 : const Color(0xFF9CA3AF),
+          ),
+          SizedBox(height: 16.h),
+          Text(
+            "We don't deliver here yet",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 18.sp,
+              fontWeight: FontWeight.w700,
+              color: isDark ? Colors.white : const Color(0xFF111827),
+            ),
+          ),
+          SizedBox(height: 8.h),
+          Text(
+            'Lagech is not available at this address. Choose another address to see restaurants near it.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 13.5.sp,
+              color: isDark ? Colors.white60 : const Color(0xFF6B7280),
+            ),
+          ),
+          SizedBox(height: 20.h),
+          ElevatedButton(
+            onPressed: () => LocationPickerSheet.show(context),
+            child: const Text('Change address'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.listen(homeScrollToTopProvider, (_, _) {
@@ -121,6 +164,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     });
 
     final homeState = ref.watch(homeViewModelProvider);
+    // The backend returns nothing for an address outside every delivery zone;
+    // say so rather than showing empty sections.
+    final outOfService = ref.watch(zoneViewModelProvider).value?.status == 'OUT_OF_SERVICE';
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
@@ -211,6 +257,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       const SliverToBoxAdapter(
                         child: HomeHeaderBanner(),
                       ),
+
+                      if (outOfService)
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: _buildOutOfServiceNotice(context, isDark),
+                        )
+                      else ...[
 
                       // 2. Sticky Pinned Categories Row (Pizza, Burger, Sandwich stays fixed when scrolling)
                       SliverPersistentHeader(
@@ -639,6 +692,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ],
                         ),
                       ),
+                      ],
                     ],
                   ),
                 ),

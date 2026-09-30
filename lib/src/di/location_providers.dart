@@ -169,6 +169,10 @@ final activeLocationProvider =
 /// Where the user is, for anything that only needs coordinates.
 final userLatLngProvider =
     FutureProvider<({double lat, double lng})?>((ref) async {
+  // Recompute when the selected location changes. Read-only, the first fix
+  // stuck for the whole session: picking another address changed the zone but
+  // distances and "nearby" kept using the old place.
+  ref.watch(activeLocationProvider);
   try {
     return await _resolveLatLng(ref).timeout(const Duration(seconds: 6));
   } catch (_) {
