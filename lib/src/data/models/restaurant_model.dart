@@ -528,6 +528,60 @@ class RestaurantModel {
     );
   }
 
+  RestaurantModel copyWith({
+    String? id,
+    String? name,
+    String? imageUrl,
+    List<String>? coverImages,
+    List<String>? menuImages,
+    double? rating,
+    int? reviewCount,
+    String? deliveryTime,
+    double? deliveryFee,
+    List<String>? tags,
+    bool? isFeatured,
+    double? distanceKm,
+    double? priceForOne,
+    String? featuredDishName,
+    bool? isNearAndFast,
+    List<String>? offerBadges,
+    List<String>? restaurantTags,
+    bool? isOpen,
+    String? closingTime,
+    bool? isPureVeg,
+    bool? isFreeDelivery,
+    String? area,
+    double? latitude,
+    double? longitude,
+  }) {
+    return RestaurantModel(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      imageUrl: imageUrl ?? this.imageUrl,
+      coverImages: coverImages ?? this.coverImages,
+      menuImages: menuImages ?? this.menuImages,
+      rating: rating ?? this.rating,
+      reviewCount: reviewCount ?? this.reviewCount,
+      deliveryTime: deliveryTime ?? this.deliveryTime,
+      deliveryFee: deliveryFee ?? this.deliveryFee,
+      tags: tags ?? this.tags,
+      isFeatured: isFeatured ?? this.isFeatured,
+      distanceKm: distanceKm ?? this.distanceKm,
+      priceForOne: priceForOne ?? this.priceForOne,
+      featuredDishName: featuredDishName ?? this.featuredDishName,
+      isNearAndFast: isNearAndFast ?? this.isNearAndFast,
+      offerBadges: offerBadges ?? this.offerBadges,
+      restaurantTags: restaurantTags ?? this.restaurantTags,
+      isOpen: isOpen ?? this.isOpen,
+      closingTime: closingTime ?? this.closingTime,
+      isPureVeg: isPureVeg ?? this.isPureVeg,
+      isFreeDelivery: isFreeDelivery ?? this.isFreeDelivery,
+      area: area ?? this.area,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,

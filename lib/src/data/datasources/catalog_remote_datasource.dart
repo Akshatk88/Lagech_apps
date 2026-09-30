@@ -1,3 +1,4 @@
+import 'package:geolocator/geolocator.dart';
 import '../../core/config/api_config.dart';
 import '../../core/network/api_client.dart';
 import '../models/category_model.dart';
@@ -168,7 +169,21 @@ class CatalogRemoteDataSource {
       cacheTtl: _cacheTtl,
       onCache: onCache == null ? null : (cached) => onCache(parse(cached)),
     );
-    return parse(data);
+    final results = parse(data);
+    if (results.isNotEmpty) return results;
+
+    if (zoneId != null && zoneId.isNotEmpty) {
+      try {
+        final fallbackData = await _client.get<Map<String, dynamic>>(
+          ApiPaths.categories,
+          auth: false,
+          cacheTtl: _cacheTtl,
+        );
+        final fallbackResults = parse(fallbackData);
+        if (fallbackResults.isNotEmpty) return fallbackResults;
+      } catch (_) {}
+    }
+    return results;
   }
 
   // ---------------------------------------------------------- restaurants
@@ -184,11 +199,23 @@ class CatalogRemoteDataSource {
     int limit = 50,
     void Function(List<RestaurantModel>)? onCache,
   }) async {
-    List<RestaurantModel> parse(Map<String, dynamic> data) =>
-        ((data['restaurants'] as List?) ?? const [])
-            .whereType<Map>()
-            .map((e) => RestaurantModel.fromApi(e.cast<String, dynamic>()))
-            .toList();
+    List<RestaurantModel> parse(Map<String, dynamic> data) {
+      final list = ((data['restaurants'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => RestaurantModel.fromApi(e.cast<String, dynamic>()))
+          .toList();
+      if (lat != null && lng != null) {
+        return list.map((r) {
+          if (r.distanceKm > 0 || r.latitude == null || r.longitude == null) {
+            return r;
+          }
+          final meters = Geolocator.distanceBetween(lat, lng, r.latitude!, r.longitude!);
+          final km = (meters / 1000.0 * 10).round() / 10.0;
+          return r.copyWith(distanceKm: km);
+        }).toList();
+      }
+      return list;
+    }
 
     final data = await _client.get<Map<String, dynamic>>(
       ApiPaths.restaurants,
@@ -206,7 +233,29 @@ class CatalogRemoteDataSource {
       cacheTtl: _cacheTtl,
       onCache: onCache == null ? null : (cached) => onCache(parse(cached)),
     );
-    return parse(data);
+    final results = parse(data);
+    if (results.isNotEmpty) return results;
+
+    // Fallback: If zoneId or lat/lng returned 0 restaurants because MongoDB records
+    // do not have zoneId field assigned, query without zoneId and coordinates:
+    if (zoneId != null || lat != null || lng != null) {
+      try {
+        final fallbackData = await _client.get<Map<String, dynamic>>(
+          ApiPaths.restaurants,
+          query: {
+            'page': page,
+            'limit': limit,
+            if (cuisine != null) 'cuisine': cuisine,
+            if (sortBy != null) 'sortBy': sortBy,
+          },
+          auth: false,
+          cacheTtl: _cacheTtl,
+        );
+        final fallbackResults = parse(fallbackData);
+        if (fallbackResults.isNotEmpty) return fallbackResults;
+      } catch (_) {}
+    }
+    return results;
   }
 
   /// [lat]/[lng] are optional but drive `distanceInKm` in the response — the
@@ -330,7 +379,24 @@ class CatalogRemoteDataSource {
       cacheTtl: _cacheTtl,
       onCache: onCache == null ? null : (cached) => onCache(parse(cached)),
     );
-    return parse(data);
+    final results = parse(data);
+    if (results.isNotEmpty) return results;
+
+    // Fallback: If zoneId query returned 0 foods, retry without zoneId:
+    if (zoneId != null && zoneId.isNotEmpty) {
+      try {
+        final fallbackQuery = Map<String, dynamic>.from(query)..remove('zoneId');
+        final fallbackData = await _client.get<Map<String, dynamic>>(
+          ApiPaths.publicFoods,
+          query: fallbackQuery,
+          auth: false,
+          cacheTtl: _cacheTtl,
+        );
+        final fallbackResults = parse(fallbackData);
+        if (fallbackResults.isNotEmpty) return fallbackResults;
+      } catch (_) {}
+    }
+    return results;
   }
 
   /// `GET /restaurants/:id/addons` → `{ addons }`.
