@@ -458,6 +458,7 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
     final secondaryColor = isDark
         ? AppColors.textSecondaryDark
         : AppColors.textSecondaryLight;
+    final savedAddresses = ref.watch(addressViewModelProvider);
 
     return Scaffold(
       backgroundColor: isDark
@@ -472,31 +473,57 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
           icon: Icon(Icons.arrow_back, color: textColor),
           onPressed: () => context.backOr(),
         ),
-        titleSpacing: 0,
-        title: RichText(
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          text: TextSpan(
-            children: [
-              TextSpan(
-                text: 'New Palasia ',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: textColor,
-                ),
-              ),
-              TextSpan(
-                text: '| New Palasia, Indore, Madhya Pradesh, India',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.normal,
-                  color: secondaryColor,
-                ),
-              ),
-            ],
+        title: Text(
+          'Set Delivery Address',
+          style: TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.bold,
+            color: textColor,
           ),
         ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 14),
+            child: Center(
+              child: InkWell(
+                onTap: () => _showSavedAddressesSheet(context),
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.primaryTintDark : const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isDark
+                          ? AppColors.primary.withValues(alpha: 0.4)
+                          : const Color(0xFFFECACA),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.bookmark_rounded,
+                        color: AppColors.primary,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Saved (${savedAddresses.length})',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
       body: SafeArea(
         child: Column(
@@ -609,7 +636,15 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
                           isDark: isDark,
                           onSelected: (type) {
                             Haptics.light();
-                            setState(() => _selectedType = type);
+                            setState(() {
+                              _selectedType = type;
+                              if (type == 'Other' && _saveAsController.text.trim().isEmpty) {
+                                final otherCount = savedAddresses.where((a) => a.type == 'Other').length;
+                                _saveAsController.text = 'Other ${otherCount + 1}';
+                              } else if (type != 'Other' && _saveAsController.text.startsWith('Other')) {
+                                _saveAsController.clear();
+                              }
+                            });
                           },
                         ),
 
@@ -656,14 +691,14 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
                                 decoration: BoxDecoration(
                                   color: isDark
                                       ? AppColors.primaryTintDark
-                                      : AppColors.primaryTint,
+                                      : const Color(0xFFFEF2F2),
                                   borderRadius: BorderRadius.circular(20),
                                   border: Border.all(
                                     color: isDark
                                         ? AppColors.primary.withValues(
                                             alpha: 0.4,
                                           )
-                                        : AppColors.primarySoft,
+                                        : const Color(0xFFFECACA),
                                     width: 1.2,
                                   ),
                                 ),
@@ -732,7 +767,9 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
 
                         _AnimatedFocusPillField(
                           controller: _saveAsController,
-                          hintText: 'Save address as *',
+                          hintText: _selectedType == 'Other'
+                              ? 'Save address as (e.g. Other 5) *'
+                              : 'Save address as *',
                           isDark: isDark,
                         ),
                       ],
@@ -755,14 +792,73 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
 
                   const SizedBox(height: 24),
 
-                  // Save Address Button
+                  // Save Address Button (in-scroll)
                   _AnimatedSaveButton(
                     isEnabled: _isFormValid,
                     isDark: isDark,
                     onPressed: _saveAddress,
                   ),
-                  const SizedBox(height: 16),
+
+                  const SizedBox(height: 12),
+
+                  // View Saved Addresses Button (in-scroll)
+                  _buildViewSavedAddressesOutlineButton(
+                    isDark: isDark,
+                    count: savedAddresses.length,
+                    onPressed: () => _showSavedAddressesSheet(context),
+                  ),
+
+                  const SizedBox(height: 20),
                 ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      bottomNavigationBar: _buildBottomActionBar(
+        isDark: isDark,
+        savedCount: savedAddresses.length,
+      ),
+    );
+  }
+
+  Widget _buildViewSavedAddressesOutlineButton({
+    required bool isDark,
+    required int count,
+    required VoidCallback onPressed,
+  }) {
+    return InkWell(
+      onTap: () {
+        Haptics.light();
+        onPressed();
+      },
+      borderRadius: BorderRadius.circular(25),
+      child: Container(
+        width: double.infinity,
+        height: 48,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(25),
+          border: Border.all(
+            color: AppColors.primary,
+            width: 1.5,
+          ),
+          color: isDark ? AppColors.primaryTintDark : const Color(0xFFFEF2F2),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.bookmark_outline_rounded,
+              color: AppColors.primary,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'View Saved Addresses ($count)',
+              style: TextStyle(
+                fontSize: 14.5,
+                fontWeight: FontWeight.bold,
+                color: AppColors.primary,
               ),
             ),
           ],
@@ -770,6 +866,502 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
       ),
     );
   }
+
+  Widget _buildBottomActionBar({
+    required bool isDark,
+    required int savedCount,
+  }) {
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        10,
+        16,
+        12 + MediaQuery.of(context).padding.bottom,
+      ),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surfaceDark : Colors.white,
+        border: Border(
+          top: BorderSide(
+            color: isDark ? AppColors.borderDark : const Color(0xFFE5E7EB),
+            width: 0.8,
+          ),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
+            blurRadius: 10,
+            offset: const Offset(0, -3),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // Outline Saved Button: [ 🔖 Saved (X) ]
+          InkWell(
+            onTap: () => _showSavedAddressesSheet(context),
+            borderRadius: BorderRadius.circular(25),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(25),
+                border: Border.all(
+                  color: AppColors.primary,
+                  width: 1.5,
+                ),
+                color: isDark ? AppColors.primaryTintDark : const Color(0xFFFEF2F2),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.bookmark_outline_rounded,
+                    color: AppColors.primary,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Saved ($savedCount)',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+
+          // Filled Save Address Button
+          Expanded(
+            child: _AnimatedSaveButton(
+              isEnabled: _isFormValid,
+              isDark: isDark,
+              onPressed: _saveAddress,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSavedAddressesSheet(BuildContext context) {
+    Haptics.light();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : AppColors.textPrimaryLight;
+    final secondaryColor = isDark
+        ? AppColors.textSecondaryDark
+        : AppColors.textSecondaryLight;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: isDark ? AppColors.surfaceDark : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetCtx) {
+        return Consumer(
+          builder: (context, ref, _) {
+            final addresses = ref.watch(addressViewModelProvider);
+
+            return SafeArea(
+              child: Container(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.78,
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Handle Bar
+                    Center(
+                      child: Container(
+                        width: 38,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? AppColors.borderDark
+                              : Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Sheet Header
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.bookmark_rounded,
+                              color: AppColors.primary,
+                              size: 22,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Saved Addresses (${addresses.length})',
+                              style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
+                                color: textColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                        InkWell(
+                          onTap: () => Navigator.pop(sheetCtx),
+                          borderRadius: BorderRadius.circular(16),
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? const Color(0xFF2E2E2E)
+                                  : const Color(0xFFF2F4F7),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.close,
+                              size: 18,
+                              color: isDark ? Colors.white : Colors.black54,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Divider(
+                      height: 1,
+                      color: isDark ? AppColors.borderDark : const Color(0xFFE5E7EB),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Addresses List or Empty View
+                    if (addresses.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 36),
+                        child: Center(
+                          child: Column(
+                            children: [
+                              Icon(
+                                Icons.location_off_outlined,
+                                size: 48,
+                                color: secondaryColor,
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                'No saved addresses yet',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: textColor,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Fill the form to save your first delivery location',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: secondaryColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    else
+                      Flexible(
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: addresses.length,
+                          separatorBuilder: (_, index) => Divider(
+                            height: 1,
+                            color: isDark
+                                ? AppColors.borderDark
+                                : const Color(0xFFF3F4F6),
+                          ),
+                          itemBuilder: (context, index) {
+                            final addr = addresses[index];
+
+                            IconData icon = Icons.location_on_outlined;
+                            if (addr.type.toLowerCase() == 'home' ||
+                                addr.title.toLowerCase().contains('home')) {
+                              icon = Icons.home_rounded;
+                            } else if (addr.type.toLowerCase() == 'office' ||
+                                addr.title.toLowerCase().contains('office') ||
+                                addr.title.toLowerCase().contains('work')) {
+                              icon = Icons.work_rounded;
+                            }
+
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Icon Badge
+                                  Container(
+                                    width: 42,
+                                    height: 42,
+                                    decoration: BoxDecoration(
+                                      color: isDark
+                                          ? AppColors.primaryTintDark
+                                          : const Color(0xFFFEF2F2),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: isDark
+                                            ? AppColors.primary.withValues(alpha: 0.3)
+                                            : const Color(0xFFFECACA),
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: Icon(
+                                      icon,
+                                      color: AppColors.primary,
+                                      size: 22,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+
+                                  // Details
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Text(
+                                              addr.title,
+                                              style: TextStyle(
+                                                fontSize: 14.5,
+                                                fontWeight: FontWeight.bold,
+                                                color: textColor,
+                                              ),
+                                            ),
+                                            if (addr.isDefault) ...[
+                                              const SizedBox(width: 8),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(
+                                                  horizontal: 6,
+                                                  vertical: 1.5,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: AppColors.primary.withValues(alpha: 0.12),
+                                                  borderRadius: BorderRadius.circular(4),
+                                                ),
+                                                child: Text(
+                                                  'DEFAULT',
+                                                  style: TextStyle(
+                                                    fontSize: 9,
+                                                    fontWeight: FontWeight.w800,
+                                                    color: AppColors.primary,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                        const SizedBox(height: 3),
+                                        Text(
+                                          addr.fullAddress,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: secondaryColor,
+                                            height: 1.3,
+                                          ),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        if (addr.contactName != null &&
+                                            addr.contactName!.isNotEmpty) ...[
+                                          const SizedBox(height: 3),
+                                          Text(
+                                            '${addr.contactName} • ${addr.contactPhone ?? ""}',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: secondaryColor.withValues(alpha: 0.8),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+
+                                  // Deliver Here Action Pill
+                                  InkWell(
+                                    onTap: () async {
+                                      Haptics.medium();
+                                      await ref
+                                          .read(addressViewModelProvider.notifier)
+                                          .setDefaultAddress(addr.id);
+                                      if (!sheetCtx.mounted) return;
+                                      Navigator.pop(sheetCtx);
+                                      if (!context.mounted) return;
+                                      context.pop<Map<String, String>>({
+                                        'type': addr.type,
+                                        'title': addr.title,
+                                        'subtitle': addr.fullAddress,
+                                        'id': addr.id,
+                                      });
+                                    },
+                                    borderRadius: BorderRadius.circular(16),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primary,
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      child: const Text(
+                                        'Select',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+
+                                  // Delete Action
+                                  IconButton(
+                                    onPressed: () {
+                                      _showDeleteConfirmationDialog(
+                                        context: sheetCtx,
+                                        title: addr.title,
+                                        onConfirm: () async {
+                                          Haptics.medium();
+                                          await ref
+                                              .read(addressViewModelProvider.notifier)
+                                              .deleteAddress(addr.id);
+                                          if (!context.mounted) return;
+                                          AppSnackbar.success(
+                                            context,
+                                            '"${addr.title}" deleted',
+                                          );
+                                        },
+                                      );
+                                    },
+                                    icon: const Icon(
+                                      Icons.delete_outline_rounded,
+                                      color: Colors.redAccent,
+                                      size: 19,
+                                    ),
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+
+                    const SizedBox(height: 12),
+
+                    // Add New Address Button in sheet
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () => Navigator.pop(sheetCtx),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: AppColors.primary, width: 1.2),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                        ),
+                        icon: Icon(Icons.add_rounded, color: AppColors.primary, size: 20),
+                        label: Text(
+                          'Add New Address',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showDeleteConfirmationDialog({
+    required BuildContext context,
+    required String title,
+    required VoidCallback onConfirm,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: isDark ? AppColors.surfaceDark : Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Text(
+            'Delete Address',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          ),
+          content: Text(
+            'Are you sure you want to delete "$title"?',
+            style: TextStyle(
+              fontSize: 14,
+              color: isDark
+                  ? AppColors.textSecondaryDark
+                  : AppColors.textSecondaryLight,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(
+                'Cancel',
+                style: TextStyle(
+                  color: isDark ? Colors.white70 : Colors.black54,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                onConfirm();
+              },
+              child: const Text(
+                'Delete',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
 
   Widget _buildLocationSearch(
     bool isDark,

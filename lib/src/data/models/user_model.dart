@@ -28,6 +28,9 @@ class UserModel {
   final bool isActive;
   final String role;
 
+  /// Whether Cash on Delivery (COD) is permitted for this customer by the admin.
+  final bool isCodAllowed;
+
   /// Supplied by `GET /food/user/wallet`, not by the user document.
   final double walletBalance;
 
@@ -47,6 +50,7 @@ class UserModel {
     this.isVerified = false,
     this.isActive = true,
     this.role = 'USER',
+    this.isCodAllowed = true,
     this.walletBalance = 0.0,
   });
 
@@ -72,6 +76,7 @@ class UserModel {
     bool? isVerified,
     bool? isActive,
     String? role,
+    bool? isCodAllowed,
     double? walletBalance,
   }) {
     return UserModel(
@@ -90,6 +95,7 @@ class UserModel {
       isVerified: isVerified ?? this.isVerified,
       isActive: isActive ?? this.isActive,
       role: role ?? this.role,
+      isCodAllowed: isCodAllowed ?? this.isCodAllowed,
       walletBalance: walletBalance ?? this.walletBalance,
     );
   }
@@ -99,6 +105,27 @@ class UserModel {
     // profileImage is a plain string on the user doc, but the API wraps images
     // as { url } elsewhere — accept both so this never bites.
     final imageUrl = image is Map ? image['url'] as String? : image as String?;
+
+    // Determine COD permission: admin can disable it via various backend field representations
+    final rawCod = json['isCodAllowed'] ??
+        json['isCodEnabled'] ??
+        json['codAllowed'] ??
+        json['allowCod'] ??
+        json['codAccess'] ??
+        json['cod'];
+
+    bool codAllowed = true;
+    if (rawCod != null) {
+      if (rawCod is bool) {
+        codAllowed = rawCod;
+      } else {
+        final s = rawCod.toString().toLowerCase().trim();
+        codAllowed = s == 'true' || s == '1' || s == 'enabled' || s == 'active';
+      }
+    }
+    if (json['isCodBlocked'] == true || json['codBlocked'] == true) {
+      codAllowed = false;
+    }
 
     return UserModel(
       id: (json['_id'] ?? json['id'] ?? '').toString(),
@@ -116,6 +143,7 @@ class UserModel {
       isVerified: json['isVerified'] as bool? ?? false,
       isActive: json['isActive'] as bool? ?? true,
       role: json['role'] as String? ?? 'USER',
+      isCodAllowed: codAllowed,
     );
   }
 

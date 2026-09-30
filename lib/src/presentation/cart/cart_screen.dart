@@ -2005,6 +2005,12 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (modalCtx, setModalState) {
+            final currentUser = ref.read(authViewModelProvider).value;
+            final isCodAllowed = currentUser?.isCodAllowed ?? true;
+            if (!isCodAllowed && _selectedPaymentMethod == 'cash') {
+              _selectedPaymentMethod = 'razorpay';
+            }
+
             final modalTextColor = isDark
                 ? AppColors.textPrimaryDark
                 : AppColors.textPrimaryLight;
@@ -2070,23 +2076,22 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                         modalSecondaryColor: modalSecondaryColor,
                       ),
 
-                      const SizedBox(height: 10),
-
-                      // Option 2: Cash on Delivery (COD)
-                      _paymentOptionTile(
-                        ctx: modalCtx,
-                        methodKey: 'cash',
-                        icon: Icons.payments_outlined,
-                        title: AppLocalizations.of(context)!.cashOnDelivery,
-                        subtitle: AppLocalizations.of(
-                          context,
-                        )!.payInCashOnDelivery,
-                        isDark: isDark,
-                        modalTextColor: modalTextColor,
-                        modalSecondaryColor: modalSecondaryColor,
-                      ),
-
-                      const SizedBox(height: 10),
+                      // Option 2: Cash on Delivery (COD) — only shown if admin has allowed COD for this user
+                      if (isCodAllowed) ...[
+                        _paymentOptionTile(
+                          ctx: modalCtx,
+                          methodKey: 'cash',
+                          icon: Icons.payments_outlined,
+                          title: AppLocalizations.of(context)!.cashOnDelivery,
+                          subtitle: AppLocalizations.of(
+                            context,
+                          )!.payInCashOnDelivery,
+                          isDark: isDark,
+                          modalTextColor: modalTextColor,
+                          modalSecondaryColor: modalSecondaryColor,
+                        ),
+                        const SizedBox(height: 10),
+                      ],
 
                       // Flagged only when the wallet is the chosen method: see
                       // the subtitle note below.
@@ -2365,6 +2370,11 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   ) {
     final walletState = ref.watch(walletViewModelProvider);
     final walletBalance = walletState.wallet.balance;
+    final currentUser = ref.watch(authViewModelProvider).value;
+    final isCodAllowed = currentUser?.isCodAllowed ?? true;
+    if (!isCodAllowed && _selectedPaymentMethod == 'cash') {
+      _selectedPaymentMethod = 'razorpay';
+    }
 
     IconData paymentIcon;
     String paymentDisplay;
