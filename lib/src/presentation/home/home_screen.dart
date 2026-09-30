@@ -111,40 +111,76 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   /// Shown for an address outside every delivery zone.
+  /// Shown as a dismissible/informative banner when location is outside delivery zones.
   Widget _buildOutOfServiceNotice(BuildContext context, bool isDark) {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 32.w, vertical: 48.h),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+      padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 12.h),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF261214) : const Color(0xFFFEF2F2),
+        borderRadius: BorderRadius.circular(14.r),
+        border: Border.all(
+          color: AppColors.primary.withValues(alpha: 0.35),
+          width: 1,
+        ),
+      ),
+      child: Row(
         children: [
-          Icon(
-            Icons.location_off_rounded,
-            size: 56.sp,
-            color: isDark ? Colors.white38 : const Color(0xFF9CA3AF),
-          ),
-          SizedBox(height: 16.h),
-          Text(
-            "We don't deliver here yet",
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 18.sp,
-              fontWeight: FontWeight.w700,
-              color: isDark ? Colors.white : const Color(0xFF111827),
+          Container(
+            padding: EdgeInsets.all(7.w),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.location_off_rounded,
+              size: 20.sp,
+              color: AppColors.primary,
             ),
           ),
-          SizedBox(height: 8.h),
-          Text(
-            'Lagech is not available at this address. Choose another address to see restaurants near it.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 13.5.sp,
-              color: isDark ? Colors.white60 : const Color(0xFF6B7280),
+          SizedBox(width: 10.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  "We don't deliver to this area yet",
+                  style: TextStyle(
+                    fontSize: 13.5.sp,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? Colors.white : const Color(0xFF111827),
+                  ),
+                ),
+                SizedBox(height: 2.h),
+                Text(
+                  'Showing all available restaurants. Change address to check delivery.',
+                  style: TextStyle(
+                    fontSize: 11.5.sp,
+                    color: isDark ? Colors.white70 : const Color(0xFF6B7280),
+                  ),
+                ),
+              ],
             ),
           ),
-          SizedBox(height: 20.h),
+          SizedBox(width: 8.w),
           ElevatedButton(
             onPressed: () => LocationPickerSheet.show(context),
-            child: const Text('Change address'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16.r),
+              ),
+              elevation: 0,
+            ),
+            child: Text(
+              'Change',
+              style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       ),
@@ -259,11 +295,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
 
                       if (outOfService)
-                        SliverFillRemaining(
-                          hasScrollBody: false,
+                        SliverToBoxAdapter(
                           child: _buildOutOfServiceNotice(context, isDark),
-                        )
-                      else ...[
+                        ),
+
 
                       // 2. Sticky Pinned Categories Row (Pizza, Burger, Sandwich stays fixed when scrolling)
                       SliverPersistentHeader(
@@ -692,7 +727,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ],
                         ),
                       ),
-                      ],
                     ],
                   ),
                 ),

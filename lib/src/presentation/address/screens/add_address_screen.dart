@@ -103,6 +103,35 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
     _cityController.addListener(() => setState(() {}));
     _stateController.addListener(() => setState(() {}));
     _pincodeController.addListener(() => setState(() {}));
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initAutoLocation();
+    });
+  }
+
+  Future<void> _initAutoLocation() async {
+    // 1. If active location already has coordinates, jump there directly
+    final active = ref.read(activeLocationProvider);
+    if (active != null && active.latitude != null && active.longitude != null) {
+      _latitude = active.latitude;
+      _longitude = active.longitude;
+      _hasRealMapPosition = true;
+      await _moveCameraTo(_latitude!, _longitude!);
+      final res = await ref.read(locationServiceProvider).reverseGeocode(_latitude!, _longitude!);
+      if (mounted) {
+        setState(() {
+          if (res.building.isNotEmpty) _buildingController.text = res.building;
+          if (res.street.isNotEmpty) _streetController.text = res.street;
+          if (res.area.isNotEmpty) _areaController.text = res.area;
+          if (res.city.isNotEmpty) _cityController.text = res.city;
+          if (res.state.isNotEmpty) _stateController.text = res.state;
+          if (res.pincode.isNotEmpty) _pincodeController.text = res.pincode;
+        });
+      }
+      return;
+    }
+    // 2. Otherwise auto-detect current GPS location
+    _detectCurrentLocation();
   }
 
   @override
@@ -1497,7 +1526,10 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
                   final position = _lastCameraPosition;
                   if (position != null) _onPinSettled(position);
                 },
-                onCameraMove: (position) => _lastCameraPosition = position,
+                onCameraMove: (position) {
+                  _hasRealMapPosition = true;
+                  _lastCameraPosition = position;
+                },
                 myLocationEnabled: false,
                 myLocationButtonEnabled: false,
                 zoomControlsEnabled: false,

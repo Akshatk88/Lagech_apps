@@ -4,11 +4,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:geolocator/geolocator.dart';
 
+import 'package:go_router/go_router.dart';
+
 import '../../../core/utils/haptics.dart';
+import '../../../data/models/address_model.dart';
 import '../../../data/models/zone_model.dart';
 import '../../../di/catalog_providers.dart';
 import '../../../di/location_providers.dart';
 import '../../branding/app_colors.dart';
+import '../../navigation/route_names.dart';
+import '../../address/viewmodels/address_viewmodel.dart';
+import '../viewmodels/home_viewmodel.dart';
 import '../viewmodels/zone_viewmodel.dart';
 
 /// Provider for fetching all admin-configured zones (10-min cache).
@@ -65,6 +71,34 @@ class _LocationPickerSheetState extends ConsumerState<LocationPickerSheet>
       curve: Curves.easeOutBack,
     );
     _animController.forward();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(addressViewModelProvider.notifier).load();
+    });
+  }
+
+  void _pickSavedAddress(AddressModel address) {
+    Haptics.light();
+    ref.read(activeLocationProvider.notifier).setLocation(
+      UserLocationInfo(
+        title: address.title.isNotEmpty
+            ? address.title
+            : (address.street.isNotEmpty ? address.street : address.type),
+        subtitle: address.fullAddress,
+        latitude: address.latitude,
+        longitude: address.longitude,
+        isManual: false,
+      ),
+    );
+    ref.invalidate(zoneViewModelProvider);
+    ref.invalidate(homeViewModelProvider);
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  void _addNewAddress() {
+    Haptics.light();
+    Navigator.of(context).pop();
+    context.push(RouteNames.addAddress);
   }
 
   @override
@@ -170,6 +204,7 @@ class _LocationPickerSheetState extends ConsumerState<LocationPickerSheet>
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final zonesAsync = ref.watch(allZonesProvider);
+    final savedAddresses = ref.watch(addressViewModelProvider);
 
     return ScaleTransition(
       scale: _scaleAnim,
@@ -375,6 +410,14 @@ class _LocationPickerSheetState extends ConsumerState<LocationPickerSheet>
                       if (_query.isEmpty) ...[
                         _buildGpsOption(isDark),
                         SizedBox(height: 16.h),
+                        if (savedAddresses.isNotEmpty) ...[
+                          _buildSectionLabel('Saved Addresses', isDark),
+                          SizedBox(height: 8.h),
+                          ...savedAddresses.map((addr) => _buildSavedAddressTile(addr, isDark)),
+                          SizedBox(height: 10.h),
+                        ],
+                        _buildAddNewAddressButton(isDark),
+                        SizedBox(height: 18.h),
                         _buildSectionLabel('Available Locations', isDark),
                         SizedBox(height: 8.h),
                       ],
@@ -499,6 +542,152 @@ class _LocationPickerSheetState extends ConsumerState<LocationPickerSheet>
                 color: AppColors.primary.withValues(alpha: 0.6),
               ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSavedAddressTile(AddressModel address, bool isDark) {
+    final active = ref.watch(activeLocationProvider);
+    final isSelected = (active?.latitude != null &&
+            address.latitude != null &&
+            (active!.latitude! - address.latitude!).abs() < 0.0001 &&
+            (active.longitude! - address.longitude!).abs() < 0.0001) ||
+        (active?.title == address.title && address.title.isNotEmpty);
+
+    IconData typeIcon = Icons.location_on_outlined;
+    if (address.type.toLowerCase() == 'home') {
+      typeIcon = Icons.home_outlined;
+    } else if (address.type.toLowerCase() == 'office') {
+      typeIcon = Icons.work_outline;
+    }
+
+    return GestureDetector(
+      onTap: () => _pickSavedAddress(address),
+      child: Container(
+        margin: EdgeInsets.only(bottom: 8.h),
+        padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 12.h),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? (isDark
+                  ? AppColors.primary.withValues(alpha: 0.18)
+                  : AppColors.primary.withValues(alpha: 0.06))
+              : (isDark ? AppColors.cardDark : Colors.white),
+          borderRadius: BorderRadius.circular(14.r),
+          border: Border.all(
+            color: isSelected
+                ? AppColors.primary
+                : (isDark ? AppColors.borderDark : const Color(0xFFEEEFF1)),
+            width: isSelected ? 1.5 : 1,
+          ),
+          boxShadow: isSelected
+              ? []
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.04),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36.r,
+              height: 36.r,
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? AppColors.primary.withValues(alpha: 0.15)
+                    : (isDark ? Colors.white10 : Colors.grey.shade100),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                typeIcon,
+                color: isSelected ? AppColors.primary : (isDark ? Colors.white70 : Colors.black87),
+                size: 18.sp,
+              ),
+            ),
+            SizedBox(width: 12.w),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        address.title.isNotEmpty ? address.title : address.type,
+                        style: TextStyle(
+                          fontSize: 14.sp,
+                          fontWeight: FontWeight.w700,
+                          color: isSelected
+                              ? AppColors.primary
+                              : (isDark ? Colors.white : AppColors.textPrimaryLight),
+                        ),
+                      ),
+                      SizedBox(width: 8.w),
+                      Container(
+                        padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6.r),
+                        ),
+                        child: Text(
+                          address.type.toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 9.sp,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 3.h),
+                  Text(
+                    address.fullAddress,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12.sp,
+                      color: isDark ? AppColors.textSecondaryDark : Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (isSelected)
+              Icon(
+                Icons.check_circle_rounded,
+                color: AppColors.primary,
+                size: 20.sp,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAddNewAddressButton(bool isDark) {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: _addNewAddress,
+        style: OutlinedButton.styleFrom(
+          side: BorderSide(color: AppColors.primary, width: 1.3),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16.r),
+          ),
+          padding: EdgeInsets.symmetric(vertical: 12.h),
+          backgroundColor: isDark ? AppColors.primaryTintDark : const Color(0xFFFEF2F2),
+        ),
+        icon: Icon(Icons.add_location_alt_outlined, color: AppColors.primary, size: 18.sp),
+        label: Text(
+          '+ Add New Address',
+          style: TextStyle(
+            fontSize: 13.5.sp,
+            fontWeight: FontWeight.bold,
+            color: AppColors.primary,
+          ),
         ),
       ),
     );

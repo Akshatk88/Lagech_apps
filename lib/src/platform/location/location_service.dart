@@ -222,6 +222,8 @@ class LocationService {
 
       final data = response.data;
       if (data == null || data['status'] != 'OK' || (data['results'] as List?).isNullOrEmpty) {
+        final osm = await _reverseGeocodeNominatim(lat, lng);
+        if (osm != null) return osm;
         return UserLocationResult(
           latitude: lat,
           longitude: lng,
@@ -265,13 +267,17 @@ class LocationService {
         }
       }
 
+      if (locality.isEmpty && sublocality.isNotEmpty) {
+        locality = sublocality;
+      }
+
       final streetCombined = [buildingNumber, route].where((s) => s.isNotEmpty).join(' ');
       final areaCombined = [sublocality, locality, stateName].where((s) => s.isNotEmpty).join(', ');
 
       return UserLocationResult(
         latitude: lat,
         longitude: lng,
-        building: buildingNumber.isNotEmpty ? buildingNumber : (route.isNotEmpty ? route : 'Building'),
+        building: buildingNumber.isNotEmpty ? buildingNumber : (route.isNotEmpty ? route : ''),
         street: route.isNotEmpty ? route : streetCombined,
         area: areaCombined.isNotEmpty ? areaCombined : formattedAddress,
         landmark: landmarkName,
@@ -281,11 +287,57 @@ class LocationService {
         fullAddress: formattedAddress,
       );
     } catch (_) {
+      final osm = await _reverseGeocodeNominatim(lat, lng);
+      if (osm != null) return osm;
       return UserLocationResult(
         latitude: lat,
         longitude: lng,
         fullAddress: 'Lat: ${lat.toStringAsFixed(4)}, Lng: ${lng.toStringAsFixed(4)}',
       );
+    }
+  }
+
+  /// Free, robust reverse geocoding fallback powered by OpenStreetMap Nominatim.
+  Future<UserLocationResult?> _reverseGeocodeNominatim(double lat, double lng) async {
+    try {
+      final res = await _dio.get<Map<String, dynamic>>(
+        'https://nominatim.openstreetmap.org/reverse',
+        queryParameters: {
+          'format': 'json',
+          'lat': lat,
+          'lon': lng,
+        },
+        options: Options(
+          headers: {'User-Agent': 'LagechUserApp/1.0'},
+          sendTimeout: const Duration(seconds: 4),
+          receiveTimeout: const Duration(seconds: 4),
+        ),
+      );
+      final d = res.data;
+      if (d == null) return null;
+      final addr = d['address'] as Map<String, dynamic>?;
+      if (addr == null) return null;
+
+      final road = (addr['road'] ?? addr['residential'] ?? '').toString();
+      final sub = (addr['suburb'] ?? addr['neighbourhood'] ?? '').toString();
+      final city = (addr['city'] ?? addr['city_district'] ?? addr['town'] ?? addr['county'] ?? '').toString();
+      final state = (addr['state'] ?? '').toString();
+      final postcode = (addr['postcode'] ?? '').toString();
+      final full = (d['display_name'] ?? '').toString();
+
+      return UserLocationResult(
+        latitude: lat,
+        longitude: lng,
+        building: road,
+        street: road,
+        area: sub.isNotEmpty ? sub : (city.isNotEmpty ? city : road),
+        city: city,
+        state: state,
+        pincode: postcode,
+        fullAddress: full,
+      );
+    } catch (_) {
+      return null;
     }
   }
 }
