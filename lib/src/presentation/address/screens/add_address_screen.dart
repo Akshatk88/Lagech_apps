@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../navigation/back_navigation.dart';
+import '../../navigation/route_names.dart';
 import '../../../core/utils/haptics.dart';
 import '../../../core/utils/validators.dart';
 import '../../../data/models/address_model.dart';
@@ -364,6 +365,17 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
 
   Future<void> _saveAddress() async {
     Haptics.light();
+
+    // Require login before saving an address
+    final isLoggedIn = ref.read(authViewModelProvider).value != null;
+    if (!isLoggedIn) {
+      if (!mounted) return;
+      context.push(
+        '${RouteNames.login}?from=${Uri.encodeComponent(RouteNames.addAddress)}',
+      );
+      return;
+    }
+
 
     final savedName = _saveAsController.text.trim().isNotEmpty
         ? _saveAsController.text.trim()
