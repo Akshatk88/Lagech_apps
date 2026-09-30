@@ -151,7 +151,15 @@ class AddressViewModel extends Notifier<List<AddressModel>> {
       }
     }
 
-    state = [for (final a in state) a.id == updated.id ? updated : a];
+    state = [
+      for (final a in state)
+        if (a.id == updated.id)
+          updated
+        else if (updated.isDefault)
+          a.copyWith(isDefault: false)
+        else
+          a,
+    ];
     await _saveToLocal(state);
     return true;
   }

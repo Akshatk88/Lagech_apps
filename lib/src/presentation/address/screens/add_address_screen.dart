@@ -39,6 +39,7 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
       ref.read(authViewModelProvider).value?.phone ?? '';
 
   String _selectedType = 'Other'; // 'Home', 'Office', 'Other'
+  String? _editingAddressId;
   bool _isDetectingLocation = false;
   bool _isSaving = false;
 
@@ -385,15 +386,22 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
       return;
     }
 
-    final parts = [
+    final rawParts = [
       buildingText,
       streetText,
       areaText,
       cityText,
       stateText,
       zipText,
-    ].where((s) => s.isNotEmpty).toList();
-    final fullAddress = parts.join(', ');
+    ].map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+
+    final uniqueParts = <String>[];
+    for (final p in rawParts) {
+      if (!uniqueParts.any((u) => u.toLowerCase() == p.toLowerCase())) {
+        uniqueParts.add(p);
+      }
+    }
+    final fullAddress = uniqueParts.join(', ');
 
     var latitude = _latitude;
     var longitude = _longitude;
@@ -419,7 +427,7 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
         : (cityText.isNotEmpty ? '$cityText, $stateText' : 'Selected Location');
 
     final addressModel = AddressModel(
-      id: '',
+      id: _editingAddressId ?? '',
       title: locationTitle,
       fullAddress: fullAddress.isNotEmpty ? fullAddress : 'Delivery Address',
       type: _selectedType,
@@ -435,9 +443,16 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
     );
 
     setState(() => _isSaving = true);
-    await ref
-        .read(addressViewModelProvider.notifier)
-        .addAddress(addressModel);
+    if (_editingAddressId != null && _editingAddressId!.isNotEmpty) {
+      await ref
+          .read(addressViewModelProvider.notifier)
+          .editAddress(addressModel);
+      _editingAddressId = null;
+    } else {
+      await ref
+          .read(addressViewModelProvider.notifier)
+          .addAddress(addressModel);
+    }
     if (!mounted) return;
     setState(() => _isSaving = false);
 
@@ -808,6 +823,9 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
 
                   // Save Address Button (in-scroll)
                   _AnimatedSaveButton(
+                    text: _editingAddressId != null
+                        ? 'Update Address'
+                        : 'Save Address',
                     isEnabled: _isFormValid,
                     isDark: isDark,
                     onPressed: _saveAddress,
@@ -950,6 +968,7 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
           // Filled Save Address Button
           Expanded(
             child: _AnimatedSaveButton(
+              text: _editingAddressId != null ? 'Update Address' : 'Save Address',
               isEnabled: _isFormValid,
               isDark: isDark,
               onPressed: _saveAddress,
@@ -962,6 +981,7 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
 
   void _populateFormFromAddress(AddressModel addr) {
     setState(() {
+      _editingAddressId = addr.id;
       final t = addr.type.isNotEmpty
           ? addr.type
           : (addr.title.toLowerCase().contains('office')
@@ -969,9 +989,41 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
               : (addr.title.toLowerCase().contains('home') ? 'Home' : 'Other'));
       _selectedType = ['Home', 'Office', 'Other'].contains(t) ? t : 'Other';
       _saveAsController.text = addr.title;
-      _streetController.text = addr.street;
-      _buildingController.text = addr.street;
-      _areaController.text = addr.street.isNotEmpty ? addr.street : addr.title;
+
+      // Split full address and populate fields cleanly without repetition
+      final parts = addr.fullAddress
+          .split(',')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toSet()
+          .toList();
+
+      if (parts.isNotEmpty) {
+        _buildingController.text = parts.first;
+        if (parts.length > 2) {
+          _streetController.text = parts[1];
+          _areaController.text = parts.length > 3 ? parts[2] : parts[1];
+        } else if (parts.length == 2) {
+          _streetController.text = parts[1];
+          _areaController.text = '';
+        } else {
+          _streetController.text = addr.street != parts.first ? addr.street : '';
+          _areaController.text = '';
+        }
+      } else {
+        _buildingController.text = addr.street;
+        _streetController.text = '';
+        _areaController.text = '';
+      }
+
+      if (_streetController.text == _buildingController.text) {
+        _streetController.text = '';
+      }
+      if (_areaController.text == _streetController.text ||
+          _areaController.text == _buildingController.text) {
+        _areaController.text = '';
+      }
+
       _cityController.text = addr.city;
       _stateController.text = addr.state;
       _pincodeController.text = addr.zipCode;
@@ -991,11 +1043,12 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
         );
       }
     });
-    AppSnackbar.success(context, 'Loaded "${addr.title}" into form');
+    AppSnackbar.success(context, 'Editing "${addr.title}" in form');
   }
 
   void _clearForm() {
     setState(() {
+      _editingAddressId = null;
       _saveAsController.clear();
       _buildingController.clear();
       _streetController.clear();
@@ -1103,15 +1156,17 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
                                 vertical: 2.5,
                               ),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFD1FAE5),
+                                color: isDark
+                                    ? AppColors.primaryTintDark
+                                    : const Color(0xFFFEE2E2),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
                                 '${addresses.length}',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w800,
-                                  color: Color(0xFF059669),
+                                  color: AppColors.primary,
                                 ),
                               ),
                             ),
@@ -1212,11 +1267,11 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
                                 borderRadius: BorderRadius.circular(16),
                                 border: Border.all(
                                   color: isDefault
-                                      ? const Color(0xFF10B981)
+                                      ? AppColors.primary
                                       : (isDark
                                           ? AppColors.borderDark
                                           : const Color(0xFFE5E7EB)),
-                                  width: isDefault ? 1.6 : 1.0,
+                                  width: isDefault ? 1.8 : 1.0,
                                 ),
                                 boxShadow: isDark
                                     ? null
@@ -1275,18 +1330,19 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
                                                   vertical: 2,
                                                 ),
                                                 decoration: BoxDecoration(
-                                                  color:
-                                                      const Color(0xFFD1FAE5),
+                                                  color: isDark
+                                                      ? AppColors.primaryTintDark
+                                                      : const Color(0xFFFEE2E2),
                                                   borderRadius:
                                                       BorderRadius.circular(5),
                                                 ),
-                                                child: const Text(
+                                                child: Text(
                                                   'DEFAULT',
                                                   style: TextStyle(
                                                     fontSize: 9.5,
                                                     fontWeight:
                                                         FontWeight.w800,
-                                                    color: Color(0xFF059669),
+                                                    color: AppColors.primary,
                                                     letterSpacing: 0.4,
                                                   ),
                                                 ),
@@ -1419,7 +1475,7 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
                                             },
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor:
-                                                  const Color(0xFF10B981),
+                                                  AppColors.primary,
                                               foregroundColor: Colors.white,
                                               elevation: 0,
                                               shape: RoundedRectangleBorder(
@@ -1460,7 +1516,7 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
                           _clearForm();
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF10B981),
+                          backgroundColor: AppColors.primary,
                           foregroundColor: Colors.white,
                           elevation: 0,
                           shape: RoundedRectangleBorder(
@@ -2151,11 +2207,13 @@ class _AnimatedSaveButton extends StatefulWidget {
   final bool isEnabled;
   final bool isDark;
   final VoidCallback onPressed;
+  final String text;
 
   const _AnimatedSaveButton({
     required this.isEnabled,
     required this.isDark,
     required this.onPressed,
+    this.text = 'Save Address',
   });
 
   @override
@@ -2210,7 +2268,7 @@ class _AnimatedSaveButtonState extends State<_AnimatedSaveButton> {
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
               ),
-              child: const Text('Save Address'),
+              child: Text(widget.text),
             ),
           ),
         ),
