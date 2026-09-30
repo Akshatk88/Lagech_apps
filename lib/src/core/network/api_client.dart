@@ -28,7 +28,7 @@ class ApiClient {
   final void Function()? onSessionExpired;
 
   /// Guards against N concurrent 401s firing N refresh calls.
-  Future<bool>? _refreshInFlight;
+  Future<bool?>? _refreshInFlight;
 
   /// In-memory GET cache. Opt in per call via [get]'s `cacheTtl`; feeds an
   /// instant paint via `onCache` and stands in for the network when offline.
@@ -145,7 +145,13 @@ class ApiClient {
 
       if (status == 401 && !didRetry) {
         final refreshed = await _refreshOnce();
-        if (refreshed) return _send<T>(call, didRetry: true);
+        if (refreshed == true) return _send<T>(call, didRetry: true);
+        if (refreshed == null) {
+          // The refresh itself could not get through (offline, timeout or a
+          // server error). The session is still good: keep it and let the
+          // caller retry, instead of logging the user out over a blip.
+          throw const NetworkFailure("Couldn't reach the server. Please try again.");
+        }
         onSessionExpired?.call();
         throw AuthFailure(_messageOf(response) ?? 'Session expired. Please log in again.');
       }
@@ -241,11 +247,15 @@ class ApiClient {
   // -------------------------------------------------------------- refresh
 
   /// Single-flight refresh: concurrent 401s all await the same call.
-  Future<bool> _refreshOnce() {
+  ///
+  /// true: renewed. false: the server rejected the refresh token, so the
+  /// session is over. null: the refresh could not get through; the tokens are
+  /// kept for the next attempt.
+  Future<bool?> _refreshOnce() {
     return _refreshInFlight ??= _doRefresh().whenComplete(() => _refreshInFlight = null);
   }
 
-  Future<bool> _doRefresh() async {
+  Future<bool?> _doRefresh() async {
     final refresh = await _tokens.refreshToken;
     if (refresh == null || refresh.isEmpty) return false;
     try {
@@ -254,16 +264,25 @@ class ApiClient {
         data: {'refreshToken': refresh},
         options: Options(extra: {'skipAuth': true}),
       );
+      final status = res.statusCode ?? 0;
+      if (status == 401 || status == 403) {
+        // The server says this refresh token is no good: the session is over.
+        await _tokens.clear();
+        return false;
+      }
+      if (status < 200 || status >= 300) return null;
       final data = res.data is Map ? res.data['data'] : null;
       final access = data is Map ? data['accessToken'] as String? : null;
       final newRefresh = data is Map ? data['refreshToken'] as String? : null;
-      if (access == null || access.isEmpty) return false;
+      if (access == null || access.isEmpty) return null;
       await _tokens.save(accessToken: access, refreshToken: newRefresh ?? refresh);
       _log('token refreshed');
       return true;
-    } catch (_) {
-      await _tokens.clear();
-      return false;
+    } on DioException catch (e) {
+      // Offline, timed out, or a 5xx while the server restarts. Deleting the
+      // tokens here used to log people out for good over a momentary blip.
+      _log('token refresh did not get through: ${e.type}');
+      return null;
     }
   }
 }

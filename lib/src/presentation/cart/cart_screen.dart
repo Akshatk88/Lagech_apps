@@ -1991,7 +1991,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           Expanded(
             child: Text(
               failed
-                  ? "Couldn't load the final bill. The amounts below are estimates."
+                  ? "${checkout.error ?? "Couldn't load the final bill."} The amounts below are estimates."
                   : 'Calculating your final bill…',
               style: TextStyle(
                 fontSize: 12.5,

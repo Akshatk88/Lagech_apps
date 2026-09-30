@@ -89,12 +89,18 @@ class AuthRepositoryImpl implements AuthRepository {
     if (!await _tokens.hasSession) {
       return const ApiResponse.success(null);
     }
-    // A 401 here is already handled by the client's refresh-then-logout path,
-    // so reaching the error branch means the session is genuinely gone.
-    final result = await getProfile();
-    if (result.isSuccess) return ApiResponse.success(result.data);
-    if (result.data == null) await _tokens.clear();
-    return ApiResponse.success(null, result.message);
+    try {
+      return ApiResponse.success(await _remote.getProfile());
+    } on AuthFailure catch (f) {
+      // The client already tried a refresh and the server refused it: the
+      // session is genuinely over.
+      await _tokens.clear();
+      return ApiResponse.success(null, f.message);
+    } on Failure catch (f) {
+      // Offline or the server hiccuped at launch. Keep the tokens: wiping
+      // them here logged people out every time the app opened without signal.
+      return ApiResponse.error(f.message);
+    }
   }
 
   @override
