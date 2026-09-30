@@ -16,7 +16,6 @@ import '../../search/widgets/voice_search_dialog.dart';
 import '../../navigation/route_names.dart';
 import '../../common_widgets/smart_image.dart';
 import '../../../di/location_providers.dart';
-import 'location_picker_sheet.dart';
 
 class HomeHeaderBanner extends ConsumerStatefulWidget {
   const HomeHeaderBanner({super.key});
@@ -307,7 +306,7 @@ class _HomeHeaderBannerState extends ConsumerState<HomeHeaderBanner> {
             behavior: HitTestBehavior.opaque,
             onTap: () {
               Haptics.light();
-              LocationPickerSheet.show(context);
+              context.push(RouteNames.addAddress);
             },
             child: Row(
               mainAxisSize: MainAxisSize.min,

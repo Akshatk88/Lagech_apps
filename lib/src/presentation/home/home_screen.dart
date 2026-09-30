@@ -22,7 +22,6 @@ import 'viewmodels/home_scroll_provider.dart';
 import 'viewmodels/veg_filter_provider.dart';
 import 'widgets/category_list.dart';
 import 'widgets/home_header_banner.dart';
-import 'widgets/location_picker_sheet.dart';
 import 'viewmodels/zone_viewmodel.dart';
 import 'widgets/restaurant_card.dart';
 import 'widgets/explore_more_section.dart';
@@ -165,7 +164,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
           SizedBox(width: 8.w),
           ElevatedButton(
-            onPressed: () => LocationPickerSheet.show(context),
+            onPressed: () => context.push(RouteNames.addAddress),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
