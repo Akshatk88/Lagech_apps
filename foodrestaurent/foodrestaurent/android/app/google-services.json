@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "857925379912",
+    "project_id": "lagech-6be7b",
+    "storage_bucket": "lagech-6be7b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:857925379912:android:d582ef07ffa91a3a00357d",
+        "android_client_info": {
+          "package_name": "com.lagech.restaurent"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDit5-NkEfNpibI4XB9NkJklSwkqcrLz6c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:857925379912:android:bc587d6759fce9ee00357d",
+        "android_client_info": {
+          "package_name": "com.lagech.user"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDit5-NkEfNpibI4XB9NkJklSwkqcrLz6c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
