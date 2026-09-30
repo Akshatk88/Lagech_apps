@@ -13,8 +13,17 @@ import '../../home/viewmodels/home_viewmodel.dart';
 import '../../home/widgets/restaurant_card.dart';
 import '../../navigation/route_names.dart';
 
-class AllOffersScreen extends ConsumerWidget {
+import '../../coupons/viewmodels/coupons_viewmodel.dart';
+
+class AllOffersScreen extends ConsumerStatefulWidget {
   const AllOffersScreen({super.key});
+
+  @override
+  ConsumerState<AllOffersScreen> createState() => _AllOffersScreenState();
+}
+
+class _AllOffersScreenState extends ConsumerState<AllOffersScreen> {
+  String? _selectedOfferTag;
 
   static const List<Map<String, String>> _topOfferDishes = [
     {
@@ -68,16 +77,36 @@ class AllOffersScreen extends ConsumerWidget {
   ];
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final homeState = ref.watch(homeViewModelProvider);
     final allRestaurants = homeState.nearbyRestaurants.asData?.value ?? [];
     final categories = homeState.categories.asData?.value ?? [];
+    final adminCoupons = ref.watch(couponsProvider).value ?? const <CouponModel>[];
 
     // Filter restaurants with offers or top rated
     final offerRestaurants = allRestaurants.isNotEmpty
         ? allRestaurants
         : <RestaurantModel>[];
+
+    // Dynamic hanging offer tags from admin and curated templates
+    final tags = _getHangingOfferTags(adminCoupons);
+
+    // Active offer filter logic
+    HangingOfferTag? activeTag;
+    List<RestaurantModel> displayedRestaurants = List.from(offerRestaurants);
+
+    if (_selectedOfferTag != null) {
+      activeTag = tags.where((t) => t.id == _selectedOfferTag).firstOrNull;
+      if (activeTag != null) {
+        final filtered = offerRestaurants
+            .where((r) => activeTag!.matches(r, adminCoupons))
+            .toList();
+        if (filtered.isNotEmpty) {
+          displayedRestaurants = filtered;
+        }
+      }
+    }
 
     // For slideable "BEST OFFERS FOR YOU"
     final bestOffersList = offerRestaurants.isNotEmpty
@@ -119,21 +148,80 @@ class AllOffersScreen extends ConsumerWidget {
                     _buildSectionHeader('TOP DISHES ON OFFERS', isDark),
                     SizedBox(height: 14.h),
                     _buildTopDishesGrid(context, categories, isDark),
+                    SizedBox(height: 20.h),
+                  ],
+                ),
+              ),
+
+              // 4. "─── MORE OFFERS ───" Section (Slidable 3D Hanging Tags)
+              SliverToBoxAdapter(
+                child: Column(
+                  children: [
+                    _buildSectionHeader('MORE OFFERS', isDark),
+                    SizedBox(height: 14.h),
+                    _buildMoreOffersHangingSlider(context, tags, isDark),
                     SizedBox(height: 22.h),
                   ],
                 ),
               ),
 
-              // 4. All Restaurants with Offers
-              if (offerRestaurants.isNotEmpty) ...[
+              // 5. All Restaurants with Offers (filtered by active offer tag)
+              if (displayedRestaurants.isNotEmpty) ...[
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 4.h),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // Active filter badge if selected
+                        if (activeTag != null) ...[
+                          Row(
+                            children: [
+                              Container(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 10.w,
+                                  vertical: 4.5.h,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: activeTag.bgColorStart,
+                                  borderRadius: BorderRadius.circular(16.r),
+                                  border: Border.all(
+                                    color: activeTag.borderColor,
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      '${activeTag.prefix} ${activeTag.mainText.replaceAll('\n', ' ')}',
+                                      style: TextStyle(
+                                        fontSize: 11.sp,
+                                        fontWeight: FontWeight.w800,
+                                        color: activeTag.textColor,
+                                      ),
+                                    ),
+                                    SizedBox(width: 6.w),
+                                    GestureDetector(
+                                      onTap: () {
+                                        Haptics.light();
+                                        setState(() => _selectedOfferTag = null);
+                                      },
+                                      child: Icon(
+                                        Icons.close_rounded,
+                                        size: 14.sp,
+                                        color: activeTag.textColor,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 8.h),
+                        ],
                         Text(
-                          '${offerRestaurants.length} RESTAURANTS WITH OFFERS',
+                          '${displayedRestaurants.length} RESTAURANTS WITH OFFERS',
                           style: TextStyle(
                             fontSize: 11.sp,
                             fontWeight: FontWeight.w800,
@@ -143,7 +231,9 @@ class AllOffersScreen extends ConsumerWidget {
                         ),
                         SizedBox(height: 3.h),
                         Text(
-                          'All Great Deals Near You',
+                          activeTag != null
+                              ? 'Deals for "${activeTag.prefix} ${activeTag.mainText.replaceAll('\n', ' ')}"'
+                              : 'All Great Deals Near You',
                           style: TextStyle(
                             fontSize: 20.sp,
                             fontWeight: FontWeight.w900,
@@ -158,13 +248,13 @@ class AllOffersScreen extends ConsumerWidget {
                 SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
-                      final rest = offerRestaurants[index];
+                      final rest = displayedRestaurants[index];
                       return RestaurantCard(
                         restaurant: rest,
                         index: index,
                       );
                     },
-                    childCount: offerRestaurants.length,
+                    childCount: displayedRestaurants.length,
                   ),
                 ),
               ],
@@ -730,5 +820,370 @@ class AllOffersScreen extends ConsumerWidget {
         },
       ),
     );
+  }
+
+  // ==================== 4. MORE OFFERS HANGING TAGS SLIDER ====================
+
+  Widget _buildMoreOffersHangingSlider(
+    BuildContext context,
+    List<HangingOfferTag> tags,
+    bool isDark,
+  ) {
+    if (tags.isEmpty) return const SizedBox.shrink();
+
+    return SizedBox(
+      height: 126.h,
+      child: Stack(
+        children: [
+          // Continuous horizontal guide line across
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              height: 1.2,
+              color: isDark ? Colors.white12 : const Color(0xFFD1D5DB),
+            ),
+          ),
+
+          // Slidable list of hanging 3D tags
+          ListView.separated(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            padding: EdgeInsets.symmetric(horizontal: 18.w),
+            itemCount: tags.length,
+            separatorBuilder: (_, _) => SizedBox(width: 14.w),
+            itemBuilder: (context, index) {
+              final tag = tags[index];
+              final isSelected = _selectedOfferTag == tag.id;
+
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  Haptics.light();
+                  setState(() {
+                    if (_selectedOfferTag == tag.id) {
+                      _selectedOfferTag = null; // Toggle off filter
+                    } else {
+                      _selectedOfferTag = tag.id; // Apply offer filter
+                    }
+                  });
+                },
+                child: AnimatedScale(
+                  scale: isSelected ? 1.05 : 1.0,
+                  duration: const Duration(milliseconds: 180),
+                  child: SizedBox(
+                    width: 88.w,
+                    height: 122.h,
+                    child: Stack(
+                      alignment: Alignment.topCenter,
+                      children: [
+                        // Vertical blue hanging string
+                        Positioned(
+                          top: 0,
+                          child: Container(
+                            width: 1.8.w,
+                            height: 16.h,
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? const Color(0xFF0F8A5F)
+                                  : const Color(0xFF3B82F6),
+                              borderRadius: BorderRadius.circular(1.r),
+                            ),
+                          ),
+                        ),
+
+                        // The 3D Tag Body
+                        Positioned(
+                          top: 14.h,
+                          child: CustomPaint(
+                            size: Size(88.w, 98.h),
+                            painter: HangingTagShapePainter(
+                              bgColorStart: tag.bgColorStart,
+                              bgColorEnd: tag.bgColorEnd,
+                              borderColor: tag.borderColor,
+                              shadowColor: tag.shadowColor,
+                              isSelected: isSelected,
+                              isDark: isDark,
+                            ),
+                            child: SizedBox(
+                              width: 88.w,
+                              height: 98.h,
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  SizedBox(height: 14.h), // Clearance for hole cutout
+                                  Text(
+                                    tag.prefix,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 9.sp,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.1,
+                                      color: tag.textColor.withValues(alpha: 0.85),
+                                    ),
+                                  ),
+                                  SizedBox(height: 3.h),
+                                  Text(
+                                    tag.mainText,
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 14.sp,
+                                      fontWeight: FontWeight.w900,
+                                      height: 1.08,
+                                      letterSpacing: -0.4,
+                                      color: tag.textColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==================== DYNAMIC HANGING OFFER TAGS ====================
+
+  List<HangingOfferTag> _getHangingOfferTags(List<CouponModel> adminCoupons) {
+    final list = <HangingOfferTag>[
+      // 1. Blue Tag: meals UNDER ₹250
+      HangingOfferTag(
+        id: 'under250',
+        prefix: 'meals',
+        mainText: 'UNDER\n₹250',
+        bgColorStart: const Color(0xFFE8F1FC),
+        bgColorEnd: const Color(0xFFD3E4F8),
+        borderColor: const Color(0xFFB3D1F5),
+        textColor: const Color(0xFF1B498C),
+        shadowColor: const Color(0xFF3366BB).withValues(alpha: 0.18),
+        matches: (r, _) =>
+            r.priceForOne <= 250 ||
+            r.offerBadges.any((b) => b.contains('250')) ||
+            r.tags.any((t) => t.toLowerCase().contains('budget') || t.toLowerCase().contains('snack')),
+      ),
+
+      // 2. Coral Tag: get up to 60% OFF
+      HangingOfferTag(
+        id: '60off',
+        prefix: 'get up to',
+        mainText: '60%\nOFF',
+        bgColorStart: const Color(0xFFFDE8E8),
+        bgColorEnd: const Color(0xFFFBD3D3),
+        borderColor: const Color(0xFFF7B4B4),
+        textColor: const Color(0xFF8B1E1E),
+        shadowColor: const Color(0xFFE53935).withValues(alpha: 0.18),
+        matches: (r, _) =>
+            r.offerBadges.any((b) => b.contains('60%') || b.toLowerCase().contains('60')) ||
+            r.tags.any((t) => t.contains('60')),
+      ),
+
+      // 3. Pink Tag: items at 50% OFF
+      HangingOfferTag(
+        id: '50off',
+        prefix: 'items at',
+        mainText: '50%\nOFF',
+        bgColorStart: const Color(0xFFFDE8F1),
+        bgColorEnd: const Color(0xFFFCD3E5),
+        borderColor: const Color(0xFFF8B5D4),
+        textColor: const Color(0xFF7A1545),
+        shadowColor: const Color(0xFFD81B60).withValues(alpha: 0.18),
+        matches: (r, _) =>
+            r.offerBadges.any((b) => b.contains('50%') || b.toLowerCase().contains('50')),
+      ),
+
+      // 4. Amber Tag: minimum ₹150 OFF
+      HangingOfferTag(
+        id: '150off',
+        prefix: 'minimum',
+        mainText: '₹150\nOFF',
+        bgColorStart: const Color(0xFFFDF0E2),
+        bgColorEnd: const Color(0xFFFCE0C6),
+        borderColor: const Color(0xFFF8C99B),
+        textColor: const Color(0xFF6E2D0E),
+        shadowColor: const Color(0xFFD35400).withValues(alpha: 0.18),
+        matches: (r, _) =>
+            r.offerBadges.any((b) => b.contains('150') || b.contains('120') || b.contains('100')),
+      ),
+
+      // 5. Gold Tag: unlock GOLD OFFERS
+      HangingOfferTag(
+        id: 'gold',
+        prefix: 'unlock',
+        mainText: 'GOLD\nOFFERS',
+        bgColorStart: const Color(0xFFFCF6E5),
+        bgColorEnd: const Color(0xFFFBEBC2),
+        borderColor: const Color(0xFFF5DC8C),
+        textColor: const Color(0xFF66440C),
+        shadowColor: const Color(0xFFD4AF37).withValues(alpha: 0.22),
+        matches: (r, _) =>
+            r.rating >= 4.2 ||
+            r.isFeatured ||
+            r.isFreeDelivery,
+      ),
+    ];
+
+    // Dynamically include any additional coupons configured by admin
+    final palette = [
+      (start: const Color(0xFFE8F8F5), end: const Color(0xFFD1F2EB), border: const Color(0xFFA2E4D4), text: const Color(0xFF0E6251)),
+      (start: const Color(0xFFF4ECF7), end: const Color(0xFFE8DAEF), border: const Color(0xFFD2B4DE), text: const Color(0xFF512E5F)),
+      (start: const Color(0xFFFEF9E7), end: const Color(0xFFFCF3CF), border: const Color(0xFFF9E79F), text: const Color(0xFF7D6608)),
+    ];
+
+    int colorIdx = 0;
+    for (final coupon in adminCoupons) {
+      final text = coupon.discountText.trim();
+      if (text.isEmpty) continue;
+      // Skip if already in preset list
+      if (list.any((t) => t.mainText.replaceAll('\n', ' ').toLowerCase() == text.toLowerCase())) {
+        continue;
+      }
+
+      final theme = palette[colorIdx % palette.length];
+      colorIdx++;
+
+      final lines = text.split(' ');
+      final mainFormatted = lines.length >= 2 ? '${lines[0]}\n${lines.sublist(1).join(' ')}' : text;
+
+      list.add(
+        HangingOfferTag(
+          id: 'coupon_${coupon.id}',
+          prefix: coupon.minSpend > 0 ? 'above ₹${coupon.minSpend.toInt()}' : 'special',
+          mainText: mainFormatted,
+          bgColorStart: theme.start,
+          bgColorEnd: theme.end,
+          borderColor: theme.border,
+          textColor: theme.text,
+          shadowColor: theme.text.withValues(alpha: 0.15),
+          matches: (r, _) =>
+              coupon.restaurantId == null ||
+              coupon.restaurantId!.isEmpty ||
+              r.id == coupon.restaurantId ||
+              r.offerBadges.any((b) =>
+                  b.toLowerCase().contains(coupon.code.toLowerCase()) ||
+                  b.toLowerCase().contains(text.toLowerCase())),
+        ),
+      );
+    }
+
+    return list;
+  }
+}
+
+/// Model representing a 3D hanging luggage offer tag
+class HangingOfferTag {
+  final String id;
+  final String prefix;
+  final String mainText;
+  final Color bgColorStart;
+  final Color bgColorEnd;
+  final Color borderColor;
+  final Color textColor;
+  final Color shadowColor;
+  final bool Function(RestaurantModel restaurant, List<CouponModel> coupons) matches;
+
+  const HangingOfferTag({
+    required this.id,
+    required this.prefix,
+    required this.mainText,
+    required this.bgColorStart,
+    required this.bgColorEnd,
+    required this.borderColor,
+    required this.textColor,
+    required this.shadowColor,
+    required this.matches,
+  });
+}
+
+/// Custom painter for the 3D luggage/price tag shape with punch hole
+class HangingTagShapePainter extends CustomPainter {
+  final Color bgColorStart;
+  final Color bgColorEnd;
+  final Color borderColor;
+  final Color shadowColor;
+  final bool isSelected;
+  final bool isDark;
+
+  HangingTagShapePainter({
+    required this.bgColorStart,
+    required this.bgColorEnd,
+    required this.borderColor,
+    required this.shadowColor,
+    required this.isSelected,
+    required this.isDark,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    const shoulderY = 16.0;
+    const r = 12.0;
+
+    final path = Path();
+    path.moveTo(w * 0.32, 0);
+    path.lineTo(w * 0.68, 0);
+    path.lineTo(w, shoulderY);
+    path.lineTo(w, h - r);
+    path.arcToPoint(Offset(w - r, h), radius: const Radius.circular(r));
+    path.lineTo(r, h);
+    path.arcToPoint(Offset(0, h - r), radius: const Radius.circular(r));
+    path.lineTo(0, shoulderY);
+    path.close();
+
+    // Soft drop shadow
+    final shadowPaint = Paint()
+      ..color = isSelected
+          ? const Color(0xFF0F8A5F).withValues(alpha: 0.35)
+          : shadowColor
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, isSelected ? 8 : 5);
+    canvas.drawPath(path.shift(const Offset(0, 3)), shadowPaint);
+
+    // Tag body gradient
+    final rect = Rect.fromLTWH(0, 0, w, h);
+    final bodyPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [bgColorStart, bgColorEnd],
+      ).createShader(rect);
+    canvas.drawPath(path, bodyPaint);
+
+    // Border
+    final borderPaint = Paint()
+      ..color = isSelected ? const Color(0xFF0F8A5F) : borderColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = isSelected ? 2.0 : 1.0;
+    canvas.drawPath(path, borderPaint);
+
+    // Circular hole cutout near top
+    const holeRadius = 3.5;
+    final holeCenter = Offset(w / 2, 8.5);
+    final holeBgPaint = Paint()
+      ..color = isDark ? const Color(0xFF1F2937) : const Color(0xFFF9FAFB);
+    final holeBorderPaint = Paint()
+      ..color = borderColor.withValues(alpha: 0.6)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+
+    canvas.drawCircle(holeCenter, holeRadius, holeBgPaint);
+    canvas.drawCircle(holeCenter, holeRadius, holeBorderPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant HangingTagShapePainter oldDelegate) {
+    return oldDelegate.isSelected != isSelected ||
+        oldDelegate.bgColorStart != bgColorStart ||
+        oldDelegate.isDark != isDark;
   }
 }
