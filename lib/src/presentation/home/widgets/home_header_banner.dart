@@ -301,8 +301,8 @@ class _HomeHeaderBannerState extends ConsumerState<HomeHeaderBanner> {
       locationTitle = activeLocation.title;
       locationSubtitle = activeLocation.subtitle;
     } else {
-      locationTitle = 'Indore';
-      locationSubtitle = 'Madhya Pradesh';
+      locationTitle = 'Select location';
+      locationSubtitle = '';
     }
 
     return Row(

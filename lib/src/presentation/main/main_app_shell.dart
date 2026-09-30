@@ -8,6 +8,8 @@ import '../common_widgets/offline_banner.dart';
 import '../orders/viewmodels/active_order_viewmodel.dart';
 import '../orders/widgets/floating_active_order_card.dart';
 import 'widgets/custom_bottom_nav.dart';
+import 'widgets/out_of_service_screen.dart';
+import '../home/viewmodels/zone_viewmodel.dart';
 import '../cart/viewmodels/cart_viewmodel.dart';
 import '../navigation/route_names.dart';
 import '../home/viewmodels/home_scroll_provider.dart';
@@ -30,6 +32,13 @@ class MainAppShell extends ConsumerWidget {
     // this shell would otherwise only pick up a new theme color the next
     // time something else marks it dirty.
     ref.watch(themeColorProvider);
+
+    // Outside every delivery zone nothing in the app can be ordered, so show
+    // only the unavailable screen: no tabs, lists or banners. Picking a
+    // location inside a zone re-detects the zone and brings the app back.
+    final outOfService = ref.watch(zoneViewModelProvider).value?.status == 'OUT_OF_SERVICE';
+    if (outOfService) return const OutOfServiceScreen();
+
     final activeOrder = ref.watch(activeOrderViewModelProvider).activeOrder;
 
     final cartState = ref.watch(cartViewModelProvider);
