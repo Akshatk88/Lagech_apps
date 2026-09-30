@@ -357,8 +357,14 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final totalDeliveryFee = pricing?.deliveryFee ?? 0.0;
     final platformFee = pricing?.platformFee ?? 0.0;
     final itemTotal = pricing?.subtotal ?? cartState.subtotal;
-    final savings = pricing?.discount ?? cartState.totalSavings;
+    // Only a real discount (coupon or offer) from the server is a discount.
+    // The gap between a dish's price and its "price on other apps" is not: it
+    // is shown in the banner and never enters the bill, or the bill stops
+    // adding up.
+    final savings = pricing?.discount ?? 0.0;
+    final otherAppsSaving = cartState.totalSavings;
     final toPay = pricing?.total ?? cartState.subtotal;
+    final billReady = pricing != null;
     final packingCharges = pricing?.packagingFee ?? 0.0;
 
     final pageBgColor = isDark
@@ -380,8 +386,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
         children: [
           // Savings banner (Screenshot 1)
-          if (savings > 0)
-            _buildSavingsBanner(savings, isDark),
+          if (otherAppsSaving > 0)
+            _buildSavingsBanner(otherAppsSaving, isDark),
 
           // Gold Membership Card (Screenshot 1)
           _buildGoldMembershipCard(isDark),
@@ -415,6 +421,9 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
           const SizedBox(height: 12),
 
+          if (!billReady)
+            _buildBillNotReadyNotice(checkoutState, isDark),
+
           // Delivery Details & Total Bill Card (Screenshot 2)
           _buildDeliveryDetailsCard(
             itemTotal: itemTotal,
@@ -433,11 +442,6 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
           const SizedBox(height: 12),
 
-          // Lagech Money Technical Issue Notice (Screenshot 2)
-          _buildLagechMoneyNotice(isDark),
-
-          const SizedBox(height: 12),
-
           // Cancellation Policy Section
           _buildCancellationPolicy(secondaryColor),
 
@@ -446,7 +450,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       ),
       bottomNavigationBar: _buildBottomDeliveryFooter(
         context,
-        toPay,
+        billReady ? toPay : null,
         isDark,
         textColor,
       ),
@@ -551,7 +555,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              'You saved ₹${savings.toStringAsFixed(0)} on this order',
+              "You're saving ₹${savings.toStringAsFixed(0)} compared to other apps",
               style: const TextStyle(
                 color: Color(0xFF1D4ED8),
                 fontSize: 13,
@@ -1606,58 +1610,6 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     );
   }
 
-  /// Lagech Money Technical Issue Notice (Screenshot 2)
-  Widget _buildLagechMoneyNotice(bool isDark) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.surfaceDark : const Color(0xFFF9FAFB),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: const Color(0xFFE0E7FF),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(
-              Icons.account_balance_wallet_outlined,
-              color: Color(0xFF4F46E5),
-              size: 18,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text(
-                  'Lagech Money',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E1E1E),
-                  ),
-                ),
-                SizedBox(height: 2),
-                Text(
-                  'Facing technical issues. Will be back shortly!',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: Color(0xFF6B7280),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   /// Cancellation Policy Text Section
   Widget _buildCancellationPolicy(Color secondaryColor) {
     return Padding(
@@ -2108,17 +2060,67 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     );
   }
 
-  String _getPaymentButtonLabel(double toPay) {
-    final amount = toPay.toStringAsFixed(0);
+  /// [toPay] is null until the server has priced the order; the button then
+  /// shows no amount, and pressing it retries the calculation.
+  String _getPaymentButtonLabel(double? toPay) {
+    final amount = toPay == null ? '' : ' (₹${toPay.toStringAsFixed(0)})';
     switch (_selectedPaymentMethod) {
       case 'cash':
-        return 'PLACE COD ORDER (₹$amount)';
+        return 'PLACE COD ORDER$amount';
       case 'wallet':
-        return 'PAY WITH WALLET (₹$amount)';
+        return 'PAY WITH WALLET$amount';
       case 'razorpay':
       default:
-        return 'PROCEED TO PAYMENT (₹$amount)';
+        return 'PROCEED TO PAYMENT$amount';
     }
+  }
+
+  /// Shown above the bill while it is still the cart's own estimate, so the
+  /// customer never reads unconfirmed numbers as final.
+  Widget _buildBillNotReadyNotice(CheckoutState checkout, bool isDark) {
+    final failed = !checkout.isCalculating && checkout.error != null;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: failed ? const Color(0xFFFEF2F2) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: failed ? const Color(0xFFFECACA) : const Color(0xFFE2E8F0),
+        ),
+      ),
+      child: Row(
+        children: [
+          if (failed)
+            const Icon(Icons.error_outline, size: 18, color: Color(0xFFB91C1C))
+          else
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              failed
+                  ? "Couldn't load the final bill. The amounts below are estimates."
+                  : 'Calculating your final bill…',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: failed ? const Color(0xFFB91C1C) : const Color(0xFF475569),
+              ),
+            ),
+          ),
+          if (failed)
+            TextButton(
+              onPressed: () =>
+                  ref.read(checkoutViewModelProvider.notifier).recalculate(),
+              child: const Text('Retry'),
+            ),
+        ],
+      ),
+    );
   }
 
   /// Card 5: Delivery Address Selection Card
@@ -2499,7 +2501,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   /// Bottom Delivery / Payment Sticky Bar Footer
   Widget _buildBottomDeliveryFooter(
     BuildContext context,
-    double toPay,
+    double? toPay,
     bool isDark,
     Color textColor,
   ) {
@@ -2556,7 +2558,9 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                 Haptics.light();
                 _showPaymentMethodBottomSheet(
                   context,
-                  toPay,
+                  // Until the server has priced the order, the cart's own
+                  // subtotal is the best estimate for the wallet check.
+                  toPay ?? ref.read(cartViewModelProvider).subtotal,
                   walletBalance,
                   isDark,
                 );
