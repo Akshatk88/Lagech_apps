@@ -349,9 +349,7 @@ class _RecommendedMiniCardState extends ConsumerState<RecommendedMiniCard> {
     if (widget.restaurant.offerBadges.isNotEmpty) {
       return widget.restaurant.offerBadges.first;
     }
-    final mod = widget.index % 2;
-    if (mod == 0) return '₹100 OFF above ₹149';
-    return '50% OFF up to ₹100';
+    return '';
   }
 
   @override
@@ -367,7 +365,7 @@ class _RecommendedMiniCardState extends ConsumerState<RecommendedMiniCard> {
       },
     );
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final rating = widget.restaurant.rating > 0 ? widget.restaurant.rating : 4.2;
+    final rating = widget.restaurant.rating;
     final currentImg = _images.isNotEmpty
         ? _images[_currentImageIndex % _images.length]
         : widget.restaurant.imageUrl;
@@ -448,7 +446,8 @@ class _RecommendedMiniCardState extends ConsumerState<RecommendedMiniCard> {
                 ),
               ),
 
-              // 2. Top-Left Offer Badge (Content hugging, not full width, matching screenshot)
+              // 2. Top-left offer badge: only for a real offer.
+              if (offerText.isNotEmpty)
               Positioned(
                 top: 4.h,
                 left: 4.w,
@@ -492,7 +491,7 @@ class _RecommendedMiniCardState extends ConsumerState<RecommendedMiniCard> {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Text(
-                        rating.toStringAsFixed(1),
+                        rating > 0 ? rating.toStringAsFixed(1) : 'New',
                         style: TextStyle(
                           fontSize: 10.5.sp,
                           fontWeight: FontWeight.w800,

@@ -115,7 +115,7 @@ class Store99RepositoryImpl implements Store99Repository {
       price: f.price,
       originalPrice: f.originalPrice,
       imageUrl: f.imageUrl,
-      rating: f.rating > 0 ? f.rating : 4.5,
+      rating: f.rating,
       ratingCount: f.reviewCount > 0 ? f.reviewCount : 12,
       deliveryTime: f.deliveryTime.isNotEmpty ? f.deliveryTime : '15-30 min',
       isVeg: f.isVeg,

@@ -39,7 +39,6 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   bool _isBillExpanded = false;
   bool _isProcessing = false;
   bool _noCutlery = false;
-  bool _isGoldAdded = false;
   // Values are the API's own payment method strings, so they can be sent as-is.
   // This used to be 'cod', which the backend never accepted -- the enum is
   // razorpay | razorpay_qr | card | wallet | cash -- so the COD button always failed.
@@ -389,8 +388,6 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           if (otherAppsSaving > 0)
             _buildSavingsBanner(otherAppsSaving, isDark),
 
-          // Gold Membership Card (Screenshot 1)
-          _buildGoldMembershipCard(isDark),
 
           // Card 1: Cart Items & Action Chips (Screenshot 1)
           _buildCartItemsCard(
@@ -464,7 +461,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     String addressDisplay,
     bool isDark,
   ) {
-    final restaurantName = restaurant?.name ?? 'Apna Sweets';
+    final restaurantName = restaurant?.name ?? '';
     final bgColor = isDark ? AppColors.surfaceDark : Colors.white;
 
     return Container(
@@ -508,7 +505,9 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '10-15 mins to $addressDisplay',
+                      restaurant != null && restaurant.deliveryTime.isNotEmpty
+                          ? '${restaurant.deliveryTime} to $addressDisplay'
+                          : 'Deliver to $addressDisplay',
                       style: TextStyle(
                         color: isDark
                             ? AppColors.textSecondaryDark
@@ -562,117 +561,6 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                 fontWeight: FontWeight.w700,
               ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Gold Membership Card (Screenshot 1)
-  Widget _buildGoldMembershipCard(bool isDark) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFFBEB),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFFDE68A), width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFBBF24).withValues(alpha: 0.25),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.workspace_premium_rounded,
-                  color: Color(0xFFD97706),
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    Text(
-                      'Get Gold for 3 months at ₹1',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF92400E),
-                      ),
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      'Enjoy FREE delivery above ₹99 and extra offers with Gold',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        color: Color(0xFFB45309),
-                        height: 1.25,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              InkWell(
-                onTap: () {
-                  Haptics.light();
-                },
-                child: Row(
-                  children: const [
-                    Text(
-                      'Learn more',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF92400E),
-                      ),
-                    ),
-                    SizedBox(width: 4),
-                    Icon(
-                      Icons.arrow_forward_rounded,
-                      size: 13,
-                      color: Color(0xFF92400E),
-                    ),
-                  ],
-                ),
-              ),
-              InkWell(
-                onTap: () {
-                  Haptics.light();
-                  setState(() => _isGoldAdded = !_isGoldAdded);
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: _isGoldAdded ? AppColors.primary : Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppColors.primary, width: 1.2),
-                  ),
-                  child: Text(
-                    _isGoldAdded ? 'ADDED ✓' : 'ADD  ₹1',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: _isGoldAdded ? Colors.white : AppColors.primary,
-                    ),
-                  ),
-                ),
-              ),
-            ],
           ),
         ],
       ),
@@ -1227,7 +1115,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: const [
                       Text(
-                        'Delivery in 10-15 mins',
+                        'Delivery',
                         style: TextStyle(
                           fontSize: 13.5,
                           fontWeight: FontWeight.bold,

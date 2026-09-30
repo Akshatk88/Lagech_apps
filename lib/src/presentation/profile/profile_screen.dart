@@ -93,10 +93,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
           const SizedBox(height: 16),
 
-          // 2. Join Lagech Gold Banner (Screenshot 4: Black card)
-          _buildGoldBanner(isDark),
-
-          const SizedBox(height: 14),
 
           // 3. Quick Action Row: Lagech Money & Your coupons (Screenshot 4)
           _buildQuickActionRow(
@@ -393,49 +389,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ),
         ),
       ],
-    );
-  }
-
-  /// Join Lagech Gold Banner (Screenshot 4: Black card, gold crown)
-  Widget _buildGoldBanner(bool isDark) {
-    return InkWell(
-      onTap: () {
-        Haptics.light();
-        _showGoldMembershipSheet(context);
-      },
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1E1E1E) : Colors.black,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          children: const [
-            Icon(
-              Icons.workspace_premium_rounded,
-              color: Color(0xFFF59E0B),
-              size: 24,
-            ),
-            SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Join LAGECH Gold',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            Icon(
-              Icons.chevron_right_rounded,
-              color: Colors.white,
-              size: 20,
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -895,72 +848,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         'Register Your Restaurant',
                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                       ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  void _showGoldMembershipSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      useRootNavigator: true,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        final isDark = Theme.of(ctx).brightness == Brightness.dark;
-        return Container(
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.surfaceDark : Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      margin: const EdgeInsets.only(bottom: 20),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFD1D5DB),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  Row(
-                    children: const [
-                      Icon(Icons.workspace_premium_rounded, color: Color(0xFFF59E0B), size: 28),
-                      SizedBox(width: 10),
-                      Text('Lagech Gold Membership', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  const Text('• Unlimited FREE delivery on orders above ₹99\n• Extra 10%–30% discount on 1000+ top restaurants\n• VIP Customer Support & Priority Dispatch', style: TextStyle(fontSize: 14, height: 1.6, color: Color(0xFF374151))),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        AppSnackbar.success(context, 'Joined Lagech Gold successfully!');
-                      },
-                      child: const Text('Get Gold for ₹1', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
                     ),
                   ),
                 ],

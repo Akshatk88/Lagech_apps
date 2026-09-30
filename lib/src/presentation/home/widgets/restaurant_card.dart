@@ -174,9 +174,7 @@ class _RestaurantCardState extends ConsumerState<RestaurantCard> {
     if (widget.restaurant.offerBadges.isNotEmpty) {
       return widget.restaurant.offerBadges.first;
     }
-    final mod = widget.index % 2;
-    if (mod == 0) return 'Flat ₹100 OFF above ₹149';
-    return '50% OFF up to ₹100';
+    return '';
   }
 
   @override
@@ -187,7 +185,7 @@ class _RestaurantCardState extends ConsumerState<RestaurantCard> {
     final currentSlide = slides.isNotEmpty
         ? slides[_currentPage % slides.length]
         : null;
-    final rating = restaurant.rating > 0 ? restaurant.rating : 4.0;
+    final rating = restaurant.rating;
     final offerBadge = _resolveOfferBadge();
 
     final isFavorited = ref.watch(
@@ -445,7 +443,7 @@ class _RestaurantCardState extends ConsumerState<RestaurantCard> {
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               Text(
-                                rating.toStringAsFixed(1),
+                                rating > 0 ? rating.toStringAsFixed(1) : 'New',
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontSize: 11.5.sp,
@@ -490,7 +488,8 @@ class _RestaurantCardState extends ConsumerState<RestaurantCard> {
 
                     SizedBox(height: 5.h),
 
-                    // Row 3: Blue Discount Badge + "Flat ₹100 OFF above ₹149"
+                    // Row 3: the restaurant's real offer, if it has one.
+                    if (offerBadge.isNotEmpty)
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [

@@ -1,10 +1,12 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/config/api_config.dart';
 import '../../../core/utils/haptics.dart';
+import '../../../di/network_providers.dart';
 import '../../../data/models/food_model.dart';
 import '../../../data/models/restaurant_model.dart';
 import '../../branding/app_colors.dart';
@@ -28,7 +30,18 @@ class RestaurantReviewItem {
   });
 }
 
-class RestaurantReviewsScreen extends StatelessWidget {
+/// Real customer reviews for one restaurant, from
+/// `GET /food/public/restaurants/:id/reviews`.
+final restaurantReviewsProvider =
+    FutureProvider.autoDispose.family<Map<String, dynamic>, String>((ref, id) {
+  return ref.watch(apiClientProvider).get<Map<String, dynamic>>(
+        ApiPaths.restaurantReviews(id),
+        query: {'limit': 50},
+        auth: false,
+      );
+});
+
+class RestaurantReviewsScreen extends ConsumerWidget {
   final RestaurantModel restaurant;
   final List<FoodModel> menuItems;
 
@@ -38,147 +51,44 @@ class RestaurantReviewsScreen extends StatelessWidget {
     this.menuItems = const [],
   });
 
-  List<RestaurantReviewItem> _buildReviews() {
-    final dishes = menuItems.isNotEmpty
-        ? menuItems
-        : [
-            FoodModel(
-              id: '1',
-              restaurantId: restaurant.id,
-              name: 'Cheesy fries',
-              description: 'Crispy fries loaded with melted cheese',
-              price: 120,
-              imageUrl: '',
-              categoryName: 'Snacks',
-              rating: 4.5,
-              reviewCount: 12,
-            ),
-            FoodModel(
-              id: '2',
-              restaurantId: restaurant.id,
-              name: 'Veg cheese roll',
-              description: 'Fresh veggies and cheese roll',
-              price: 150,
-              imageUrl: '',
-              categoryName: 'Rolls',
-              rating: 4.8,
-              reviewCount: 20,
-            ),
-            FoodModel(
-              id: '3',
-              restaurantId: restaurant.id,
-              name: 'Cheesy paneer burger',
-              description: 'Delicious paneer burger',
-              price: 180,
-              imageUrl: '',
-              categoryName: 'Burgers',
-              rating: 4.3,
-              reviewCount: 15,
-            ),
-            FoodModel(
-              id: '4',
-              restaurantId: restaurant.id,
-              name: 'Maxicana pizza',
-              description: 'Spicy mexican style pizza',
-              price: 260,
-              imageUrl: '',
-              categoryName: 'Pizza',
-              rating: 4.7,
-              reviewCount: 30,
-            ),
-            FoodModel(
-              id: '5',
-              restaurantId: restaurant.id,
-              name: 'Maharaja burger',
-              description: 'Grand burger with double patty',
-              price: 220,
-              imageUrl: '',
-              categoryName: 'Burgers',
-              rating: 5.0,
-              reviewCount: 45,
-            ),
-          ];
+  static const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-    final sampleData = [
-      (
-        name: 'Sarthak Sonwalkar',
-        rating: 1.0,
-        date: '24 Sep 2026',
-        comment: "Didn't recieve this item",
-        dishIndex: 0,
-      ),
-      (
-        name: 'Sagar Nimbalkar',
-        rating: 1.0,
-        date: '12 Sep 2026',
-        comment: '',
-        dishIndex: 1,
-      ),
-      (
-        name: 'Sagar Nimbalkar',
-        rating: 1.0,
-        date: '12 Sep 2026',
-        comment: '',
-        dishIndex: 2,
-      ),
-      (
-        name: 'Sagar Nimbalkar',
-        rating: 1.0,
-        date: '12 Sep 2026',
-        comment: '',
-        dishIndex: 3,
-      ),
-      (
-        name: 'Prathamesh Chavan',
-        rating: 5.0,
-        date: '08 Sep 2026',
-        comment: 'Amazing taste and super fast delivery! Highly recommended.',
-        dishIndex: 4,
-      ),
-      (
-        name: 'Aakash Verma',
-        rating: 4.5,
-        date: '02 Sep 2026',
-        comment: 'Great quality packaging and food arrived steaming hot.',
-        dishIndex: 0,
-      ),
-      (
-        name: 'Pooja Sharma',
-        rating: 5.0,
-        date: '28 Aug 2026',
-        comment: 'Best food experience in the area. Loved the flavours.',
-        dishIndex: 1,
-      ),
-      (
-        name: 'Rohan Mehta',
-        rating: 4.0,
-        date: '20 Aug 2026',
-        comment: 'Portion size was generous and worth the price.',
-        dishIndex: 2,
-      ),
-    ];
+  static String _formatDate(Object? raw) {
+    final d = DateTime.tryParse(raw?.toString() ?? '')?.toLocal();
+    if (d == null) return '';
+    return '${d.day.toString().padLeft(2, '0')} ${_months[d.month - 1]} ${d.year}';
+  }
 
-    return sampleData.map((e) {
-      final dish = dishes[e.dishIndex % dishes.length];
+  static List<RestaurantReviewItem> _parseReviews(Map<String, dynamic> data) {
+    final list = (data['reviews'] as List?) ?? const [];
+    return list.whereType<Map>().map((raw) {
+      final r = raw.cast<String, dynamic>();
+      final image = r['dishImage'] as String?;
       return RestaurantReviewItem(
-        userName: e.name,
-        rating: e.rating,
-        date: e.date,
-        comment: e.comment,
-        dishName: dish.name,
-        dishImageUrl: dish.imageUrl,
+        userName: (r['userName'] ?? 'Customer').toString(),
+        rating: (r['rating'] as num?)?.toDouble() ?? 0,
+        date: _formatDate(r['ratedAt']),
+        comment: (r['comment'] ?? '').toString(),
+        dishName: r['dishName'] as String?,
+        dishImageUrl: image == null ? null : ApiConfig.resolveMedia(image),
       );
     }).toList();
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final rating = restaurant.rating > 0 ? restaurant.rating : 4.3;
-    final totalRatings = restaurant.reviewCount > 0 ? restaurant.reviewCount : 67;
-    final totalReviews = max(19, (totalRatings * 0.28).round());
-
-    final reviews = _buildReviews();
+    final async = ref.watch(restaurantReviewsProvider(restaurant.id));
+    final data = async.asData?.value ?? const <String, dynamic>{};
+    final summary = (data['summary'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+    final rating = (summary['rating'] as num?)?.toDouble() ?? restaurant.rating;
+    final totalRatings = (summary['totalRatings'] as num?)?.toInt() ?? restaurant.reviewCount;
+    final totalReviews = (summary['totalReviews'] as num?)?.toInt() ?? 0;
+    final breakdown = <String, int>{
+      for (final entry in ((summary['breakdown'] as Map?) ?? const {}).entries)
+        entry.key.toString(): (entry.value as num?)?.toInt() ?? 0,
+    };
+    final reviews = _parseReviews(data);
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: (isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark).copyWith(
@@ -225,12 +135,23 @@ class RestaurantReviewsScreen extends StatelessWidget {
               rating: rating,
               totalRatings: totalRatings,
               totalReviews: totalReviews,
+              breakdown: breakdown,
             ),
 
             SizedBox(height: 8.h),
 
             // Review List
-            ...reviews.map((review) => _buildReviewRow(context, review, isDark)),
+            if (async.isLoading && reviews.isEmpty)
+              Padding(
+                padding: EdgeInsets.all(32.h),
+                child: const Center(child: CircularProgressIndicator()),
+              )
+            else if (async.hasError && reviews.isEmpty)
+              _buildEmptyState("Couldn't load reviews. Go back and try again.", isDark)
+            else if (reviews.isEmpty)
+              _buildEmptyState('No reviews yet', isDark)
+            else
+              ...reviews.map((review) => _buildReviewRow(context, review, isDark)),
 
             SizedBox(height: 32.h),
           ],
@@ -245,7 +166,11 @@ class RestaurantReviewsScreen extends StatelessWidget {
     required double rating,
     required int totalRatings,
     required int totalReviews,
+    required Map<String, int> breakdown,
   }) {
+    double share(int star) =>
+        totalRatings > 0 ? (breakdown['$star'] ?? 0) / totalRatings : 0;
+    String pct(int star) => '${(share(star) * 100).round()}%';
     return Container(
       margin: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
       padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
@@ -372,19 +297,35 @@ class RestaurantReviewsScreen extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _buildRatingBarRow(5, 0.66, '66%', isDark),
+                _buildRatingBarRow(5, share(5), pct(5), isDark),
                 SizedBox(height: 5.h),
-                _buildRatingBarRow(4, 0.19, '19%', isDark),
+                _buildRatingBarRow(4, share(4), pct(4), isDark),
                 SizedBox(height: 5.h),
-                _buildRatingBarRow(3, 0.03, '3%', isDark),
+                _buildRatingBarRow(3, share(3), pct(3), isDark),
                 SizedBox(height: 5.h),
-                _buildRatingBarRow(2, 0.03, '3%', isDark),
+                _buildRatingBarRow(2, share(2), pct(2), isDark),
                 SizedBox(height: 5.h),
-                _buildRatingBarRow(1, 0.10, '10%', isDark),
+                _buildRatingBarRow(1, share(1), pct(1), isDark),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(String message, bool isDark) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 40.h, horizontal: 24.w),
+      child: Center(
+        child: Text(
+          message,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 14.sp,
+            color: isDark ? Colors.white60 : const Color(0xFF6B7280),
+          ),
+        ),
       ),
     );
   }

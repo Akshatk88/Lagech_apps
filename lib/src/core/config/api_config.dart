@@ -83,6 +83,7 @@ class ApiPaths {
   static String restaurantMenu(String id) => '$restaurants/$id/menu';
   static String restaurantAddons(String id) => '$restaurants/$id/addons';
   static String restaurantTimings(String id) => '$restaurants/$id/outlet-timings';
+  static String restaurantReviews(String id) => '/food/public/restaurants/$id/reviews';
 
   // ---- Home / landing ----
   static const String heroBanners = '/food/hero-banners/public';

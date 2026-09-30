@@ -194,7 +194,7 @@ class _RestaurantScreenState extends ConsumerState<RestaurantScreen> {
 
   /// Zomato-style rating info bottom sheet shown when the green rating badge is tapped.
   void _showRatingInfoSheet(BuildContext context, RestaurantModel restaurant) {
-    final rating = restaurant.rating > 0 ? restaurant.rating : 4.0;
+    final rating = restaurant.rating;
     final reviewCount = restaurant.reviewCount;
     final reviewText = reviewCount > 0
         ? '${reviewCount > 999 ? '${(reviewCount / 1000).toStringAsFixed(1)}K' : reviewCount} ratings'
@@ -936,7 +936,7 @@ class _RestaurantScreenState extends ConsumerState<RestaurantScreen> {
               ),
               SizedBox(width: 3.w),
               Text(
-                '${restaurant.deliveryTime.isNotEmpty ? restaurant.deliveryTime : "15-20 mins"} · Schedule for later',
+                restaurant.deliveryTime.isNotEmpty ? '${restaurant.deliveryTime} · Schedule for later' : 'Schedule for later',
                 style: TextStyle(
                   fontSize: 12.sp,
                   fontWeight: FontWeight.w600,
@@ -954,66 +954,8 @@ class _RestaurantScreenState extends ConsumerState<RestaurantScreen> {
 
           SizedBox(height: 8.h),
 
-          // Benefit Chips matching Screenshot 5: ✓ No packaging charges | ✓ On-time preparation
-          Row(
-            children: [
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.5.h),
-                decoration: BoxDecoration(
-                  color: isDark ? AppColors.surfaceDark : const Color(0xFFF0FDF4),
-                  borderRadius: BorderRadius.circular(6.r),
-                  border: Border.all(
-                    color: isDark ? AppColors.borderDark : const Color(0xFFDCFCE7),
-                    width: 0.8,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.check_rounded, color: const Color(0xFF008A45), size: 13.sp),
-                    SizedBox(width: 4.w),
-                    Text(
-                      'No packaging charges',
-                      style: TextStyle(
-                        fontSize: 10.5.sp,
-                        fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white70 : const Color(0xFF374151),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(width: 8.w),
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.5.h),
-                decoration: BoxDecoration(
-                  color: isDark ? AppColors.surfaceDark : const Color(0xFFF0FDF4),
-                  borderRadius: BorderRadius.circular(6.r),
-                  border: Border.all(
-                    color: isDark ? AppColors.borderDark : const Color(0xFFDCFCE7),
-                    width: 0.8,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.check_rounded, color: const Color(0xFF008A45), size: 13.sp),
-                    SizedBox(width: 4.w),
-                    Text(
-                      'On-time preparation',
-                      style: TextStyle(
-                        fontSize: 10.5.sp,
-                        fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white70 : const Color(0xFF374151),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-
-          // Offers row matching Screenshot 5: Flat ₹100 OFF above ₹149   7 offers ˅
+          // Offers row: only when the restaurant really has offers.
+          if (primaryOfferText.isNotEmpty)
           GestureDetector(
             onTap: () => _showOffersSheet(context, restaurant, restaurantOffers),
             child: Container(
@@ -1040,7 +982,7 @@ class _RestaurantScreenState extends ConsumerState<RestaurantScreen> {
                   SizedBox(width: 8.w),
                   Expanded(
                     child: Text(
-                      primaryOfferText.isNotEmpty ? primaryOfferText : 'Flat ₹100 OFF above ₹149',
+                      primaryOfferText,
                       style: TextStyle(
                         fontSize: 12.sp,
                         fontWeight: FontWeight.w700,
@@ -1051,7 +993,7 @@ class _RestaurantScreenState extends ConsumerState<RestaurantScreen> {
                     ),
                   ),
                   Text(
-                    '7 offers',
+                    '${restaurant.offerBadges.length + restaurantOffers.length} offer${restaurant.offerBadges.length + restaurantOffers.length == 1 ? '' : 's'}',
                     style: TextStyle(
                       fontSize: 11.5.sp,
                       fontWeight: FontWeight.w600,
@@ -1170,7 +1112,7 @@ class _RestaurantScreenState extends ConsumerState<RestaurantScreen> {
                   Icon(Icons.access_time_rounded, size: 18.sp, color: Colors.grey[600]),
                   SizedBox(width: 10.w),
                   Text(
-                    restaurant.deliveryTime.isNotEmpty ? 'Delivery: ${restaurant.deliveryTime}' : 'Delivery: 25-30 mins',
+                    restaurant.deliveryTime.isNotEmpty ? 'Delivery: ${restaurant.deliveryTime}' : 'Delivery',
                     style: TextStyle(fontSize: 13.sp, fontWeight: FontWeight.w500),
                   ),
                 ],
@@ -1555,7 +1497,7 @@ class _RestaurantScreenState extends ConsumerState<RestaurantScreen> {
                   ),
                   SizedBox(width: 4.w),
                   Text(
-                    'Highly reordered',
+                    'Top rated',
                     style: TextStyle(
                       fontSize: 11.5.sp,
                       fontWeight: FontWeight.w600,
@@ -1566,39 +1508,6 @@ class _RestaurantScreenState extends ConsumerState<RestaurantScreen> {
                   ),
                 ],
               ),
-            ),
-          ),
-
-          // Kid's choice chip matching Screenshot 5
-          Container(
-            margin: EdgeInsets.only(right: 6.w),
-            padding: EdgeInsets.symmetric(horizontal: 10.w),
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.surfaceDark : Colors.white,
-              borderRadius: BorderRadius.circular(16.r),
-              border: Border.all(
-                color: isDark ? AppColors.borderDark : const Color(0xFFD1D5DB),
-                width: 1,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.face_rounded,
-                  size: 14.sp,
-                  color: const Color(0xFFF59E0B),
-                ),
-                SizedBox(width: 4.w),
-                Text(
-                  "Kid's choice",
-                  style: TextStyle(
-                    fontSize: 11.5.sp,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? AppColors.textSecondaryDark : const Color(0xFF1E232C),
-                  ),
-                ),
-              ],
             ),
           ),
         ],

@@ -452,8 +452,8 @@ class AllOffersScreen extends ConsumerWidget {
   ) {
     final offerText = r.offerBadges.isNotEmpty
         ? r.offerBadges.first
-        : (index % 2 == 0 ? 'Flat ₹100 OFF' : '50% OFF up to ₹100');
-    final rating = r.rating > 0 ? r.rating : 4.0;
+        : '';
+    final rating = r.rating;
     final isFast = r.isNearAndFast ||
         r.deliveryTime.contains('10') ||
         r.deliveryTime.contains('15') ||
@@ -520,7 +520,8 @@ class AllOffersScreen extends ConsumerWidget {
                       ),
                     ),
 
-                    // Top Left: Black Offer Badge
+                    // Top left: the real offer, if any.
+                    if (offerText.isNotEmpty)
                     Positioned(
                       top: 5.h,
                       left: 5.w,
@@ -556,7 +557,7 @@ class AllOffersScreen extends ConsumerWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              rating.toStringAsFixed(1),
+                              rating > 0 ? rating.toStringAsFixed(1) : 'New',
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 8.5.sp,
@@ -612,7 +613,7 @@ class AllOffersScreen extends ConsumerWidget {
                       SizedBox(width: 2.w),
                       Expanded(
                         child: Text(
-                          r.deliveryTime.isNotEmpty ? r.deliveryTime : '25-30 mins',
+                          r.deliveryTime,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(

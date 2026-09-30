@@ -92,10 +92,10 @@ class _SpotlightCarouselState extends State<SpotlightCarousel> {
             },
             itemBuilder: (context, index) {
               final restaurant = items[index];
-              final rating = restaurant.rating > 0 ? restaurant.rating : 4.0;
+              final rating = restaurant.rating;
               final offer = restaurant.offerBadges.isNotEmpty
                   ? restaurant.offerBadges.first
-                  : '₹100 OFF above ₹149';
+                  : '';
 
               return Padding(
                 padding: EdgeInsets.symmetric(horizontal: 5.w),
@@ -209,7 +209,7 @@ class _SpotlightCarouselState extends State<SpotlightCarousel> {
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         Text(
-                                          rating.toStringAsFixed(1),
+                                          rating > 0 ? rating.toStringAsFixed(1) : 'New',
                                           style: TextStyle(
                                             fontSize: 10.sp,
                                             fontWeight: FontWeight.w800,

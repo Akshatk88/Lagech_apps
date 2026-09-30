@@ -110,7 +110,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         description: result.subtitle,
         price: result.price ?? 99,
         imageUrl: result.imageUrl,
-        rating: result.rating ?? 4.5,
+        rating: result.rating ?? 0,
       );
     }
 
@@ -142,7 +142,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         description: item.subtitle,
         price: item.price ?? 99,
         imageUrl: item.imageUrl,
-        rating: item.rating ?? 4.5,
+        rating: item.rating ?? 0,
       );
     }
 
@@ -1432,7 +1432,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       ),
                       SizedBox(width: 2.w),
                       Text(
-                        '${item.rating ?? 4.0}',
+                        (item.rating ?? 0) > 0 ? '${item.rating}' : 'New',
                         style: TextStyle(
                           fontSize: 12.sp,
                           fontWeight: FontWeight.bold,
