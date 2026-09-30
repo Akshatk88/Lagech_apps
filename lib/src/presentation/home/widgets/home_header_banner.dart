@@ -1,74 +1,269 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/utils/haptics.dart';
 import '../../address/viewmodels/address_viewmodel.dart';
 import '../../../data/models/address_model.dart';
+import '../../../data/models/promo_banner_model.dart';
+import '../viewmodels/banners_viewmodel.dart';
 import '../viewmodels/veg_filter_provider.dart';
 import '../../cart/viewmodels/cart_viewmodel.dart';
 import '../../search/widgets/voice_search_dialog.dart';
 import '../../navigation/route_names.dart';
-import '../../branding/app_colors.dart';
+import '../../common_widgets/smart_image.dart';
+import '../../../di/location_providers.dart';
+import 'location_picker_sheet.dart';
 
-class HomeHeaderBanner extends ConsumerWidget {
+class HomeHeaderBanner extends ConsumerStatefulWidget {
   const HomeHeaderBanner({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeHeaderBanner> createState() => _HomeHeaderBannerState();
+}
+
+class _HomeHeaderBannerState extends ConsumerState<HomeHeaderBanner> {
+  static const _rotateEvery = Duration(seconds: 4);
+
+  late final PageController _pageController;
+  Timer? _timer;
+  int _currentIndex = 0;
+  bool _userInteracting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _syncTimer(int bannerCount) {
+    if (bannerCount < 2) {
+      _timer?.cancel();
+      _timer = null;
+      return;
+    }
+    if (_timer != null && _timer!.isActive) return;
+
+    _timer = Timer.periodic(_rotateEvery, (_) {
+      if (!mounted || _userInteracting || !_pageController.hasClients) return;
+      final next = (_currentIndex + 1) % bannerCount;
+      _pageController.animateToPage(
+        next,
+        duration: const Duration(milliseconds: 450),
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
+
+  Future<void> _openBanner(PromoBannerModel banner) async {
+    final destination = banner.destination;
+    Haptics.light();
+
+    if (destination == null || destination.trim().isEmpty) {
+      if (mounted) context.push(RouteNames.allOffers);
+      return;
+    }
+
+    if (destination.startsWith('/')) {
+      if (mounted) context.push(destination);
+      return;
+    }
+
+    try {
+      await launchUrl(
+        Uri.parse(destination),
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (_) {
+      if (mounted) context.push(RouteNames.allOffers);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final promoAsync = ref.watch(promoBannersProvider);
+    final banners = promoAsync.asData?.value ?? const [];
+
+    _syncTimer(banners.length);
 
     return Container(
       width: double.infinity,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: isDark
-              ? [
-                  AppColors.surfaceDark,
-                  AppColors.backgroundDark,
-                ]
-              : [
-                  const Color(0xFFEADBFA), // Soft Lilac / Lavender
-                  const Color(0xFFF6F0FB),
-                  Colors.white,
-                ],
-        ),
+      decoration: const BoxDecoration(
+        color: Color(0xFFC80A14), // Brand red fallback
       ),
-      child: SafeArea(
-        bottom: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
-              child: Column(
-                children: [
-                  // 1. Top Row: Location, Appzeto Logo, Wallet & Cart
-                  _buildTopRow(context, ref, isDark),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // 1. Dynamic Full-bleed Background Banner Carousel extending all the way to the top
+          Positioned.fill(
+            child: banners.isEmpty
+                ? _buildFallbackBanner(context, isDark)
+                : NotificationListener<ScrollNotification>(
+                    onNotification: (n) {
+                      if (n is ScrollStartNotification) _userInteracting = true;
+                      if (n is ScrollEndNotification) _userInteracting = false;
+                      return false;
+                    },
+                    child: PageView.builder(
+                      controller: _pageController,
+                      itemCount: banners.length,
+                      onPageChanged: (i) {
+                        if (mounted) setState(() => _currentIndex = i);
+                      },
+                      itemBuilder: (context, i) {
+                        final banner = banners[i];
+                        return GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => _openBanner(banner),
+                          child: SmartImage(
+                            url: banner.imageUrl,
+                            category: ImageCategory.food,
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            height: double.infinity,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+          ),
 
-                  SizedBox(height: 14.h),
-
-                  // 2. Search Bar and VEG Mode Toggle
-                  _buildSearchBarAndVegMode(context, ref, isDark),
-                ],
+          // 2. High-contrast gradient scrim over the banner
+          // Ensures the top bar (Location, Logo, Wallet/Cart) and Search capsule
+          // are ultra-crisp, easy to read and interact with on top of any banner!
+          Positioned.fill(
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    stops: const [0.0, 0.22, 0.45, 1.0],
+                    colors: [
+                      Colors.black.withValues(alpha: 0.65), // Top dark shade for status bar & address
+                      Colors.black.withValues(alpha: 0.25), // Mid shade for search bar
+                      Colors.transparent, // Clear window for promotional banner center
+                      Colors.black.withValues(alpha: 0.35), // Base shade for indicator dots
+                    ],
+                  ),
+                ),
               ),
             ),
+          ),
 
-            // 3. Special Offer Express Delivery Banner
-            _buildSpecialOfferBanner(context, isDark),
+          // 3. Foreground Controls & Layout
+          SafeArea(
+            bottom: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+                  child: Column(
+                    children: [
+                      // Top Row: Location, Lagech Logo, Wallet & Cart
+                      _buildTopRow(context, ref, isDark),
 
-            SizedBox(height: 10.h),
-          ],
+                      SizedBox(height: 14.h),
+
+                      // Search Bar and VEG Mode Toggle
+                      _buildSearchBarAndVegMode(context, ref, isDark),
+                    ],
+                  ),
+                ),
+
+                // Open interactive area showcasing the admin promotional banner artwork.
+                // Wrapped in IgnorePointer so any tap/drag in this space passes directly
+                // through to the banner PageView & GestureDetector underneath!
+                IgnorePointer(
+                  child: SizedBox(height: 150.h),
+                ),
+
+                // Overlaid indicator dots at the bottom of the banner
+                if (banners.length > 1) ...[
+                  _buildIndicatorDots(banners.length),
+                  SizedBox(height: 8.h),
+                ] else
+                  SizedBox(height: 6.h),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFallbackBanner(BuildContext context, bool isDark) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        Haptics.light();
+        context.push(RouteNames.allOffers);
+      },
+      child: Image.asset(
+        'assets/images/home_banner.png',
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        errorBuilder: (context, error, stackTrace) => Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xFFD60E18),
+                Color(0xFFC80A14),
+                Color(0xFFB80610),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
 
+  Widget _buildIndicatorDots(int count) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(count, (i) {
+        final active = i == _currentIndex;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          margin: EdgeInsets.symmetric(horizontal: 3.w),
+          width: active ? 18.w : 6.w,
+          height: 6.h,
+          decoration: BoxDecoration(
+            color: active
+                ? Colors.white
+                : Colors.white.withValues(alpha: 0.45),
+            borderRadius: BorderRadius.circular(3.r),
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black26,
+                blurRadius: 3,
+                offset: Offset(0, 1),
+              ),
+            ],
+          ),
+        );
+      }),
+    );
+  }
+
   Widget _buildTopRow(BuildContext context, WidgetRef ref, bool isDark) {
+    final activeLocation = ref.watch(activeLocationProvider);
     final addresses = ref.watch(addressViewModelProvider);
     final defaultAddress = addresses.cast<AddressModel?>().firstWhere(
       (a) => a?.isDefault == true,
@@ -76,10 +271,13 @@ class HomeHeaderBanner extends ConsumerWidget {
     );
     final cartItemCount = ref.watch(cartViewModelProvider).items.length;
 
-    String locationTitle = 'Indore';
-    String locationSubtitle = 'Madhya Pradesh';
+    String locationTitle = 'Select Location';
+    String locationSubtitle = 'Tap to choose address';
 
-    if (defaultAddress != null) {
+    if (activeLocation != null && activeLocation.title.isNotEmpty) {
+      locationTitle = activeLocation.title;
+      locationSubtitle = activeLocation.subtitle;
+    } else if (defaultAddress != null) {
       if (defaultAddress.title.isNotEmpty) {
         locationTitle = defaultAddress.title;
       } else if (defaultAddress.city.isNotEmpty) {
@@ -94,29 +292,32 @@ class HomeHeaderBanner extends ConsumerWidget {
       } else if (defaultAddress.fullAddress.isNotEmpty) {
         locationSubtitle = defaultAddress.fullAddress;
       }
+    } else {
+      locationTitle = 'Indore';
+      locationSubtitle = 'Madhya Pradesh';
     }
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // Left: Location with Pin and Dropdown
+        // Left: Location with Pin and Dropdown (Pure White)
         Expanded(
           flex: 4,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () {
               Haptics.light();
-              context.push(RouteNames.addAddress);
+              LocationPickerSheet.show(context);
             },
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
                   Icons.location_on_rounded,
-                  color: isDark ? const Color(0xFFD1D5DB) : const Color(0xFF4B5563),
-                  size: 19.sp,
+                  color: Colors.white,
+                  size: 18.sp,
                 ),
-                SizedBox(width: 4.w),
+                SizedBox(width: 3.w),
                 Flexible(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -129,8 +330,8 @@ class HomeHeaderBanner extends ConsumerWidget {
                             child: Text(
                               locationTitle,
                               style: TextStyle(
-                                color: isDark ? Colors.white : const Color(0xFF111827),
-                                fontSize: 15.sp,
+                                color: Colors.white,
+                                fontSize: 13.5.sp,
                                 fontWeight: FontWeight.w800,
                               ),
                               maxLines: 1,
@@ -139,18 +340,16 @@ class HomeHeaderBanner extends ConsumerWidget {
                           ),
                           Icon(
                             Icons.keyboard_arrow_down_rounded,
-                            color: isDark ? Colors.white70 : const Color(0xFF4B5563),
-                            size: 18.sp,
+                            color: Colors.white,
+                            size: 16.sp,
                           ),
                         ],
                       ),
                       Text(
                         locationSubtitle,
                         style: TextStyle(
-                          color: isDark
-                              ? const Color(0xFF9CA3AF)
-                              : const Color(0xFF6B7280),
-                          fontSize: 11.sp,
+                          color: Colors.white.withValues(alpha: 0.85),
+                          fontSize: 10.sp,
                           fontWeight: FontWeight.w500,
                         ),
                         maxLines: 1,
@@ -164,37 +363,29 @@ class HomeHeaderBanner extends ConsumerWidget {
           ),
         ),
 
-        // Center: Appzeto Logo
+        // Center: Lagech Logo (White stylized speed logo, clean without side lines)
         Expanded(
-          flex: 4,
+          flex: 5,
           child: Center(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Appzeto',
-                  style: TextStyle(
-                    color: const Color(0xFF00A896), // Brand Teal / Cyan
-                    fontSize: 22.sp,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -0.5,
-                  ),
+            child: Image.asset(
+              'assets/images/logo_text.png',
+              height: 22.h,
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) => Text(
+                'LAGECH',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20.sp,
+                  fontWeight: FontWeight.w900,
+                  fontStyle: FontStyle.italic,
+                  letterSpacing: -0.5,
                 ),
-                Container(
-                  width: 5.r,
-                  height: 5.r,
-                  margin: EdgeInsets.only(left: 2.w, top: 8.h),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFF59E0B), // Warm yellow dot
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),
 
-        // Right: Wallet & Cart Buttons
+        // Right: Wallet & Cart Buttons (Circular translucent buttons)
         Expanded(
           flex: 4,
           child: Row(
@@ -207,19 +398,17 @@ class HomeHeaderBanner extends ConsumerWidget {
                   Haptics.light();
                   context.push(RouteNames.wallet);
                 },
-                isDark: isDark,
               ),
-              SizedBox(width: 8.w),
+              SizedBox(width: 6.w),
 
               // Cart Button
               _buildTopActionButton(
-                icon: Icons.shopping_bag_outlined,
+                icon: Icons.shopping_cart_outlined,
                 badgeCount: cartItemCount,
                 onTap: () {
                   Haptics.light();
                   context.push(RouteNames.cart);
                 },
-                isDark: isDark,
               ),
             ],
           ),
@@ -231,7 +420,6 @@ class HomeHeaderBanner extends ConsumerWidget {
   Widget _buildTopActionButton({
     required IconData icon,
     required VoidCallback onTap,
-    required bool isDark,
     int badgeCount = 0,
   }) {
     return GestureDetector(
@@ -240,43 +428,32 @@ class HomeHeaderBanner extends ConsumerWidget {
         clipBehavior: Clip.none,
         children: [
           Container(
-            width: 36.w,
-            height: 36.w,
+            width: 30.w,
+            height: 30.w,
             decoration: BoxDecoration(
-              color: isDark ? AppColors.surfaceDark : Colors.white,
-              borderRadius: BorderRadius.circular(10.r),
-              border: Border.all(
-                color: isDark ? AppColors.borderDark : const Color(0xFFE5E7EB),
-                width: 1,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-                  blurRadius: 4,
-                  offset: const Offset(0, 1),
-                ),
-              ],
+              shape: BoxShape.circle,
+              color: Colors.white.withValues(alpha: 0.22),
             ),
             child: Icon(
               icon,
-              color: isDark ? Colors.white : const Color(0xFF374151),
-              size: 19.sp,
+              color: Colors.white,
+              size: 16.sp,
             ),
           ),
           if (badgeCount > 0)
             Positioned(
-              right: -3,
-              top: -3,
+              right: -2,
+              top: -2,
               child: Container(
                 padding: EdgeInsets.all(4.r),
                 decoration: const BoxDecoration(
-                  color: Color(0xFFE50914),
+                  color: Colors.white,
                   shape: BoxShape.circle,
                 ),
                 child: Text(
                   '$badgeCount',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: const Color(0xFFC80A14),
                     fontSize: 9.sp,
                     fontWeight: FontWeight.bold,
                   ),
@@ -296,26 +473,22 @@ class HomeHeaderBanner extends ConsumerWidget {
         // Left: Rounded White Capsule Search Bar
         Expanded(
           child: Container(
-            height: 46.h,
-            padding: EdgeInsets.symmetric(horizontal: 14.w),
+            height: 40.h,
+            padding: EdgeInsets.symmetric(horizontal: 12.w),
             decoration: BoxDecoration(
-              color: isDark ? AppColors.surfaceDark : Colors.white,
-              borderRadius: BorderRadius.circular(24.r),
-              border: Border.all(
-                color: isDark ? AppColors.borderDark : const Color(0xFFE5E7EB),
-                width: 1,
-              ),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(30.r),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-                  blurRadius: 8,
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 6,
                   offset: const Offset(0, 2),
                 ),
               ],
             ),
             child: Row(
               children: [
-                // Search Icon
+                // Search Icon & Prompt Click
                 Expanded(
                   child: InkWell(
                     onTap: () {
@@ -326,17 +499,17 @@ class HomeHeaderBanner extends ConsumerWidget {
                       children: [
                         Icon(
                           Icons.search,
-                          color: const Color(0xFF00A896),
-                          size: 20.sp,
+                          color: const Color(0xFFC80A14), // Red
+                          size: 18.sp,
                         ),
-                        SizedBox(width: 8.w),
+                        SizedBox(width: 6.w),
                         Expanded(
                           child: Text(
-                            'Search "biryani"',
+                            'Search restaurants, dishes...',
                             style: TextStyle(
-                              color: isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280),
-                              fontSize: 13.5.sp,
-                              fontWeight: FontWeight.w500,
+                              color: const Color(0xFF9CA3AF),
+                              fontSize: 12.sp,
+                              fontWeight: FontWeight.w400,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -357,11 +530,11 @@ class HomeHeaderBanner extends ConsumerWidget {
                     }
                   },
                   child: Padding(
-                    padding: EdgeInsets.only(left: 6.w),
+                    padding: EdgeInsets.only(left: 4.w),
                     child: Icon(
                       Icons.mic_none_rounded,
-                      color: isDark ? const Color(0xFF9CA3AF) : const Color(0xFF4B5563),
-                      size: 22.sp,
+                      color: const Color(0xFFC80A14), // Red
+                      size: 18.sp,
                     ),
                   ),
                 ),
@@ -370,7 +543,7 @@ class HomeHeaderBanner extends ConsumerWidget {
           ),
         ),
 
-        SizedBox(width: 12.w),
+        SizedBox(width: 10.w),
 
         // Right: VEG MODE Toggle Pill Button
         InkWell(
@@ -386,31 +559,31 @@ class HomeHeaderBanner extends ConsumerWidget {
                 'VEG\nMODE',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 8.5.sp,
+                  fontSize: 9.sp,
                   fontWeight: FontWeight.w900,
-                  color: isDark ? const Color(0xFFD1D5DB) : const Color(0xFF4B5563),
-                  letterSpacing: 0.5,
+                  color: Colors.white, // Pure white as in screenshot
+                  letterSpacing: 0.4,
                   height: 1.1,
                 ),
               ),
-              SizedBox(height: 3.h),
+              SizedBox(height: 2.h),
               AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
-                width: 36.w,
-                height: 18.h,
+                width: 32.w,
+                height: 16.h,
                 padding: EdgeInsets.all(2.r),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(10.r),
+                  borderRadius: BorderRadius.circular(8.r),
                   color: isVegOnly
-                      ? const Color(0xFF22C55E) // Bright Green
-                      : (isDark ? const Color(0xFF4B5563) : const Color(0xFFD1D5DB)),
+                      ? const Color(0xFF10B981) // Emerald Green as in screenshot
+                      : Colors.white.withValues(alpha: 0.35),
                 ),
                 child: AnimatedAlign(
                   duration: const Duration(milliseconds: 200),
                   alignment: isVegOnly ? Alignment.centerRight : Alignment.centerLeft,
                   child: Container(
-                    width: 14.h,
-                    height: 14.h,
+                    width: 12.h,
+                    height: 12.h,
                     decoration: const BoxDecoration(
                       color: Colors.white,
                       shape: BoxShape.circle,
@@ -429,210 +602,6 @@ class HomeHeaderBanner extends ConsumerWidget {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildSpecialOfferBanner(BuildContext context, bool isDark) {
-    return Container(
-      margin: EdgeInsets.symmetric(horizontal: 16.w, vertical: 6.h),
-      padding: EdgeInsets.all(16.r),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20.r),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: isDark
-              ? [
-                  const Color(0xFF3B1E54),
-                  const Color(0xFF2B124C),
-                ]
-              : [
-                  const Color(0xFFE4D0F3), // Pastel Lilac / Violet
-                  const Color(0xFFD5BAED),
-                  const Color(0xFFC7A2E5),
-                ],
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.purple.withValues(alpha: isDark ? 0.2 : 0.08),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          // Left Column: Text & CTA
-          Expanded(
-            flex: 6,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Pop Badge: Special Offer!
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.9),
-                    borderRadius: BorderRadius.circular(6.r),
-                    border: Border.all(
-                      color: const Color(0xFF7E22CE),
-                      width: 1,
-                    ),
-                  ),
-                  child: Text(
-                    'Special Offer!',
-                    style: TextStyle(
-                      color: const Color(0xFF581C87),
-                      fontSize: 14.sp,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-                SizedBox(height: 5.h),
-
-                // Subtitle
-                Text(
-                  '& Get Express Delivery',
-                  style: TextStyle(
-                    color: isDark ? Colors.white : const Color(0xFF2E1065),
-                    fontSize: 14.sp,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                Text(
-                  'with every order',
-                  style: TextStyle(
-                    color: isDark ? Colors.white70 : const Color(0xFF3B0764),
-                    fontSize: 12.5.sp,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                Text(
-                  'on your first order under 7 km',
-                  style: TextStyle(
-                    color: isDark ? Colors.white60 : const Color(0xFF581C87),
-                    fontSize: 10.sp,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                SizedBox(height: 10.h),
-
-                // CTA Button: Know more >
-                InkWell(
-                  onTap: () {
-                    Haptics.light();
-                    context.push(RouteNames.allOffers);
-                  },
-                  borderRadius: BorderRadius.circular(20.r),
-                  child: Container(
-                    padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 6.h),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF6B21A8), // Deep Royal Purple
-                      borderRadius: BorderRadius.circular(20.r),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF6B21A8).withValues(alpha: 0.3),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'Know more',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 11.5.sp,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        SizedBox(width: 4.w),
-                        Icon(
-                          Icons.arrow_forward_ios_rounded,
-                          color: Colors.white,
-                          size: 10.sp,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Right Column: Delivery Boy Illustration
-          Expanded(
-            flex: 4,
-            child: SizedBox(
-              height: 110.h,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  // Pop speed rays / circle background
-                  Container(
-                    width: 90.r,
-                    height: 90.r,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.white.withValues(alpha: 0.35),
-                    ),
-                  ),
-                  // Delivery Bag Artwork
-                  Positioned(
-                    right: 4.w,
-                    child: Container(
-                      width: 78.w,
-                      height: 82.h,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE9D5FF),
-                        borderRadius: BorderRadius.circular(14.r),
-                        border: Border.all(color: Colors.white, width: 2),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
-                            blurRadius: 8,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.delivery_dining_rounded,
-                            size: 40.sp,
-                            color: const Color(0xFF7E22CE),
-                          ),
-                          SizedBox(height: 2.h),
-                          Container(
-                            padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF7E22CE),
-                              borderRadius: BorderRadius.circular(4.r),
-                            ),
-                            child: Text(
-                              'EXPRESS',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 8.sp,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

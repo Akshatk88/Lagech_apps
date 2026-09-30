@@ -16,10 +16,11 @@ import '../restaurant/screens/food_detail_loader_screen.dart';
 import '../restaurant/screens/food_detail_screen.dart';
 import '../restaurant/screens/restaurant_detail_loader_screen.dart';
 import '../restaurant/screens/restaurant_screen.dart';
+import '../restaurant/screens/restaurant_reviews_screen.dart';
 import '../restaurant/screens/store99_screen.dart';
+import '../offers/screens/all_offers_screen.dart';
 import '../search/screens/search_screen.dart';
 import '../address/screens/add_address_screen.dart';
-import '../offers/screens/all_offers_screen.dart';
 import '../favorites/favorites_screen.dart';
 import '../orders/screens/orders_screen.dart';
 import '../orders/screens/order_details_screen.dart';
@@ -34,6 +35,7 @@ import '../chat/screens/chat_screen.dart';
 import '../home/screens/home_filter_screen.dart';
 import '../home/screens/category_details_screen.dart';
 import '../home/screens/popular_dishes_screen.dart';
+import '../home/screens/top_10_screen.dart';
 import '../common/webview_screen.dart';
 import '../about/screens/about_screen.dart';
 import '../profile/screens/help_support_screen.dart';
@@ -152,6 +154,29 @@ final routerProvider = Provider<GoRouter>((ref) {
         ],
       ),
       GoRoute(
+        path: RouteNames.restaurantReviews,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) {
+          final extra = state.extra;
+          RestaurantModel? restaurant;
+          List<FoodModel> menuItems = const [];
+          if (extra is RestaurantModel) {
+            restaurant = extra;
+          } else if (extra is Map<String, dynamic>) {
+            restaurant = extra['restaurant'] as RestaurantModel?;
+            menuItems = (extra['menuItems'] as List<FoodModel>?) ?? const [];
+          }
+          if (restaurant != null) {
+            return RestaurantReviewsScreen(
+              restaurant: restaurant,
+              menuItems: menuItems,
+            );
+          }
+          final restaurantId = state.uri.queryParameters['id'] ?? '';
+          return RestaurantDetailLoaderScreen(restaurantId: restaurantId);
+        },
+      ),
+      GoRoute(
         path: RouteNames.foodDetail,
         builder: (context, state) {
           final extraFood = state.extra is FoodModel ? state.extra as FoodModel : null;
@@ -267,6 +292,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: RouteNames.popularDishes,
         parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const PopularDishesScreen(),
+      ),
+      GoRoute(
+        path: RouteNames.top10,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => const Top10Screen(),
       ),
       GoRoute(
         path: '/orders/success/:id',

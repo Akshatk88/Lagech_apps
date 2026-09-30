@@ -46,34 +46,60 @@ class PopularBrandsList extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   // Circular Brand Logo Avatar Container
-                  Container(
-                    width: 48.w,
-                    height: 48.h,
-                    padding: EdgeInsets.all(7.r),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isDark ? AppColors.surfaceDark : Colors.white,
-                      border: Border.all(
-                        color: isDark ? AppColors.borderDark : const Color(0xFFEEEEEE),
-                        width: 1.0,
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        width: 48.w,
+                        height: 48.h,
+                        padding: EdgeInsets.all(7.r),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isDark ? AppColors.surfaceDark : Colors.white,
+                          border: Border.all(
+                            color: !restaurant.isOpen
+                                ? const Color(0xFFEF4444)
+                                : (isDark
+                                    ? AppColors.borderDark
+                                    : const Color(0xFFEEEEEE)),
+                            width: 1.0,
+                          ),
+                          boxShadow: isDark
+                              ? []
+                              : [
+                                  BoxShadow(
+                                    color: AppColors.shadow1,
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                        ),
+                        child: ClipOval(
+                          child: SmartImage(
+                            url: logo,
+                            category: ImageCategory.restaurant,
+                            fit: BoxFit.contain,
+                          ),
+                        ),
                       ),
-                      boxShadow: isDark
-                          ? []
-                          : [
-                              BoxShadow(
-                                color: AppColors.shadow1,
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                    ),
-                    child: ClipOval(
-                      child: SmartImage(
-                        url: logo,
-                        category: ImageCategory.restaurant,
-                        fit: BoxFit.contain,
-                      ),
-                    ),
+                      if (!restaurant.isOpen)
+                        Positioned(
+                          bottom: -2.h,
+                          right: -2.w,
+                          child: Container(
+                            padding: EdgeInsets.all(2.5.r),
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFDC2626),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.lock_clock_rounded,
+                              size: 10.sp,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                   SizedBox(height: 4.h),
 
@@ -92,13 +118,15 @@ class PopularBrandsList extends StatelessWidget {
 
                   SizedBox(height: 1.h),
 
-                  // Delivery Time
+                  // Delivery Time or Closed
                   Text(
-                    time,
+                    !restaurant.isOpen ? 'Closed' : time,
                     style: TextStyle(
                       fontSize: 9.5.sp,
-                      fontWeight: FontWeight.w500,
-                      color: isDark ? AppColors.textSecondaryDark : const Color(0xFF757575),
+                      fontWeight: !restaurant.isOpen ? FontWeight.w700 : FontWeight.w500,
+                      color: !restaurant.isOpen
+                          ? const Color(0xFFEF4444)
+                          : (isDark ? AppColors.textSecondaryDark : const Color(0xFF757575)),
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,

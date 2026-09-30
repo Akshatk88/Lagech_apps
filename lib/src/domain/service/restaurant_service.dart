@@ -13,103 +13,60 @@ class RestaurantService {
     return _repository.getRestaurantMenu(restaurantId);
   }
 
-  /// Fixed display order for menu categories, mirrored between
-  /// [extractCategories], [filterMenu] and [groupByCategory] so that chip
-  /// order, filter results, and section order always stay in sync.
-  static const List<MapEntry<String, String>> _categoryOrder = [
-    MapEntry('all', 'All'),
-    MapEntry('recommended', 'Recommended'),
-    MapEntry('breakfast', 'Breakfast'),
-    MapEntry('burger', 'Burgers'),
-    MapEntry('pizza', 'Pizza'),
-    MapEntry('biryani', 'Biryani'),
-    MapEntry('sandwiches', 'Sandwiches & Subs'),
-    MapEntry('sides', 'Sides & Snacks'),
-    MapEntry('beverages', 'Beverages'),
-    MapEntry('desserts', 'Desserts'),
-    MapEntry('combos', 'Combos & Thali'),
-    MapEntry('main_course', 'Main Course'),
-  ];
-
-  /// Resolves every category an item belongs to (an item may appear under
-  /// more than one, e.g. a popular pizza is both "Recommended" and "Pizza").
-  Set<String> _categoryIdsFor(FoodModel item) {
-    final ids = <String>{};
-    if (item.isPopular) ids.add('recommended');
-
-    final name = item.name.toLowerCase();
-    if (name.contains('pizza')) ids.add('pizza');
-    if (name.contains('burger')) ids.add('burger');
-    if (name.contains('biryani') || name.contains('rice')) ids.add('biryani');
-    if (name.contains('dosa') ||
-        name.contains('paratha') ||
-        name.contains('khichdi') ||
-        name.contains('idli') ||
-        name.contains('upma')) {
-      ids.add('breakfast');
-    }
-    if (name.contains('sandwich') || name.contains('sub')) {
-      ids.add('sandwiches');
-    }
-    if (name.contains('fries') ||
-        name.contains('bucket') ||
-        name.contains('nugget') ||
-        name.contains('wings')) {
-      ids.add('sides');
-    }
-    if (name.contains('frappuccino') ||
-        name.contains('shake') ||
-        name.contains('coffee') ||
-        name.contains('drink') ||
-        name.contains('juice') ||
-        name.contains('soda')) {
-      ids.add('beverages');
-    }
-    if (name.contains('muffin') ||
-        name.contains('cake') ||
-        name.contains('brownie') ||
-        name.contains('ice cream') ||
-        name.contains('dessert')) {
-      ids.add('desserts');
-    }
-    if (name.contains('roti') || name.contains('thali') || name.contains('combo')) {
-      ids.add('combos');
-    }
-
-    if (ids.isEmpty) ids.add('main_course');
-    return ids;
-  }
-
-  /// Dynamically extract categories from menu items.
+  /// Dynamically extract categories from menu items using the real categories
+  /// assigned by the restaurant/backend, with 'All' and 'Recommended' (if any popular dishes exist).
   List<RestaurantMenuCategory> extractCategories(List<FoodModel> items) {
     if (items.isEmpty) return const [];
 
-    final seenIds = <String>{};
-    final seenNames = <String>{};
     final result = <RestaurantMenuCategory>[];
 
-    for (final entry in _categoryOrder) {
-      final id = entry.key;
-      final name = entry.value;
-      final nameKey = name.trim().toLowerCase();
+    // 1. 'All' category
+    result.add(RestaurantMenuCategory(id: 'all', name: 'All', itemCount: items.length));
 
-      if (seenIds.contains(id) || seenNames.contains(nameKey)) continue;
-
-      final count = id == 'all'
-          ? items.length
-          : items.where((f) => _categoryIdsFor(f).contains(id)).length;
-
-      if (count > 0) {
-        seenIds.add(id);
-        seenNames.add(nameKey);
-        result.add(RestaurantMenuCategory(id: id, name: name, itemCount: count));
-      }
+    // 2. 'Recommended' category if any dishes are flagged popular
+    final popularDishes = items.where((f) => f.isPopular).toList();
+    if (popularDishes.isNotEmpty) {
+      result.add(RestaurantMenuCategory(
+        id: 'recommended',
+        name: 'Recommended',
+        itemCount: popularDishes.length,
+      ));
     }
+
+    // 3. Extract distinct restaurant categories in order of appearance
+    final seen = <String>{};
+    final categoryCounts = <String, int>{};
+    final categoryNames = <String, String>{};
+    final categoryOrder = <String>[];
+
+    for (final item in items) {
+      final rawName = item.categoryName.trim().isNotEmpty
+          ? item.categoryName.trim()
+          : (item.categoryId.trim().isNotEmpty ? item.categoryId.trim() : 'Menu');
+      final normalizedId = rawName.toLowerCase();
+
+      if (normalizedId == 'all' || normalizedId == 'recommended') continue;
+
+      if (!seen.contains(normalizedId)) {
+        seen.add(normalizedId);
+        categoryOrder.add(normalizedId);
+        categoryNames[normalizedId] = rawName;
+      }
+      categoryCounts[normalizedId] = (categoryCounts[normalizedId] ?? 0) + 1;
+    }
+
+    for (final id in categoryOrder) {
+      result.add(RestaurantMenuCategory(
+        id: id,
+        name: categoryNames[id] ?? id,
+        itemCount: categoryCounts[id] ?? 0,
+      ));
+    }
+
     return result;
   }
 
-  /// Groups items by category id, preserving [_categoryOrder]. Used to
-  /// render the menu as jump-to sections instead of a single filtered grid.
+  /// Groups items by category preserving category order.
   Map<String, List<FoodModel>> groupByCategory(
     List<FoodModel> items,
     List<RestaurantMenuCategory> categories,
@@ -117,9 +74,27 @@ class RestaurantService {
     final map = <String, List<FoodModel>>{};
     for (final cat in categories) {
       if (cat.id == 'all') continue;
-      final matched = items.where((f) => _categoryIdsFor(f).contains(cat.id)).toList();
+      if (cat.id == 'recommended') {
+        final matched = items.where((f) => f.isPopular).toList();
+        if (matched.isNotEmpty) map[cat.id] = matched;
+        continue;
+      }
+
+      final matched = items.where((f) {
+        final rawName = f.categoryName.trim().isNotEmpty
+            ? f.categoryName.trim()
+            : (f.categoryId.trim().isNotEmpty ? f.categoryId.trim() : 'Menu');
+        return rawName.toLowerCase() == cat.id;
+      }).toList();
+
       if (matched.isNotEmpty) map[cat.id] = matched;
     }
+
+    // Safety fallback: if no category matched but items exist, show them under 'menu'
+    if (map.isEmpty && items.isNotEmpty) {
+      map['menu'] = items;
+    }
+
     return map;
   }
 
@@ -142,13 +117,23 @@ class RestaurantService {
       result = result.where((f) {
         final matchesName = f.name.toLowerCase().contains(cleanQuery);
         final matchesDesc = f.description.toLowerCase().contains(cleanQuery);
-        return matchesName || matchesDesc;
+        final matchesCat = f.categoryName.toLowerCase().contains(cleanQuery);
+        return matchesName || matchesDesc || matchesCat;
       }).toList();
     }
 
     // 2. Category Filter
     if (categoryId != 'all') {
-      result = result.where((f) => _categoryIdsFor(f).contains(categoryId)).toList();
+      if (categoryId == 'recommended') {
+        result = result.where((f) => f.isPopular).toList();
+      } else {
+        result = result.where((f) {
+          final rawName = f.categoryName.trim().isNotEmpty
+              ? f.categoryName.trim()
+              : (f.categoryId.trim().isNotEmpty ? f.categoryId.trim() : 'Menu');
+          return rawName.toLowerCase() == categoryId.toLowerCase();
+        }).toList();
+      }
     }
 
     // 3. Veg / Non-Veg Toggle
@@ -169,7 +154,6 @@ class RestaurantService {
       if (popular.isNotEmpty) {
         result = popular;
       } else {
-        // Fallback: prioritize dishes with highest rating or reviews
         final sorted = List<FoodModel>.from(result)
           ..sort((a, b) {
             final cmp = b.rating.compareTo(a.rating);

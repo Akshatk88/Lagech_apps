@@ -9,6 +9,7 @@ class HomeFilterChipsRow extends StatelessWidget {
   final VoidCallback? onUnder45MinsTap;
   final VoidCallback? onUnder1KmTap;
   final String? activeFilter;
+  final int activeFiltersCount;
 
   const HomeFilterChipsRow({
     super.key,
@@ -17,6 +18,7 @@ class HomeFilterChipsRow extends StatelessWidget {
     this.onUnder45MinsTap,
     this.onUnder1KmTap,
     this.activeFilter,
+    this.activeFiltersCount = 0,
   });
 
   @override
@@ -29,22 +31,23 @@ class HomeFilterChipsRow extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: 16.w),
       child: Row(
         children: [
-          // 1. Filters Button
+          // 1. Filters Button (shows badge/selected when any filter is active)
           _buildChip(
             isDark: isDark,
             icon: Icons.tune_rounded,
-            label: 'Filters',
-            isSelected: false,
+            label: activeFiltersCount > 0 ? 'Filters ($activeFiltersCount)' : 'Filters',
+            isSelected: activeFiltersCount > 0,
             onTap: () {
               Haptics.light();
               onFiltersTap();
             },
           ),
-          SizedBox(width: 8.w),
+          SizedBox(width: 6.w),
 
           // 2. Under 30 mins
           _buildChip(
             isDark: isDark,
+            icon: Icons.bolt_rounded,
             label: 'Under 30 mins',
             isSelected: activeFilter == '30mins',
             onTap: () {
@@ -52,11 +55,12 @@ class HomeFilterChipsRow extends StatelessWidget {
               onUnder30MinsTap?.call();
             },
           ),
-          SizedBox(width: 8.w),
+          SizedBox(width: 6.w),
 
           // 3. Under 45 mins
           _buildChip(
             isDark: isDark,
+            icon: Icons.timer_outlined,
             label: 'Under 45 mins',
             isSelected: activeFilter == '45mins',
             onTap: () {
@@ -64,12 +68,12 @@ class HomeFilterChipsRow extends StatelessWidget {
               onUnder45MinsTap?.call();
             },
           ),
-          SizedBox(width: 8.w),
+          SizedBox(width: 6.w),
 
           // 4. Under 1km
           _buildChip(
             isDark: isDark,
-            icon: Icons.location_on_outlined,
+            icon: Icons.near_me_outlined,
             label: 'Under 1km',
             isSelected: activeFilter == '1km',
             onTap: () {
@@ -90,25 +94,27 @@ class HomeFilterChipsRow extends StatelessWidget {
     required VoidCallback onTap,
   }) {
     final bgColor = isSelected
-        ? AppColors.primary.withValues(alpha: 0.12)
+        ? const Color(0xFFC80A14).withValues(alpha: 0.1)
         : (isDark ? AppColors.surfaceDark : Colors.white);
 
     final borderColor = isSelected
-        ? AppColors.primary
+        ? const Color(0xFFC80A14)
         : (isDark ? AppColors.borderDark : const Color(0xFFE5E7EB));
 
     final textColor = isSelected
-        ? AppColors.primary
+        ? const Color(0xFFC80A14)
         : (isDark ? Colors.white : const Color(0xFF374151));
+
+    final iconColor = isSelected ? const Color(0xFFC80A14) : const Color(0xFFC80A14);
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(10.r),
+      borderRadius: BorderRadius.circular(8.r),
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 7.h),
+        padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 5.h),
         decoration: BoxDecoration(
           color: bgColor,
-          borderRadius: BorderRadius.circular(10.r),
+          borderRadius: BorderRadius.circular(8.r),
           border: Border.all(color: borderColor, width: 1),
           boxShadow: isDark || isSelected
               ? []
@@ -126,16 +132,16 @@ class HomeFilterChipsRow extends StatelessWidget {
             if (icon != null) ...[
               Icon(
                 icon,
-                size: 15.sp,
-                color: textColor,
+                size: 13.sp,
+                color: iconColor,
               ),
-              SizedBox(width: 5.w),
+              SizedBox(width: 4.w),
             ],
             Text(
               label,
               style: TextStyle(
                 color: textColor,
-                fontSize: 12.sp,
+                fontSize: 11.sp,
                 fontWeight: FontWeight.w600,
               ),
             ),

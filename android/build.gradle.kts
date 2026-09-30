@@ -19,9 +19,8 @@ allprojects {
 
 // Keep all build output in the root build folder
 val newBuildDir: Directory =
-    rootProject.layout.buildDirectory
+    rootProject.layout.projectDirectory
         .dir("../build")
-        .get()
 
 rootProject.layout.buildDirectory.value(newBuildDir)
 

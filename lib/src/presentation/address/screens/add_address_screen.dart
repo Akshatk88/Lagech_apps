@@ -20,8 +20,9 @@ import '../../../platform/location/location_service.dart';
 import '../../branding/app_colors.dart';
 import '../../common_widgets/app_snackbar.dart';
 import '../../auth/viewmodels/auth_viewmodel.dart';
-import '../../navigation/route_names.dart';
 import '../viewmodels/address_viewmodel.dart';
+import '../../home/viewmodels/zone_viewmodel.dart';
+import '../../home/viewmodels/home_viewmodel.dart';
 
 class AddAddressScreen extends ConsumerStatefulWidget {
   const AddAddressScreen({super.key});
@@ -332,13 +333,6 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
 
   Future<void> _saveAddress() async {
     Haptics.light();
-    final isLoggedIn = ref.read(authViewModelProvider).value != null;
-    if (!isLoggedIn) {
-      context.push(
-        '${RouteNames.login}?from=${Uri.encodeComponent(RouteNames.addAddress)}',
-      );
-      return;
-    }
 
     final savedName = _saveAsController.text.trim().isNotEmpty
         ? _saveAsController.text.trim()
@@ -351,10 +345,6 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
     final stateText = _stateController.text.trim();
     final zipText = _pincodeController.text.trim();
 
-    // City, state and pincode used to fall back to hardcoded Indore / Madhya
-    // Pradesh when left blank. That is a delivery address: guessing a city the
-    // user never typed sends the order to the wrong place and the fee and
-    // distance derived from it are wrong too. Ask instead of guessing.
     final invalid = cityText.isEmpty
         ? 'Please enter your city'
         : stateText.isEmpty
@@ -375,18 +365,6 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
     ].where((s) => s.isNotEmpty).toList();
     final fullAddress = parts.join(', ');
 
-    // The map pin wins.
-    //
-    // _latitude/_longitude now track the pin, and dropping a pin is the most
-    // explicit statement of intent the user can make — far more precise than a
-    // typed street name, which is exactly why gate codes and back entrances get
-    // pinned rather than described. Geocoding the text on top of that would move
-    // the delivery point away from the spot they deliberately chose.
-    //
-    // Geocoding the typed address remains the fallback for when there is no pin
-    // at all: the map failed to load, or permissions left it never moved. Without
-    // it the address would be saved with no coordinates and every distance and
-    // fee derived from it would be wrong.
     var latitude = _latitude;
     var longitude = _longitude;
     if ((latitude == null || longitude == null) && fullAddress.isNotEmpty) {
@@ -397,6 +375,42 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
         latitude = geocoded.latitude;
         longitude = geocoded.longitude;
       }
+    }
+
+    final locationTitle = areaText.isNotEmpty
+        ? areaText
+        : (buildingText.isNotEmpty
+            ? buildingText
+            : (cityText.isNotEmpty ? cityText : savedName));
+    final locationSubtitle = fullAddress.isNotEmpty
+        ? fullAddress
+        : (cityText.isNotEmpty ? '$cityText, $stateText' : 'Selected Location');
+
+    // 1. Immediately apply the chosen manual location to activeLocationProvider
+    ref.read(activeLocationProvider.notifier).setLocation(
+      UserLocationInfo(
+        title: locationTitle,
+        subtitle: locationSubtitle,
+        latitude: latitude,
+        longitude: longitude,
+        isManual: true,
+      ),
+    );
+
+    // 2. Invalidate location and zone providers so restaurants reload for this location
+    ref.invalidate(userLatLngProvider);
+    ref.invalidate(zoneViewModelProvider);
+    ref.invalidate(homeViewModelProvider);
+
+    final isLoggedIn = ref.read(authViewModelProvider).value != null;
+    if (!isLoggedIn) {
+      Haptics.success();
+      context.pop<Map<String, String>>({
+        'type': _selectedType,
+        'title': locationTitle,
+        'subtitle': locationSubtitle,
+      });
+      return;
     }
 
     final addressModel = AddressModel(
@@ -425,8 +439,8 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
       Haptics.success();
       context.pop<Map<String, String>>({
         'type': _selectedType,
-        'title': savedName,
-        'subtitle': fullAddress,
+        'title': locationTitle,
+        'subtitle': locationSubtitle,
       });
     } else {
       final err = ref.read(addressViewModelProvider.notifier).error;

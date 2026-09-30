@@ -382,6 +382,40 @@ class _FavoriteRestaurantCard extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (!isOpen)
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.vertical(top: Radius.circular(16.r)),
+                      ),
+                      child: Center(
+                        child: Container(
+                          padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
+                          decoration: BoxDecoration(
+                            color: const Color(0xEFDC2626),
+                            borderRadius: BorderRadius.circular(6.r),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.lock_clock_rounded, size: 12.sp, color: Colors.white),
+                              SizedBox(width: 4.w),
+                              Text(
+                                'CLOSED',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11.sp,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.6,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
             Padding(

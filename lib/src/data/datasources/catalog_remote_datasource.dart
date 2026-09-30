@@ -36,6 +36,29 @@ class CatalogRemoteDataSource {
     return ZoneModel.fromApi(data);
   }
 
+  /// Fetches all admin-configured serviceable zones for the location picker.
+  ///
+  /// Returns an empty list gracefully if the backend doesn't expose this
+  /// endpoint yet — the UI falls back to GPS-only detection.
+  Future<List<ServiceableZone>> getAllZones() async {
+    try {
+      final data = await _client.get<Map<String, dynamic>>(
+        ApiPaths.zonesList,
+        auth: false,
+        cacheTtl: const Duration(minutes: 10),
+      );
+      final list = data['zones'] ?? data['data'] ?? data['items'] ?? [];
+      if (list is! List) return const [];
+      return list
+          .whereType<Map>()
+          .map((e) => ServiceableZone.fromApi(e.cast<String, dynamic>()))
+          .where((z) => z.isActive && z.id.isNotEmpty)
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
   // ----------------------------------------------------------------- home
 
   /// `GET /food/hero-banners/public` → `{ banners }`.
@@ -217,19 +240,56 @@ class CatalogRemoteDataSource {
     if (menu is! Map) return const [];
 
     final items = <FoodModel>[];
-    for (final section in (menu['sections'] as List?) ?? const []) {
-      if (section is! Map) continue;
-      for (final item in (section['items'] as List?) ?? const []) {
-        if (item is Map) {
-          items.add(
-            FoodModel.fromApi(
-              item.cast<String, dynamic>(),
-              restaurantId: restaurantId,
-            ),
-          );
+    final sections = menu['sections'];
+    if (sections is List) {
+      for (final section in sections) {
+        if (section is! Map) continue;
+        final sectionName = (section['name'] ?? section['categoryName'] ?? '').toString();
+        final sectionCatId = (section['categoryId'] ?? section['id'] ?? '').toString();
+        final rawItems = section['items'];
+        if (rawItems is List) {
+          for (final item in rawItems) {
+            if (item is Map) {
+              try {
+                final itemMap = Map<String, dynamic>.from(item);
+                if ((itemMap['categoryName'] == null || itemMap['categoryName'].toString().isEmpty) && sectionName.isNotEmpty) {
+                  itemMap['categoryName'] = sectionName;
+                }
+                if ((itemMap['categoryId'] == null || itemMap['categoryId'].toString().isEmpty) && sectionCatId.isNotEmpty) {
+                  itemMap['categoryId'] = sectionCatId;
+                }
+                items.add(
+                  FoodModel.fromApi(
+                    itemMap,
+                    restaurantId: restaurantId,
+                  ),
+                );
+              } catch (_) {}
+            }
+          }
         }
       }
     }
+
+    // Fallback: If sections didn't yield any items, check menu['items'] or data['foods'] or data['items']
+    if (items.isEmpty) {
+      final rawFallback = menu['items'] ?? data['foods'] ?? data['items'] ?? menu['foods'];
+      if (rawFallback is List) {
+        for (final item in rawFallback) {
+          if (item is Map) {
+            try {
+              items.add(
+                FoodModel.fromApi(
+                  Map<String, dynamic>.from(item),
+                  restaurantId: restaurantId,
+                ),
+              );
+            } catch (_) {}
+          }
+        }
+      }
+    }
+
     return items;
   }
 

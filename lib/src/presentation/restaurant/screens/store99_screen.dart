@@ -1,9 +1,9 @@
-import '../../common_widgets/app_refresh_indicator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../../core/utils/haptics.dart';
 import '../../../data/models/food_model.dart';
 import '../../../domain/model/store99_product.dart';
@@ -11,19 +11,13 @@ import '../../branding/app_colors.dart';
 import '../../cart/utils/cart_restaurant_guard.dart';
 import '../../cart/viewmodels/cart_viewmodel.dart';
 import '../../cart/widgets/floating_view_cart_bar.dart';
-import '../../common_widgets/collapsing_header_delegate.dart';
-import '../../common_widgets/skeleton_loading.dart';
+import '../../common_widgets/app_refresh_indicator.dart';
 import '../../common_widgets/smart_image.dart';
-import '../../home/viewmodels/veg_filter_provider.dart';
 import '../../navigation/route_names.dart';
-import '../viewmodels/store99_state.dart';
 import '../viewmodels/store99_viewmodel.dart';
 import '../widgets/food_detail_sheet.dart';
 
-/// The 99 Store promo landing screen.
-///
-/// Integrated with the app's core design system ([AppColors], Material 3,
-/// theme-aware Light/Dark modes, card elevations, typography, and micro-interactions).
+/// The 99 Store promo screen, redesigned to match the Restaurant UI.
 class Store99Screen extends ConsumerStatefulWidget {
   const Store99Screen({super.key});
 
@@ -33,27 +27,19 @@ class Store99Screen extends ConsumerStatefulWidget {
 
 class _Store99ScreenState extends ConsumerState<Store99Screen> {
   final ScrollController _scrollController = ScrollController();
+  final TextEditingController _searchController = TextEditingController();
   final GlobalKey<FloatingViewCartBarState> _cartBarKey =
       GlobalKey<FloatingViewCartBarState>();
+  final Map<String, GlobalKey> _sectionKeys = {};
   final Map<String, GlobalKey> _dishImageKeys = {};
+  final Set<String> _collapsedCategories = {};
 
-  // Flips once the sticky header has mostly collapsed, so the status bar
-  // icon color can switch from light (over the banner) to dark (over the
-  // plain background), mirroring Home's behavior.
-  bool _headerCollapsed = false;
-
-  // Sticky header geometry: the back/search icon row + cuisines block travel
-  // together as one fixed-height block from their original (floating-over-
-  // the-banner) position up to a pinned spot below the status bar — the
-  // same mechanic Home uses for its search bar + categories.
-  double get _iconRowHeight => 56.h;
-  double get _titleHeight => 24.h;
-  double get _cuisinesRowHeight => 96.h;
-  double get _blockInnerGap => 10.h;
-  double get _stickyBlockHeight => _iconRowHeight;
-  double get _bannerToBlockOverlap => 20.h;
-  double get _collapsedTopPadding => 8.h;
-  double get _shadowRoom => 8.h;
+  bool _isSearchExpanded = false;
+  String _searchQuery = '';
+  bool _isVegOnly = false;
+  bool _isNonVegOnly = false;
+  bool _isQuickDeliveryOnly = false;
+  bool _isRatingSort = false;
 
   @override
   void initState() {
@@ -65,6 +51,7 @@ class _Store99ScreenState extends ConsumerState<Store99Screen> {
   void dispose() {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -73,20 +60,9 @@ class _Store99ScreenState extends ConsumerState<Store99Screen> {
         _scrollController.position.maxScrollExtent - 300) {
       ref.read(store99ViewModelProvider.notifier).loadMoreProducts();
     }
-    final screenWidth = MediaQuery.of(context).size.width;
-    final bannerHeight = screenWidth * 1000 / 1600;
-    final headerRange =
-        bannerHeight - _bannerToBlockOverlap - _collapsedTopPadding;
-    final collapsed = _scrollController.offset > headerRange * 0.7;
-    if (collapsed != _headerCollapsed) {
-      setState(() => _headerCollapsed = collapsed);
-    }
   }
 
-  Future<void> _handleFirstAddToCart({
-    required String imageKeyId,
-    required FoodModel food,
-  }) async {
+  Future<void> _handleFirstAddToCart(FoodModel food) async {
     Haptics.light();
     await addFoodToCart(context, ref, food);
   }
@@ -107,48 +83,191 @@ class _Store99ScreenState extends ConsumerState<Store99Screen> {
 
   void _onProductTap(Store99Product product) {
     Haptics.light();
-    FoodDetailSheet.show(context, product.toFoodModel());
+    FoodDetailSheet.show(
+      context,
+      product.toFoodModel(),
+      restaurantName: product.restaurantName.isNotEmpty
+          ? product.restaurantName
+          : '₹99 Store',
+    );
+  }
+
+  void _scrollToSection(String categoryId) {
+    final key = _sectionKeys[categoryId];
+    if (key?.currentContext != null) {
+      Scrollable.ensureVisible(
+        key!.currentContext!,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOutCubic,
+        alignment: 0.08,
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-
     final storeState = ref.watch(store99ViewModelProvider);
     final cartState = ref.watch(cartViewModelProvider);
 
-    final screenWidth = MediaQuery.of(context).size.width;
-    final topInset = MediaQuery.of(context).padding.top;
-    // The header image has a fixed 1600x1000 intrinsic aspect ratio (see
-    // _buildBannerImage), so its rendered height is deterministic from the
-    // screen width alone — no need to measure it after the fact.
-    final bannerHeight = screenWidth * 1000 / 1600;
-    final expandedBlockTop = bannerHeight - _bannerToBlockOverlap;
-    final collapsedBlockTop = topInset + _collapsedTopPadding;
-    final expandedHeaderExtent =
-        expandedBlockTop + _stickyBlockHeight + _shadowRoom;
-    final collapsedHeaderExtent =
-        collapsedBlockTop + _stickyBlockHeight + _shadowRoom;
+    // Combine trending and explore dishes (deduped by ID)
+    final allProductsMap = <String, Store99Product>{};
+    for (final dish in storeState.trendingDishes) {
+      allProductsMap[dish.id] = dish;
+    }
+    for (final dish in storeState.exploreDishes) {
+      allProductsMap[dish.id] = dish;
+    }
+
+    var productList = allProductsMap.values.toList();
+
+    // Filters
+    if (_isVegOnly) {
+      productList = productList.where((p) => p.isVeg).toList();
+    }
+    if (_isNonVegOnly) {
+      productList = productList.where((p) => !p.isVeg).toList();
+    }
+    if (_isQuickDeliveryOnly) {
+      productList = productList.where((p) => p.isQuickDelivery).toList();
+    }
+    if (_isRatingSort) {
+      productList.sort((a, b) => b.rating.compareTo(a.rating));
+    }
+    if (_searchQuery.isNotEmpty) {
+      final q = _searchQuery.toLowerCase();
+      productList = productList
+          .where((p) =>
+              p.name.toLowerCase().contains(q) ||
+              p.description.toLowerCase().contains(q) ||
+              p.restaurantName.toLowerCase().contains(q))
+          .toList();
+    }
+
+    // Group items into categories matching restaurant style
+    final Map<String, List<Store99Product>> grouped = {};
+    final List<_StoreCategoryItem> categories = [];
+
+    // 1. Group by primary food categories (Pizza, Burger, etc.) matching the screenshot
+    final Map<String, List<Store99Product>> primaryGroups = {
+      'Pizza': [],
+      'Burger': [],
+      'Biryani': [],
+      'Sandwiches & Snacks': [],
+      'Beverages & Shakes': [],
+      'Combos & Meals': [],
+    };
+
+    final assignedIds = <String>{};
+
+    for (final p in productList) {
+      final name = p.name.toLowerCase();
+      final cuisine = p.cuisineId.toLowerCase();
+      if (name.contains('pizza') || cuisine.contains('pizza')) {
+        primaryGroups['Pizza']!.add(p);
+        assignedIds.add(p.id);
+      } else if (name.contains('burger') || cuisine.contains('burger')) {
+        primaryGroups['Burger']!.add(p);
+        assignedIds.add(p.id);
+      } else if (name.contains('biryani') || cuisine.contains('biryani')) {
+        primaryGroups['Biryani']!.add(p);
+        assignedIds.add(p.id);
+      } else if (name.contains('sandwich') ||
+          name.contains('roll') ||
+          name.contains('snack') ||
+          name.contains('fries') ||
+          name.contains('nuggets')) {
+        primaryGroups['Sandwiches & Snacks']!.add(p);
+        assignedIds.add(p.id);
+      } else if (name.contains('shake') ||
+          name.contains('tea') ||
+          name.contains('coffee') ||
+          name.contains('drink') ||
+          name.contains('beverage') ||
+          name.contains('juice')) {
+        primaryGroups['Beverages & Shakes']!.add(p);
+        assignedIds.add(p.id);
+      } else if (name.contains('combo') ||
+          name.contains('meal') ||
+          name.contains('thali') ||
+          name.contains('rice') ||
+          name.contains('noodles')) {
+        primaryGroups['Combos & Meals']!.add(p);
+        assignedIds.add(p.id);
+      }
+    }
+
+    primaryGroups.forEach((name, items) {
+      if (items.isNotEmpty) {
+        final id = name.toLowerCase().replaceAll(RegExp(r'\s+'), '_');
+        grouped[id] = items;
+        categories.add(_StoreCategoryItem(id: id, name: name, count: items.length));
+      }
+    });
+
+    // 2. Add any remaining cuisines from storeState
+    final remainingProducts = productList.where((p) => !assignedIds.contains(p.id)).toList();
+    if (remainingProducts.isNotEmpty) {
+      if (storeState.cuisines.isNotEmpty) {
+        for (final cuisine in storeState.cuisines) {
+          if (cuisine.id == 'all') continue;
+          final matched = remainingProducts.where((p) {
+            final matchesCuisine = p.cuisineId.toLowerCase() == cuisine.id.toLowerCase() ||
+                p.cuisineId.toLowerCase() == cuisine.label.toLowerCase();
+            final matchesName = p.name.toLowerCase().contains(cuisine.label.toLowerCase());
+            return matchesCuisine || matchesName;
+          }).toList();
+
+          if (matched.isNotEmpty && !grouped.containsKey(cuisine.id)) {
+            grouped[cuisine.id] = matched;
+            categories.add(
+              _StoreCategoryItem(id: cuisine.id, name: cuisine.label, count: matched.length),
+            );
+            for (final m in matched) {
+              assignedIds.add(m.id);
+            }
+          }
+        }
+      }
+
+      final stillRemaining = productList.where((p) => !assignedIds.contains(p.id)).toList();
+      if (stillRemaining.isNotEmpty) {
+        grouped['deals'] = stillRemaining;
+        categories.add(
+          _StoreCategoryItem(id: 'deals', name: '₹99 Deals', count: stillRemaining.length),
+        );
+      }
+    }
+
+    // 3. Fallback: if completely empty but products exist, create a default category
+    if (categories.isEmpty && productList.isNotEmpty) {
+      grouped['all_99'] = productList;
+      categories.add(
+        _StoreCategoryItem(
+          id: 'all_99',
+          name: '₹99 Store Specials',
+          count: productList.length,
+        ),
+      );
+    }
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: (_headerCollapsed && !isDark)
-          ? SystemUiOverlayStyle.dark
-          : SystemUiOverlayStyle.light,
+      value: isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
       child: Scaffold(
-        backgroundColor: isDark
-            ? AppColors.backgroundDark
-            : AppColors.backgroundLight,
+        backgroundColor:
+            isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
         body: SafeArea(
-          top: false,
-          bottom: false,
           child: Stack(
             children: [
               Column(
                 children: [
+                  // Top App Bar
+                  _buildCleanTopAppBar(context, isDark),
+
+                  // Scrollable Body
                   Expanded(
-                    child:
-                        storeState.isLoading && storeState.exploreDishes.isEmpty
+                    child: storeState.isLoading && productList.isEmpty
                         ? Center(
                             child: CircularProgressIndicator(
                               color: AppColors.primary,
@@ -160,136 +279,99 @@ class _Store99ScreenState extends ConsumerState<Store99Screen> {
                                   .read(store99ViewModelProvider.notifier)
                                   .loadInitialData();
                             },
-                            child: CustomScrollView(
+                            child: ListView(
                               controller: _scrollController,
                               physics: const AlwaysScrollableScrollPhysics(),
-                              slivers: [
-                                // Hero banner + sticky back/search row & cuisines
-                                // — the banner fades/collapses on scroll-up, and
-                                // the icon row + cuisines block sticks to the
-                                // top once pinned, exactly like Home.
-                                SliverPersistentHeader(
-                                  pinned: true,
-                                  delegate: CollapsingHeaderDelegate(
-                                    expandedExtent: expandedHeaderExtent,
-                                    collapsedExtent: collapsedHeaderExtent,
-                                    expandedBlockTop: expandedBlockTop,
-                                    collapsedBlockTop: collapsedBlockTop,
-                                    blockHeight: _stickyBlockHeight,
-                                    backdropColor: isDark
-                                        ? AppColors.backgroundDark
-                                        : AppColors.backgroundLight,
-                                    bannerDriftUp: 20.h,
-                                    banner: _buildBannerImage(),
-                                    stickyBlock: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        SizedBox(
-                                          height: _iconRowHeight,
-                                          child: _buildIconRow(context, isDark),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                SliverToBoxAdapter(
-                                  child: Padding(
-                                    padding: EdgeInsets.only(bottom: 120.h),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        SizedBox(height: 24.h - _shadowRoom),
+                              padding: EdgeInsets.only(bottom: 120.h),
+                              children: [
+                                // Store Header Info
+                                _buildStoreHeader(context, isDark),
 
-                                        // Quick Delivery — only genuinely
-                                        // eligible items (isQuickDelivery set
-                                        // by the restaurant), never a
-                                        // heuristic guess off prep-time text.
-                                        if (storeState.exploreDishes.any((d) => d.isQuickDelivery)) ...[
-                                          _buildSectionTitle(
-                                            context,
-                                            'Quick Delivery',
-                                            isDark,
-                                          ),
-                                          SizedBox(height: 14.h),
-                                          _buildQuickDeliveryDishes(
-                                            context,
-                                            storeState,
-                                            cartState,
-                                            isDark,
-                                          ),
-                                          SizedBox(height: 24.h),
-                                        ],
+                                SizedBox(height: 10.h),
 
-                                        // Trending dishes
-                                        if (storeState
-                                            .trendingDishes
-                                            .isNotEmpty) ...[
-                                          _buildSectionTitle(
-                                            context,
-                                            'Trending dishes near you',
-                                            isDark,
-                                          ),
-                                          SizedBox(height: 14.h),
-                                          _buildTrendingDishes(
-                                            context,
-                                            storeState,
-                                            cartState,
-                                            isDark,
-                                          ),
-                                          SizedBox(height: 24.h),
-                                        ],
+                                // Filter Chips Row
+                                _buildFilterChipsRow(context, isDark),
 
-                                        // Top Brands
-                                        if (storeState.brands.isNotEmpty) ...[
-                                          _buildSectionTitle(
-                                            context,
-                                            'Big Savings with Top Brands',
-                                            isDark,
-                                            onViewAll: () => _showAllBrands(
-                                              context,
-                                              storeState,
-                                              isDark,
+                                SizedBox(height: 12.h),
+
+                                // Dishes grouped into highlighted category sections
+                                if (categories.isEmpty)
+                                  Center(
+                                    child: Padding(
+                                      padding: EdgeInsets.symmetric(vertical: 40.h, horizontal: 24.w),
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.search_off_rounded, size: 44.sp, color: Colors.grey[400]),
+                                          SizedBox(height: 10.h),
+                                          Text(
+                                            storeState.errorMessage ?? 'No dishes match your filters.',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              fontSize: 14.sp,
+                                              color: isDark
+                                                  ? AppColors.textSecondaryDark
+                                                  : Colors.grey[600],
                                             ),
                                           ),
-                                          SizedBox(height: 14.h),
-                                          _buildBrands(
-                                            context,
-                                            storeState,
-                                            isDark,
+                                          SizedBox(height: 12.h),
+                                          TextButton(
+                                            onPressed: () {
+                                              setState(() {
+                                                _isVegOnly = false;
+                                                _isNonVegOnly = false;
+                                                _isQuickDeliveryOnly = false;
+                                                _isRatingSort = false;
+                                                _searchQuery = '';
+                                                _searchController.clear();
+                                              });
+                                              ref.read(store99ViewModelProvider.notifier).loadInitialData();
+                                            },
+                                            child: const Text('Reset filters / Try again'),
                                           ),
-                                          SizedBox(height: 28.h),
                                         ],
-
-                                        // Explore Grid
-                                        _buildSectionTitle(
-                                          context,
-                                          'Explore ₹99 Meals',
-                                          isDark,
-                                        ),
-                                        SizedBox(height: 14.h),
-                                        _buildExploreGrid(
-                                          context,
-                                          storeState,
-                                          cartState,
-                                          isDark,
-                                        ),
-
-                                        // Pagination
-                                        if (storeState.isLoadingMore)
-                                          Padding(
-                                            padding: EdgeInsets.symmetric(
-                                              vertical: 20.h,
-                                              horizontal: 20.w,
-                                            ),
-                                            child: const SkeletonFoodItemCard(),
-                                          ),
-
-                                        SizedBox(height: 20.h),
-                                      ],
+                                      ),
                                     ),
-                                  ),
-                                ),
+                                  )
+                                else
+                                  for (final cat in categories) ...[
+                                    // Highlighted Category Header
+                                    _buildCategoryHeader(
+                                      cat,
+                                      grouped[cat.id]!.length,
+                                      isDark,
+                                    ),
+
+                                    // Category Items (Collapsible)
+                                    AnimatedCrossFade(
+                                      duration:
+                                          const Duration(milliseconds: 280),
+                                      crossFadeState: _collapsedCategories
+                                              .contains(cat.id)
+                                          ? CrossFadeState.showSecond
+                                          : CrossFadeState.showFirst,
+                                      firstChild: _buildDishesList(
+                                        context,
+                                        grouped[cat.id]!,
+                                        cartState,
+                                        isDark,
+                                      ),
+                                      secondChild: const SizedBox.shrink(),
+                                    ),
+
+                                    // Divider between categories
+                                    Padding(
+                                      padding: EdgeInsets.fromLTRB(
+                                          16.w, 10.h, 16.w, 4.h),
+                                      child: Divider(
+                                        height: 1,
+                                        thickness: 1,
+                                        color: isDark
+                                            ? AppColors.borderDark
+                                            : Colors.grey.shade200,
+                                      ),
+                                    ),
+                                  ],
                               ],
                             ),
                           ),
@@ -297,12 +379,20 @@ class _Store99ScreenState extends ConsumerState<Store99Screen> {
                 ],
               ),
 
+              // Floating Menu Button (Red circular button at bottom right)
+              if (categories.isNotEmpty)
+                Positioned(
+                  right: 16.w,
+                  bottom: cartState.items.isNotEmpty ? 90.h : 20.h,
+                  child: _buildFloatingMenuButton(context, categories, isDark),
+                ),
+
               // Floating View Cart Bar
               FloatingViewCartBar(
                 key: _cartBarKey,
                 onTap: () {
                   Haptics.light();
-                  context.go(RouteNames.cart);
+                  context.push(RouteNames.cart);
                 },
               ),
             ],
@@ -312,607 +402,1031 @@ class _Store99ScreenState extends ConsumerState<Store99Screen> {
     );
   }
 
-  // ==================== HEADER ====================
+  // ==================== TOP APP BAR ====================
 
-  Widget _buildBannerImage() {
-    return AspectRatio(
-      aspectRatio: 1600 / 1000,
-      child: Image.asset(
-        'assets/images/new.png',
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [AppColors.primary, AppColors.primaryButton],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildIconRow(BuildContext context, bool isDark) {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 12.w),
+  Widget _buildCleanTopAppBar(BuildContext context, bool isDark) {
+    return Container(
+      color: isDark ? AppColors.backgroundDark : Colors.white,
+      padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 8.h),
       child: Row(
         children: [
-          _buildCircleIconButton(
-            icon: Icons.arrow_back,
-            isDark: isDark,
+          // Circular Back Button
+          GestureDetector(
             onTap: () {
               Haptics.light();
-              if (context.canPop()) {
+              if (_isSearchExpanded && _searchQuery.isEmpty) {
+                setState(() => _isSearchExpanded = false);
+              } else if (context.canPop()) {
                 context.pop();
               } else {
                 context.go(RouteNames.home);
               }
             },
+            child: Container(
+              width: 38.r,
+              height: 38.r,
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.surfaceDark : const Color(0xFFF1F3F5),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.arrow_back_rounded,
+                color: isDark ? Colors.white : const Color(0xFF1E232C),
+                size: 20.sp,
+              ),
+            ),
           ),
-          SizedBox(width: 10.w),
-          Expanded(child: _buildSearchBar(context, isDark)),
+
+          if (!_isSearchExpanded && _searchQuery.isEmpty) ...[
+            const Spacer(),
+            // Search Capsule Pill on Right
+            GestureDetector(
+              onTap: () {
+                Haptics.light();
+                setState(() => _isSearchExpanded = true);
+              },
+              child: Container(
+                height: 36.h,
+                padding: EdgeInsets.symmetric(horizontal: 14.w),
+                decoration: BoxDecoration(
+                  color:
+                      isDark ? AppColors.surfaceDark : const Color(0xFFF5F6F8),
+                  borderRadius: BorderRadius.circular(20.r),
+                  border: Border.all(
+                    color:
+                        isDark ? AppColors.borderDark : const Color(0xFFE5E7EB),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.search_rounded,
+                      color: isDark
+                          ? AppColors.textSecondaryDark
+                          : Colors.grey[700],
+                      size: 17.sp,
+                    ),
+                    SizedBox(width: 6.w),
+                    Text(
+                      'Search',
+                      style: TextStyle(
+                        fontSize: 13.sp,
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : const Color(0xFF374151),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SizedBox(width: 8.w),
+            // Share Button
+            GestureDetector(
+              onTap: () {
+                Haptics.light();
+                SharePlus.instance.share(
+                  ShareParams(
+                    text: 'Order delicious meals at ₹99 on Lagech App!',
+                  ),
+                );
+              },
+              child: Container(
+                width: 38.r,
+                height: 38.r,
+                decoration: BoxDecoration(
+                  color:
+                      isDark ? AppColors.surfaceDark : const Color(0xFFF1F3F5),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.share_outlined,
+                  color: isDark ? Colors.white : const Color(0xFF1E232C),
+                  size: 18.sp,
+                ),
+              ),
+            ),
+          ] else ...[
+            SizedBox(width: 10.w),
+            // Expanded Search TextField
+            Expanded(
+              child: Container(
+                height: 40.h,
+                padding: EdgeInsets.symmetric(horizontal: 12.w),
+                decoration: BoxDecoration(
+                  color:
+                      isDark ? AppColors.surfaceDark : const Color(0xFFF1F3F5),
+                  borderRadius: BorderRadius.circular(20.r),
+                  border: Border.all(
+                    color:
+                        isDark ? AppColors.borderDark : const Color(0xFFE5E7EB),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.search_rounded,
+                      color: isDark
+                          ? AppColors.textSecondaryDark
+                          : Colors.grey[600],
+                      size: 18.sp,
+                    ),
+                    SizedBox(width: 8.w),
+                    Expanded(
+                      child: TextField(
+                        controller: _searchController,
+                        autofocus: _isSearchExpanded,
+                        textAlignVertical: TextAlignVertical.center,
+                        textInputAction: TextInputAction.search,
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        spellCheckConfiguration:
+                            const SpellCheckConfiguration.disabled(),
+                        onSubmitted: (_) =>
+                            FocusManager.instance.primaryFocus?.unfocus(),
+                        onChanged: (val) {
+                          setState(() => _searchQuery = val.trim());
+                        },
+                        style: TextStyle(
+                          fontSize: 13.sp,
+                          color: isDark
+                              ? AppColors.textPrimaryDark
+                              : AppColors.textPrimaryLight,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Search ₹99 deals...',
+                          hintStyle: TextStyle(
+                            fontSize: 13.sp,
+                            color: Colors.grey[500],
+                            fontWeight: FontWeight.w400,
+                          ),
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          errorBorder: InputBorder.none,
+                          focusedErrorBorder: InputBorder.none,
+                          disabledBorder: InputBorder.none,
+                          isDense: true,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () {
+                        Haptics.light();
+                        _searchController.clear();
+                        setState(() {
+                          _searchQuery = '';
+                          _isSearchExpanded = false;
+                        });
+                      },
+                      child: Icon(
+                        Icons.close_rounded,
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : Colors.grey[600],
+                        size: 18.sp,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildCircleIconButton({
-    required IconData icon,
-    required bool isDark,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 40.r,
-        height: 40.r,
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.surfaceDark : Colors.white,
-          shape: BoxShape.circle,
-          boxShadow: isDark
-              ? []
-              : [
-                  BoxShadow(
-                    color: AppColors.shadow1,
-                    blurRadius: 10,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-        ),
-        child: Icon(
-          icon,
-          color: isDark
-              ? AppColors.textPrimaryDark
-              : AppColors.textPrimaryLight,
-          size: 20.sp,
-        ),
-      ),
-    );
-  }
+  // ==================== STORE HEADER ====================
 
-  Widget _buildSearchBar(BuildContext context, bool isDark) {
-    return GestureDetector(
-      onTap: () {
-        Haptics.light();
-        context.push(RouteNames.search);
-      },
-      child: Container(
-        height: 40.r,
-        padding: EdgeInsets.symmetric(horizontal: 14.w),
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.surfaceDark : Colors.white,
-          borderRadius: BorderRadius.circular(20.r),
-          boxShadow: isDark
-              ? []
-              : [
-                  BoxShadow(
-                    color: AppColors.shadow1,
-                    blurRadius: 10,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-        ),
-        child: Row(
-          children: [
-            Icon(
-              Icons.search,
-              color: isDark
-                  ? AppColors.textSecondaryDark
-                  : AppColors.textSecondaryLight,
-              size: 20.sp,
-            ),
-            SizedBox(width: 8.w),
-            Expanded(
-              child: Text(
-                "Search for '99 store' meals...",
-                style: TextStyle(
-                  color: isDark
-                      ? AppColors.textSecondaryDark
-                      : AppColors.textSecondaryLight,
-                  fontSize: 11.5.sp,
-                  fontWeight: FontWeight.w400,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ==================== SECTIONS ====================
-
-  Widget _buildSectionTitle(
-    BuildContext context,
-    String title,
-    bool isDark, {
-    VoidCallback? onViewAll,
-  }) {
-    final theme = Theme.of(context);
-    final titleStyle =
-        theme.textTheme.displaySmall?.copyWith(
-          fontSize: 18.sp,
-          fontWeight: FontWeight.bold,
-          color: isDark
-              ? AppColors.textPrimaryDark
-              : AppColors.textPrimaryLight,
-        ) ??
-        TextStyle(
-          fontSize: 18.sp,
-          fontWeight: FontWeight.bold,
-          color: isDark
-              ? AppColors.textPrimaryDark
-              : AppColors.textPrimaryLight,
-        );
-
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 20.w),
-      child: Row(
+  Widget _buildStoreHeader(BuildContext context, bool isDark) {
+    return Container(
+      padding: EdgeInsets.fromLTRB(16.w, 4.h, 16.w, 10.h),
+      color: isDark ? AppColors.backgroundDark : Colors.white,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Text(title, style: titleStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
-          ),
-          if (onViewAll != null)
-            GestureDetector(
-              onTap: () {
-                Haptics.light();
-                onViewAll();
-              },
-              behavior: HitTestBehavior.opaque,
-              child: Padding(
-                padding: EdgeInsets.only(left: 8.w),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '₹99 STORE',
+                      style: TextStyle(
+                        fontSize: 22.sp,
+                        fontWeight: FontWeight.w900,
+                        color: isDark ? Colors.white : const Color(0xFF1E232C),
+                        letterSpacing: -0.3,
+                        height: 1.15,
+                      ),
+                    ),
+                    SizedBox(height: 3.h),
+                    Text(
+                      'Pocket-friendly meals & snacks at ₹99 or less',
+                      style: TextStyle(
+                        fontSize: 12.sp,
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : const Color(0xFF6B7280),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(width: 12.w),
+              // Rating pill
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF008A45),
+                  borderRadius: BorderRadius.circular(8.r),
+                ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'View All',
+                      '5.0',
                       style: TextStyle(
-                        fontSize: 13.sp,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
+                        color: Colors.white,
+                        fontSize: 12.sp,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
-                    Icon(Icons.chevron_right_rounded,
-                        size: 18.sp, color: AppColors.primary),
+                    SizedBox(width: 2.w),
+                    Icon(Icons.star_rounded, color: Colors.white, size: 13.sp),
                   ],
                 ),
               ),
-            ),
+            ],
+          ),
+
+          SizedBox(height: 10.h),
+
+          // Delivery info row
+          Row(
+            children: [
+              Icon(
+                Icons.access_time_rounded,
+                size: 14.sp,
+                color: const Color(0xFF008A45),
+              ),
+              SizedBox(width: 4.w),
+              Text(
+                '15-30 min',
+                style: TextStyle(
+                  fontSize: 12.sp,
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? Colors.white70 : const Color(0xFF1E232C),
+                ),
+              ),
+              SizedBox(width: 8.w),
+              Text(
+                '•',
+                style: TextStyle(color: Colors.grey[400], fontSize: 12.sp),
+              ),
+              SizedBox(width: 8.w),
+              Text(
+                'Free delivery on qualifying orders',
+                style: TextStyle(
+                  fontSize: 12.sp,
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : const Color(0xFF6B7280),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 
-  /// Full list for a horizontally-scrolling section.
-  ///
-  /// A sheet rather than a pushed route: these lists are short and selecting an
-  /// entry filters the page underneath, so returning straight to it is the
-  /// point. A new route would need its own copy of that filter wiring.
-  void _showAllSheet({
-    required BuildContext context,
-    required String title,
-    required bool isDark,
-    required int itemCount,
-    required Widget Function(BuildContext, int) itemBuilder,
-  }) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetCtx) => DraggableScrollableSheet(
-        initialChildSize: 0.7,
-        minChildSize: 0.4,
-        maxChildSize: 0.92,
-        expand: false,
-        builder: (ctx, scrollController) => Container(
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.surfaceDark : Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
-          ),
-          child: Column(
-            children: [
-              Padding(
-                padding: EdgeInsets.symmetric(vertical: 10.h),
-                child: Container(
-                  width: 38.w,
-                  height: 4.h,
-                  decoration: BoxDecoration(
-                    color: isDark ? AppColors.borderDark : Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(2.r),
-                  ),
+  // ==================== FILTER CHIPS ROW ====================
+
+  Widget _buildFilterChipsRow(BuildContext context, bool isDark) {
+    final hasAnyFilter = _isVegOnly ||
+        _isNonVegOnly ||
+        _isQuickDeliveryOnly ||
+        _isRatingSort;
+
+    return SizedBox(
+      height: 32.h,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.symmetric(horizontal: 16.w),
+        children: [
+          // Filters Reset / Indicator chip
+          GestureDetector(
+            onTap: () {
+              Haptics.light();
+              if (hasAnyFilter) {
+                setState(() {
+                  _isVegOnly = false;
+                  _isNonVegOnly = false;
+                  _isQuickDeliveryOnly = false;
+                  _isRatingSort = false;
+                });
+              }
+            },
+            child: Container(
+              margin: EdgeInsets.only(right: 6.w),
+              padding: EdgeInsets.symmetric(horizontal: 10.w),
+              decoration: BoxDecoration(
+                color: hasAnyFilter
+                    ? AppColors.primary.withValues(alpha: 0.1)
+                    : (isDark ? AppColors.surfaceDark : Colors.white),
+                borderRadius: BorderRadius.circular(16.r),
+                border: Border.all(
+                  color: hasAnyFilter
+                      ? AppColors.primary
+                      : (isDark
+                          ? AppColors.borderDark
+                          : const Color(0xFFD1D5DB)),
+                  width: 1,
                 ),
               ),
-              Padding(
-                padding: EdgeInsets.fromLTRB(20.w, 0, 20.w, 12.h),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: 16.sp,
-                          fontWeight: FontWeight.bold,
-                          color: isDark
-                              ? AppColors.textPrimaryDark
-                              : AppColors.textPrimaryLight,
-                        ),
-                      ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Filters',
+                    style: TextStyle(
+                      fontSize: 11.5.sp,
+                      fontWeight: FontWeight.w600,
+                      color: hasAnyFilter
+                          ? AppColors.primary
+                          : (isDark
+                              ? AppColors.textSecondaryDark
+                              : const Color(0xFF1E232C)),
                     ),
-                    IconButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      icon: const Icon(Icons.close_rounded),
-                      color: isDark
-                          ? AppColors.textSecondaryDark
-                          : AppColors.textSecondaryLight,
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: GridView.builder(
-                  controller: scrollController,
-                  padding: EdgeInsets.fromLTRB(20.w, 0, 20.w, 24.h),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    mainAxisSpacing: 16.h,
-                    crossAxisSpacing: 12.w,
-                    childAspectRatio: 0.78,
                   ),
-                  itemCount: itemCount,
-                  itemBuilder: itemBuilder,
+                  SizedBox(width: 3.w),
+                  Icon(
+                    hasAnyFilter
+                        ? Icons.close_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    size: 14.sp,
+                    color: hasAnyFilter
+                        ? AppColors.primary
+                        : (isDark
+                            ? AppColors.textSecondaryDark
+                            : const Color(0xFF1E232C)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Veg chip
+          GestureDetector(
+            onTap: () {
+              Haptics.light();
+              setState(() {
+                _isVegOnly = !_isVegOnly;
+                if (_isVegOnly) _isNonVegOnly = false;
+              });
+            },
+            child: Container(
+              margin: EdgeInsets.only(right: 6.w),
+              padding: EdgeInsets.symmetric(horizontal: 10.w),
+              decoration: BoxDecoration(
+                color: _isVegOnly
+                    ? const Color(0xFF008A45).withValues(alpha: 0.12)
+                    : (isDark ? AppColors.surfaceDark : Colors.white),
+                borderRadius: BorderRadius.circular(16.r),
+                border: Border.all(
+                  color: _isVegOnly
+                      ? const Color(0xFF008A45)
+                      : (isDark
+                          ? AppColors.borderDark
+                          : const Color(0xFFD1D5DB)),
+                  width: 1,
                 ),
               ),
-            ],
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 7.r,
+                    height: 7.r,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF008A45),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  SizedBox(width: 5.w),
+                  Text(
+                    'Veg',
+                    style: TextStyle(
+                      fontSize: 11.5.sp,
+                      fontWeight: FontWeight.w600,
+                      color: _isVegOnly
+                          ? const Color(0xFF008A45)
+                          : (isDark
+                              ? AppColors.textSecondaryDark
+                              : const Color(0xFF1E232C)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
+
+          // Non-veg chip
+          GestureDetector(
+            onTap: () {
+              Haptics.light();
+              setState(() {
+                _isNonVegOnly = !_isNonVegOnly;
+                if (_isNonVegOnly) _isVegOnly = false;
+              });
+            },
+            child: Container(
+              margin: EdgeInsets.only(right: 6.w),
+              padding: EdgeInsets.symmetric(horizontal: 10.w),
+              decoration: BoxDecoration(
+                color: _isNonVegOnly
+                    ? const Color(0xFFB45309).withValues(alpha: 0.12)
+                    : (isDark ? AppColors.surfaceDark : Colors.white),
+                borderRadius: BorderRadius.circular(16.r),
+                border: Border.all(
+                  color: _isNonVegOnly
+                      ? const Color(0xFFB45309)
+                      : (isDark
+                          ? AppColors.borderDark
+                          : const Color(0xFFD1D5DB)),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 7.r,
+                    height: 7.r,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFB45309),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  SizedBox(width: 5.w),
+                  Text(
+                    'Non-veg',
+                    style: TextStyle(
+                      fontSize: 11.5.sp,
+                      fontWeight: FontWeight.w600,
+                      color: _isNonVegOnly
+                          ? const Color(0xFFB45309)
+                          : (isDark
+                              ? AppColors.textSecondaryDark
+                              : const Color(0xFF1E232C)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Quick Delivery chip
+          GestureDetector(
+            onTap: () {
+              Haptics.light();
+              setState(() {
+                _isQuickDeliveryOnly = !_isQuickDeliveryOnly;
+              });
+            },
+            child: Container(
+              margin: EdgeInsets.only(right: 6.w),
+              padding: EdgeInsets.symmetric(horizontal: 10.w),
+              decoration: BoxDecoration(
+                color: _isQuickDeliveryOnly
+                    ? const Color(0xFFEF4444).withValues(alpha: 0.12)
+                    : (isDark ? AppColors.surfaceDark : Colors.white),
+                borderRadius: BorderRadius.circular(16.r),
+                border: Border.all(
+                  color: _isQuickDeliveryOnly
+                      ? const Color(0xFFEF4444)
+                      : (isDark
+                          ? AppColors.borderDark
+                          : const Color(0xFFD1D5DB)),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.bolt_rounded,
+                    size: 14.sp,
+                    color: const Color(0xFFEF4444),
+                  ),
+                  SizedBox(width: 4.w),
+                  Text(
+                    'Quick Delivery',
+                    style: TextStyle(
+                      fontSize: 11.5.sp,
+                      fontWeight: FontWeight.w600,
+                      color: _isQuickDeliveryOnly
+                          ? const Color(0xFFEF4444)
+                          : (isDark
+                              ? AppColors.textSecondaryDark
+                              : const Color(0xFF1E232C)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Highly Rated chip
+          GestureDetector(
+            onTap: () {
+              Haptics.light();
+              setState(() {
+                _isRatingSort = !_isRatingSort;
+              });
+            },
+            child: Container(
+              margin: EdgeInsets.only(right: 6.w),
+              padding: EdgeInsets.symmetric(horizontal: 10.w),
+              decoration: BoxDecoration(
+                color: _isRatingSort
+                    ? const Color(0xFF008A45).withValues(alpha: 0.12)
+                    : (isDark ? AppColors.surfaceDark : Colors.white),
+                borderRadius: BorderRadius.circular(16.r),
+                border: Border.all(
+                  color: _isRatingSort
+                      ? const Color(0xFF008A45)
+                      : (isDark
+                          ? AppColors.borderDark
+                          : const Color(0xFFD1D5DB)),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 7.r,
+                    height: 7.r,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF008A45),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  SizedBox(width: 5.w),
+                  Text(
+                    'Highly Rated',
+                    style: TextStyle(
+                      fontSize: 11.5.sp,
+                      fontWeight: FontWeight.w600,
+                      color: _isRatingSort
+                          ? const Color(0xFF008A45)
+                          : (isDark
+                              ? AppColors.textSecondaryDark
+                              : const Color(0xFF1E232C)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==================== HIGHLIGHTED CATEGORY HEADER ====================
+
+  Widget _buildCategoryHeader(
+    _StoreCategoryItem category,
+    int count,
+    bool isDark,
+  ) {
+    return GestureDetector(
+      onTap: () {
+        Haptics.light();
+        setState(() {
+          if (_collapsedCategories.contains(category.id)) {
+            _collapsedCategories.remove(category.id);
+          } else {
+            _collapsedCategories.add(category.id);
+          }
+        });
+      },
+      child: Container(
+        key: _sectionKeys.putIfAbsent(category.id, () => GlobalKey()),
+        margin: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 8.h),
+        padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
+        decoration: BoxDecoration(
+          color: isDark
+              ? AppColors.surfaceDark.withValues(alpha: 0.6)
+              : const Color(0xFFF3F4F6),
+          borderRadius: BorderRadius.circular(12.r),
+          border: Border.all(
+            color: isDark ? AppColors.borderDark : const Color(0xFFE5E7EB),
+            width: 0.8,
+          ),
+        ),
+        child: Row(
+          children: [
+            // Left primary accent bar
+            Container(
+              width: 4.w,
+              height: 18.h,
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.circular(3.r),
+              ),
+            ),
+            SizedBox(width: 10.w),
+            // Category Name
+            Expanded(
+              child: Text(
+                category.name,
+                style: TextStyle(
+                  fontSize: 16.sp,
+                  fontWeight: FontWeight.w800,
+                  color: isDark ? Colors.white : const Color(0xFF1E232C),
+                  letterSpacing: -0.2,
+                ),
+              ),
+            ),
+            // Item Count Badge
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.white,
+                borderRadius: BorderRadius.circular(10.r),
+                border: Border.all(
+                  color: isDark ? AppColors.borderDark : const Color(0xFFE5E7EB),
+                  width: 0.6,
+                ),
+              ),
+              child: Text(
+                '$count',
+                style: TextStyle(
+                  fontSize: 12.sp,
+                  fontWeight: FontWeight.w700,
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : const Color(0xFF4B5563),
+                ),
+              ),
+            ),
+            SizedBox(width: 8.w),
+            AnimatedRotation(
+              turns: _collapsedCategories.contains(category.id) ? 0.5 : 0.0,
+              duration: const Duration(milliseconds: 250),
+              child: Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 22.sp,
+                color: isDark ? AppColors.textSecondaryDark : Colors.grey[600],
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  void _showAllCuisines(BuildContext context, Store99State storeState, bool isDark) {
-    final secondaryTextColor =
-        isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
-    _showAllSheet(
-      context: context,
-      title: 'All Categories',
-      isDark: isDark,
-      itemCount: storeState.cuisines.length,
-      itemBuilder: (ctx, index) {
-        final cuisine = storeState.cuisines[index];
-        final isSelected = cuisine.id == storeState.selectedCuisineId;
-        return GestureDetector(
-          onTap: () {
-            Haptics.light();
-            ref.read(store99ViewModelProvider.notifier).selectCuisine(cuisine.id);
-            Navigator.pop(ctx);
-          },
-          behavior: HitTestBehavior.opaque,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: EdgeInsets.all(3.r),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isDark ? AppColors.cardDark : AppColors.surfaceLight,
-                  border: Border.all(
-                    color: isSelected
-                        ? AppColors.primary
-                        : (isDark ? AppColors.borderDark : AppColors.borderLight),
-                    width: isSelected ? 2 : 1,
+  // ==================== DISHES LIST ====================
+
+  Widget _buildDishesList(
+    BuildContext context,
+    List<Store99Product> dishes,
+    CartState cartState,
+    bool isDark,
+  ) {
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: EdgeInsets.zero,
+      itemCount: dishes.length,
+      separatorBuilder: (context, index) => Divider(
+        height: 24.h,
+        thickness: 1,
+        color: isDark ? AppColors.borderDark : Colors.grey.shade200,
+        indent: 16.w,
+        endIndent: 16.w,
+      ),
+      itemBuilder: (context, index) {
+        return _buildHorizontalDishCard(
+          context,
+          dishes[index],
+          cartState,
+          isDark,
+        );
+      },
+    );
+  }
+
+  // ==================== HORIZONTAL DISH CARD (RESTAURANT UI MATCH) ====================
+
+  Widget _buildHorizontalDishCard(
+    BuildContext context,
+    Store99Product dish,
+    CartState cartState,
+    bool isDark,
+  ) {
+    final quantity = _getQuantity(cartState, dish.id);
+    final cartItemId = _getCartItemId(cartState, dish.id);
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // LEFT COLUMN: Details
+          Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _onProductTap(dish),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Veg / Non-veg icon
+                  dish.isVeg ? _buildVegIcon(size: 14) : _buildNonVegIcon(size: 14),
+                  SizedBox(height: 5.h),
+
+                  // Dish Title
+                  Text(
+                    dish.name,
+                    style: TextStyle(
+                      fontSize: 16.sp,
+                      fontWeight: FontWeight.w700,
+                      color: isDark ? Colors.white : const Color(0xFF1E232C),
+                      height: 1.25,
+                    ),
                   ),
-                ),
-                child: _placeholderImage(
-                  assetPath: cuisine.imagesPath,
-                  fallbackIcon: Icons.restaurant,
-                  height: 58.r,
-                  width: 58.r,
-                  shape: BoxShape.circle,
-                  background: Colors.transparent,
-                  fit: BoxFit.contain,
-                ),
+
+                  SizedBox(height: 4.h),
+
+                  // Price
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(
+                        '₹${dish.price.toInt()}',
+                        style: TextStyle(
+                          fontSize: 15.sp,
+                          fontWeight: FontWeight.w800,
+                          color: isDark ? Colors.white : const Color(0xFF1E232C),
+                        ),
+                      ),
+                      if (dish.originalPrice != null &&
+                          dish.originalPrice! > dish.price) ...[
+                        SizedBox(width: 6.w),
+                        Text(
+                          '₹${dish.originalPrice!.toInt()}',
+                          style: TextStyle(
+                            fontSize: 12.sp,
+                            decoration: TextDecoration.lineThrough,
+                            color: Colors.grey[500],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+
+                  // Description or Restaurant name
+                  if (dish.description.isNotEmpty ||
+                      dish.restaurantName.isNotEmpty) ...[
+                    SizedBox(height: 4.h),
+                    Text(
+                      dish.description.isNotEmpty
+                          ? dish.description
+                          : 'By ${dish.restaurantName}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12.sp,
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : const Color(0xFF757575),
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+
+                  SizedBox(height: 10.h),
+
+                  // Bookmark & Share icons (matching screenshot rounded pills)
+                  Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          Haptics.light();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Saved "${dish.name}" to favorites'),
+                              duration: const Duration(seconds: 1),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        },
+                        child: Container(
+                          padding: EdgeInsets.all(6.r),
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: isDark
+                                  ? AppColors.borderDark
+                                  : const Color(0xFFE5E7EB),
+                              width: 1,
+                            ),
+                            borderRadius: BorderRadius.circular(8.r),
+                          ),
+                          child: Icon(
+                            Icons.bookmark_border_rounded,
+                            size: 16.sp,
+                            color: isDark ? Colors.white70 : const Color(0xFF6B7280),
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: 10.w),
+                      GestureDetector(
+                        onTap: () {
+                          Haptics.light();
+                          SharePlus.instance.share(
+                            ShareParams(
+                              text:
+                                  'Order ${dish.name} for ₹${dish.price.toInt()} on Lagech App!',
+                            ),
+                          );
+                        },
+                        child: Container(
+                          padding: EdgeInsets.all(6.r),
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: isDark
+                                  ? AppColors.borderDark
+                                  : const Color(0xFFE5E7EB),
+                              width: 1,
+                            ),
+                            borderRadius: BorderRadius.circular(8.r),
+                          ),
+                          child: Icon(
+                            Icons.share_outlined,
+                            size: 16.sp,
+                            color: isDark ? Colors.white70 : const Color(0xFF6B7280),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-              SizedBox(height: 6.h),
-              Flexible(
-                child: Text(
-                  cuisine.label,
-                  maxLines: 2,
-                  textAlign: TextAlign.center,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 11.sp,
-                    color: isSelected ? AppColors.primary : secondaryTextColor,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  ),
+            ),
+          ),
+
+          SizedBox(width: 14.w),
+
+          // RIGHT COLUMN: Food image + Overlapping ADD button
+          Column(
+            children: [
+              SizedBox(
+                width: 114.w,
+                height: 122.h,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  alignment: Alignment.topCenter,
+                  children: [
+                    // Image
+                    GestureDetector(
+                      onTap: () => _onProductTap(dish),
+                      child: Container(
+                        key: _dishImageKeys.putIfAbsent(
+                            dish.id, () => GlobalKey()),
+                        width: 114.w,
+                        height: 104.h,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16.r),
+                          color: isDark
+                              ? AppColors.surfaceDark
+                              : const Color(0xFFF1F3F5),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: SmartImage(
+                          url: dish.imageUrl,
+                          category: ImageCategory.food,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
+
+                    // Overlapping ADD button at bottom center
+                    Positioned(
+                      bottom: 0,
+                      child: _buildOverlapAddButton(
+                        context,
+                        dish,
+                        quantity,
+                        cartItemId,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-        );
-      },
-    );
-  }
-
-  void _showAllBrands(BuildContext context, Store99State storeState, bool isDark) {
-    final secondaryTextColor =
-        isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
-    _showAllSheet(
-      context: context,
-      title: 'All Brands',
-      isDark: isDark,
-      itemCount: storeState.brands.length,
-      itemBuilder: (ctx, index) {
-        final brand = storeState.brands[index];
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _placeholderImage(
-              assetPath: brand.imageUrl,
-              fallbackIcon: Icons.storefront,
-              height: 58.r,
-              width: 58.r,
-              shape: BoxShape.circle,
-              background: isDark ? AppColors.cardDark : const Color(0xFFF5F5F5),
-              border: Border.all(
-                color: isDark ? AppColors.borderDark : const Color(0xFFEEEEEE),
-              ),
-            ),
-            SizedBox(height: 6.h),
-            Flexible(
-              child: Text(
-                brand.label,
-                maxLines: 2,
-                textAlign: TextAlign.center,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 11.sp, color: secondaryTextColor),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildCuisines(
-    BuildContext context,
-    Store99State storeState,
-    bool isDark,
-  ) {
-    final secondaryTextColor = isDark
-        ? AppColors.textSecondaryDark
-        : AppColors.textSecondaryLight;
-
-    return SizedBox(
-      height: 96.h,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: EdgeInsets.symmetric(horizontal: 20.w),
-        itemCount: storeState.cuisines.length,
-        separatorBuilder: (context, index) => SizedBox(width: 12.w),
-        itemBuilder: (context, index) {
-          final cuisine = storeState.cuisines[index];
-          final isSelected = cuisine.id == storeState.selectedCuisineId;
-
-          return GestureDetector(
-            onTap: () {
-              Haptics.light();
-              ref
-                  .read(store99ViewModelProvider.notifier)
-                  .selectCuisine(cuisine.id);
-            },
-            child: Column(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(3.r),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: isDark ? AppColors.cardDark : AppColors.surfaceLight,
-                    border: isSelected
-                        ? Border.all(color: AppColors.primary, width: 2)
-                        : Border.all(
-                            color: isDark
-                                ? AppColors.borderDark
-                                : AppColors.borderLight,
-                            width: 1,
-                          ),
-                  ),
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      _placeholderImage(
-                        assetPath: cuisine.imagesPath,
-                        fallbackIcon: Icons.restaurant,
-                        height: 64.r,
-                        width: 64.r,
-                        shape: BoxShape.circle,
-                        background: Colors.transparent,
-                        fit: BoxFit.contain,
-                      ),
-                      if (isSelected)
-                        Positioned(
-                          top: -2,
-                          right: -2,
-                          child: Container(
-                            padding: EdgeInsets.all(2.r),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              Icons.check,
-                              color: Colors.white,
-                              size: 10.sp,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                SizedBox(height: 4.h),
-                // Flexible so the label can never overflow the fixed row height
-                // when font metrics round up (iOS) or text scale is bumped.
-                Flexible(
-                  child: Text(
-                    cuisine.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 12.sp,
-                      fontWeight: FontWeight.w600,
-                      color: isSelected ? AppColors.primary : secondaryTextColor,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
+        ],
       ),
     );
   }
 
-  Widget _buildQuickDeliveryDishes(
-    BuildContext context,
-    Store99State storeState,
-    CartState cartState,
-    bool isDark,
-  ) {
-    final isVegOnly = ref.watch(vegFilterProvider);
-    final eligibleDishes = storeState.exploreDishes.where((d) => d.isQuickDelivery).toList();
-    final list = isVegOnly
-        ? eligibleDishes.where((d) => d.isVeg).toList()
-        : eligibleDishes;
+  // ==================== OVERLAPPING ADD BUTTON ====================
 
-    if (list.isEmpty) return const SizedBox.shrink();
-
-    return SizedBox(
-      height: 252.h,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: EdgeInsets.symmetric(horizontal: 20.w),
-        itemCount: list.length,
-        separatorBuilder: (context, index) => SizedBox(width: 14.w),
-        itemBuilder: (context, index) {
-          final dish = list[index];
-          return _buildDishCard(context, dish, cartState, isDark, keyPrefix: 'quick');
-        },
-      ),
-    );
-  }
-
-  Widget _buildTrendingDishes(
-    BuildContext context,
-    Store99State storeState,
-    CartState cartState,
-    bool isDark,
-  ) {
-    final isVegOnly = ref.watch(vegFilterProvider);
-    final eligibleDishes =
-        storeState.trendingDishes.where((d) => d.price <= 99.0).toList();
-    final list = isVegOnly
-        ? eligibleDishes.where((d) => d.isVeg).toList()
-        : eligibleDishes;
-
-    if (list.isEmpty) return const SizedBox.shrink();
-
-    return SizedBox(
-      height: 252.h,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: EdgeInsets.symmetric(horizontal: 20.w),
-        itemCount: list.length,
-        separatorBuilder: (context, index) => SizedBox(width: 14.w),
-        itemBuilder: (context, index) {
-          final dish = list[index];
-          return _buildDishCard(context, dish, cartState, isDark);
-        },
-      ),
-    );
-  }
-
-  Widget _buildDishCard(
+  Widget _buildOverlapAddButton(
     BuildContext context,
     Store99Product dish,
-    CartState cartState,
-    bool isDark, {
-    String keyPrefix = 'trend',
-  }) {
-    final quantity = _getQuantity(cartState, dish.id);
-    final cartItemId = _getCartItemId(cartState, dish.id);
+    int quantity,
+    String? cartItemId,
+  ) {
+    final hasQty = quantity > 0;
 
-    final textColor = isDark
-        ? AppColors.textPrimaryDark
-        : AppColors.textPrimaryLight;
-    final secondaryColor = isDark
-        ? AppColors.textSecondaryDark
-        : AppColors.textSecondaryLight;
-
-    return GestureDetector(
-      onTap: () => _onProductTap(dish),
-      child: SizedBox(
-        width: 120.w,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                _placeholderImage(
-                  key: _dishImageKeys.putIfAbsent(
-                    '${keyPrefix}_${dish.id}',
-                    () => GlobalKey(),
-                  ),
-                  assetPath: dish.imageUrl,
-                  fallbackIcon: Icons.fastfood,
-                  height: 115.w,
-                  width: 120.w,
-                  borderRadius: BorderRadius.circular(16.r),
-                  background: isDark
-                      ? AppColors.cardDark
-                      : const Color(0xFFF0F0F0),
-                ),
-                Positioned(
-                  right: 4.w,
-                  bottom: -8.h,
-                  child: _buildMorphingQuantityButton(
-                    quantity: quantity,
-                    isDark: isDark,
-                    onAdd: () => _handleFirstAddToCart(
-                      imageKeyId: 'trend_${dish.id}',
-                      food: dish.toFoodModel(),
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 200),
+      child: !hasQty
+          ? GestureDetector(
+              key: const ValueKey('add_btn'),
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _handleFirstAddToCart(dish.toFoodModel()),
+              child: Container(
+                width: 96.w,
+                height: 34.h,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF05151),
+                  borderRadius: BorderRadius.circular(8.r),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFF05151).withValues(alpha: 0.35),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
                     ),
-                    onIncrement: cartItemId == null
-                        ? null
-                        : () {
-                            Haptics.light();
-                            ref
-                                .read(cartViewModelProvider.notifier)
-                                .updateQuantity(cartItemId, quantity + 1);
-                          },
-                    onDecrement: cartItemId == null
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.remove_rounded,
+                      color: Colors.white70,
+                      size: 14.sp,
+                    ),
+                    SizedBox(width: 6.w),
+                    Text(
+                      'ADD',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 13.5.sp,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    SizedBox(width: 6.w),
+                    Icon(
+                      Icons.add_rounded,
+                      color: Colors.white,
+                      size: 14.sp,
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : Container(
+              key: const ValueKey('stepper_btn'),
+              width: 96.w,
+              height: 34.h,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF05151),
+                borderRadius: BorderRadius.circular(8.r),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFF05151).withValues(alpha: 0.35),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: cartItemId == null
                         ? null
                         : () {
                             Haptics.light();
@@ -920,92 +1434,96 @@ class _Store99ScreenState extends ConsumerState<Store99Screen> {
                                 .read(cartViewModelProvider.notifier)
                                 .updateQuantity(cartItemId, quantity - 1);
                           },
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 12.h),
-            SizedBox(
-              height: 32.h,
-              child: Text.rich(
-                TextSpan(
-                  children: [
-                    WidgetSpan(
-                      alignment: PlaceholderAlignment.middle,
-                      child: Padding(
-                        padding: EdgeInsets.only(right: 4.w),
-                        child: _buildVegIcon(dish.isVeg, size: 10),
+                    child: Padding(
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+                      child: Icon(
+                        Icons.remove_rounded,
+                        color: Colors.white,
+                        size: 16.sp,
                       ),
                     ),
-                    TextSpan(text: dish.name),
-                  ],
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 12.sp,
-                  fontWeight: FontWeight.w700,
-                  color: textColor,
-                  height: 1.2,
-                ),
-              ),
-            ),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                if (dish.originalPrice != null) ...[
+                  ),
                   Text(
-                    '₹${dish.originalPrice!.toStringAsFixed(0)}',
+                    '$quantity',
                     style: TextStyle(
-                      fontSize: 11.sp,
-                      color: secondaryColor,
-                      decoration: TextDecoration.lineThrough,
+                      color: Colors.white,
+                      fontSize: 13.5.sp,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
-                  SizedBox(width: 6.w),
-                ],
-                _buildPriceTag(dish.price.toInt(), fontSize: 11),
-              ],
-            ),
-            SizedBox(height: 8.h),
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 3.h),
-              decoration: BoxDecoration(
-                color: AppColors.success.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(4.r),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.star_rounded,
-                    color: AppColors.success,
-                    size: 11.sp,
-                  ),
-                  SizedBox(width: 2.w),
-                  Text(
-                    '${dish.rating} (${dish.ratingCount})',
-                    style: TextStyle(
-                      fontSize: 10.sp,
-                      color: AppColors.success,
-                      fontWeight: FontWeight.w700,
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: cartItemId == null
+                        ? null
+                        : () {
+                            Haptics.light();
+                            ref
+                                .read(cartViewModelProvider.notifier)
+                                .updateQuantity(cartItemId, quantity + 1);
+                          },
+                    child: Padding(
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+                      child: Icon(
+                        Icons.add_rounded,
+                        color: Colors.white,
+                        size: 16.sp,
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
-            SizedBox(height: 8.h),
-            Divider(
-              color: isDark ? AppColors.borderDark : AppColors.borderLight,
-              height: 1,
-              thickness: 1,
+    );
+  }
+
+  // ==================== FLOATING MENU BUTTON ====================
+
+  Widget _buildFloatingMenuButton(
+    BuildContext context,
+    List<_StoreCategoryItem> categories,
+    bool isDark,
+  ) {
+    return GestureDetector(
+      onTap: () {
+        Haptics.medium();
+        _showCategoryBottomSheet(context, categories, isDark);
+      },
+      child: Container(
+        width: 60.r,
+        height: 60.r,
+        decoration: BoxDecoration(
+          color: AppColors.primary,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withValues(alpha: 0.4),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
             ),
-            SizedBox(height: 6.h),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Image.asset(
+              'assets/images/menuicon.png',
+              width: 20.sp,
+              height: 20.sp,
+              color: Colors.white,
+              errorBuilder: (context, error, stackTrace) =>
+                  Icon(Icons.restaurant_menu, color: Colors.white, size: 20.sp),
+            ),
+            SizedBox(height: 2.h),
             Text(
-              dish.restaurantName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 11.sp, color: secondaryColor),
+              'MENU',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 8.sp,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.5,
+              ),
             ),
           ],
         ),
@@ -1013,613 +1531,181 @@ class _Store99ScreenState extends ConsumerState<Store99Screen> {
     );
   }
 
-  Widget _buildBrands(
+  void _showCategoryBottomSheet(
     BuildContext context,
-    Store99State storeState,
+    List<_StoreCategoryItem> categories,
     bool isDark,
   ) {
-    final secondaryTextColor = isDark
-        ? AppColors.textSecondaryDark
-        : AppColors.textSecondaryLight;
-
-    return SizedBox(
-      height: 90.h,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: EdgeInsets.symmetric(horizontal: 20.w),
-        itemCount: storeState.brands.length,
-        separatorBuilder: (context, index) => SizedBox(width: 20.w),
-        itemBuilder: (context, index) {
-          final brand = storeState.brands[index];
-          return Column(
-            children: [
-              _placeholderImage(
-                assetPath: brand.imageUrl,
-                fallbackIcon: Icons.storefront,
-                height: 56.r,
-                width: 56.r,
-                shape: BoxShape.circle,
-                background: isDark
-                    ? AppColors.cardDark
-                    : const Color(0xFFF5F5F5),
-                border: Border.all(
-                  color: isDark
-                      ? AppColors.borderDark
-                      : const Color(0xFFEEEEEE),
-                ),
-              ),
-              SizedBox(height: 6.h),
-              Text(
-                brand.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 11.sp, color: secondaryTextColor),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildExploreGrid(
-    BuildContext context,
-    Store99State storeState,
-    CartState cartState,
-    bool isDark,
-  ) {
-    final isVegOnly = ref.watch(vegFilterProvider);
-    final eligibleExplore =
-        storeState.exploreDishes.where((d) => d.price <= 99.0).toList();
-    final exploreList = isVegOnly
-        ? eligibleExplore.where((d) => d.isVeg).toList()
-        : eligibleExplore;
-
-    if (exploreList.isEmpty && !storeState.isLoading) {
-      final secondaryColor = isDark
-          ? AppColors.textSecondaryDark
-          : AppColors.textSecondaryLight;
-      final primaryTextColor = isDark
-          ? AppColors.textPrimaryDark
-          : AppColors.textPrimaryLight;
-
-      return Center(
-        child: Padding(
-          padding: EdgeInsets.symmetric(vertical: 48.h, horizontal: 24.w),
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.cardDark : Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(24.r),
+              topRight: Radius.circular(24.r),
+            ),
+          ),
+          padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 64.r,
-                height: 64.r,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.local_offer_outlined,
-                  color: AppColors.primary,
-                  size: 32.sp,
+              Center(
+                child: Container(
+                  width: 40.w,
+                  height: 4.h,
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white30 : Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2.r),
+                  ),
                 ),
               ),
               SizedBox(height: 16.h),
-              Text(
-                'No ₹99 Store deals available right now.',
-                style: TextStyle(
-                  fontSize: 15.sp,
-                  fontWeight: FontWeight.bold,
-                  color: primaryTextColor,
-                ),
-                textAlign: TextAlign.center,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Menu Categories',
+                    style: TextStyle(
+                      fontSize: 18.sp,
+                      fontWeight: FontWeight.w800,
+                      color: isDark ? Colors.white : const Color(0xFF1E1E1E),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Icon(
+                      Icons.close_rounded,
+                      color: isDark ? Colors.white70 : Colors.grey[600],
+                    ),
+                  ),
+                ],
               ),
-              SizedBox(height: 6.h),
-              Text(
-                'Check back soon for delicious meals at ₹99 or less.',
-                style: TextStyle(
-                  fontSize: 12.sp,
-                  color: secondaryColor,
-                  height: 1.3,
+              SizedBox(height: 16.h),
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: categories.length,
+                  separatorBuilder: (context, index) => Divider(
+                    color: isDark ? AppColors.borderDark : Colors.grey.shade200,
+                    height: 1,
+                  ),
+                  itemBuilder: (context, index) {
+                    final category = categories[index];
+                    return ListTile(
+                      contentPadding: EdgeInsets.symmetric(vertical: 4.h),
+                      title: Text(
+                        category.name,
+                        style: TextStyle(
+                          fontSize: 15.sp,
+                          fontWeight: FontWeight.w700,
+                          color:
+                              isDark ? Colors.white : const Color(0xFF1E1E1E),
+                        ),
+                      ),
+                      trailing: Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 10.w,
+                          vertical: 4.h,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12.r),
+                        ),
+                        child: Text(
+                          '${category.count}',
+                          style: TextStyle(
+                            fontSize: 12.sp,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _scrollToSection(category.id);
+                      },
+                    );
+                  },
                 ),
-                textAlign: TextAlign.center,
               ),
+              SizedBox(height: 10.h),
             ],
           ),
-        ),
-      );
-    }
-
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 20.w),
-      child: GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        padding: EdgeInsets.zero,
-        itemCount: exploreList.length,
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 14.w,
-          mainAxisSpacing: 18.h,
-          childAspectRatio: 0.61,
-        ),
-        itemBuilder: (context, index) {
-          final dish = exploreList[index];
-          return _buildGridDishCard(context, dish, cartState, isDark);
-        },
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildGridDishCard(
-    BuildContext context,
-    Store99Product dish,
-    CartState cartState,
-    bool isDark,
-  ) {
-    final quantity = _getQuantity(cartState, dish.id);
-    final cartItemId = _getCartItemId(cartState, dish.id);
+  // ==================== ICONS ====================
 
-    final textColor = isDark
-        ? AppColors.textPrimaryDark
-        : AppColors.textPrimaryLight;
-    final secondaryColor = isDark
-        ? AppColors.textSecondaryDark
-        : AppColors.textSecondaryLight;
-
-    return GestureDetector(
-      onTap: () => _onProductTap(dish),
-      child: Container(
-        padding: EdgeInsets.all(8.r),
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.cardDark : Colors.white,
-          borderRadius: BorderRadius.circular(16.r),
-          boxShadow: isDark
-              ? []
-              : [
-                  BoxShadow(
-                    color: AppColors.shadow1,
-                    blurRadius: 16,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
-          border: isDark
-              ? Border.all(color: AppColors.borderDark, width: 1)
-              : null,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12.r),
-              child: SizedBox(
-                height: 120.h,
-                width: double.infinity,
-                child: _placeholderImage(
-                  key: _dishImageKeys.putIfAbsent(
-                    'grid_${dish.id}',
-                    () => GlobalKey(),
-                  ),
-                  assetPath: dish.imageUrl,
-                  fallbackIcon: Icons.fastfood,
-                  height: 120.h,
-                  width: double.infinity,
-                  background: isDark
-                      ? AppColors.surfaceDark
-                      : const Color(0xFFF0F0F0),
-                ),
-              ),
-            ),
-            SizedBox(height: 8.h),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: EdgeInsets.only(top: 2.h),
-                  child: _buildVegIcon(dish.isVeg, size: 11),
-                ),
-                SizedBox(width: 4.w),
-                Expanded(
-                  child: Text(
-                    dish.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13.sp,
-                      fontWeight: FontWeight.w700,
-                      color: textColor,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 4.h),
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 5.w, vertical: 2.h),
-              decoration: BoxDecoration(
-                color: AppColors.success.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(4.r),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.star_rounded,
-                    color: AppColors.success,
-                    size: 11.sp,
-                  ),
-                  SizedBox(width: 2.w),
-                  Text(
-                    '${dish.rating} (${dish.ratingCount})',
-                    style: TextStyle(
-                      fontSize: 10.sp,
-                      color: AppColors.success,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Spacer(),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (dish.originalPrice != null) ...[
-                      Text(
-                        '₹${dish.originalPrice!.toStringAsFixed(0)}',
-                        style: TextStyle(
-                          fontSize: 11.sp,
-                          color: secondaryColor,
-                          decoration: TextDecoration.lineThrough,
-                        ),
-                      ),
-                    ],
-                    _buildPriceTag(dish.price.toInt(), fontSize: 12),
-                  ],
-                ),
-                const Spacer(),
-                _buildGridMorphingButton(
-                  quantity: quantity,
-                  isDark: isDark,
-                  onAdd: () => _handleFirstAddToCart(
-                    imageKeyId: 'grid_${dish.id}',
-                    food: dish.toFoodModel(),
-                  ),
-                  onIncrement: cartItemId == null
-                      ? null
-                      : () {
-                          Haptics.light();
-                          ref
-                              .read(cartViewModelProvider.notifier)
-                              .updateQuantity(cartItemId, quantity + 1);
-                        },
-                  onDecrement: cartItemId == null
-                      ? null
-                      : () {
-                          Haptics.light();
-                          ref
-                              .read(cartViewModelProvider.notifier)
-                              .updateQuantity(cartItemId, quantity - 1);
-                        },
-                ),
-              ],
-            ),
-            SizedBox(height: 6.h),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    dish.restaurantName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 10.5.sp,
-                      color: secondaryColor,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                Text(
-                  dish.deliveryTime,
-                  style: TextStyle(
-                    fontSize: 10.5.sp,
-                    color: secondaryColor,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ==================== SHARED WIDGET HELPERS ====================
-
-  Widget _buildMorphingQuantityButton({
-    required int quantity,
-    required bool isDark,
-    required VoidCallback onAdd,
-    required VoidCallback? onIncrement,
-    required VoidCallback? onDecrement,
-  }) {
-    final bool hasQty = quantity > 0;
-    final double width = hasQty ? 68.w : 28.r;
-    final double height = 28.r;
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOutCubic,
-      width: width,
-      height: height,
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.surfaceDark : Colors.white,
-        borderRadius: BorderRadius.circular(height / 2),
-        border: Border.all(
-          color: hasQty
-              ? AppColors.primary
-              : (isDark ? AppColors.borderDark : AppColors.borderLight),
-          width: hasQty ? 1.2 : 1.0,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.15),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Material(
-        type: MaterialType.transparency,
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 200),
-          switchInCurve: Curves.easeOutBack,
-          switchOutCurve: Curves.easeIn,
-          transitionBuilder: (child, anim) => ScaleTransition(
-            scale: anim,
-            child: FadeTransition(opacity: anim, child: child),
-          ),
-          child: !hasQty
-              ? InkWell(
-                  key: const ValueKey('circle_plus'),
-                  onTap: onAdd,
-                  borderRadius: BorderRadius.circular(14.r),
-                  child: Center(
-                    child: Icon(
-                      Icons.add,
-                      color: AppColors.primary,
-                      size: 18.sp,
-                    ),
-                  ),
-                )
-              : Row(
-                  key: const ValueKey('pill_stepper'),
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    InkWell(
-                      onTap: onDecrement,
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(14.r),
-                        bottomLeft: Radius.circular(14.r),
-                      ),
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 4.w),
-                        child: Icon(
-                          Icons.remove,
-                          color: AppColors.primary,
-                          size: 14.sp,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      '$quantity',
-                      style: TextStyle(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 12.5.sp,
-                      ),
-                    ),
-                    InkWell(
-                      onTap: onIncrement,
-                      borderRadius: BorderRadius.only(
-                        topRight: Radius.circular(14.r),
-                        bottomRight: Radius.circular(14.r),
-                      ),
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 4.w),
-                        child: Icon(
-                          Icons.add,
-                          color: AppColors.primary,
-                          size: 14.sp,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGridMorphingButton({
-    required int quantity,
-    required bool isDark,
-    required VoidCallback onAdd,
-    required VoidCallback? onIncrement,
-    required VoidCallback? onDecrement,
-  }) {
-    final bool hasQty = quantity > 0;
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOutCubic,
-      height: 30.h,
-      padding: EdgeInsets.symmetric(horizontal: hasQty ? 6.w : 14.w),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.surfaceDark : Colors.white,
-        border: Border.all(
-          color: hasQty
-              ? AppColors.primary
-              : (isDark ? AppColors.borderDark : AppColors.borderLight),
-          width: hasQty ? 1.2 : 1.0,
-        ),
-        borderRadius: BorderRadius.circular(8.r),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Material(
-        type: MaterialType.transparency,
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 200),
-          transitionBuilder: (child, anim) => ScaleTransition(
-            scale: anim,
-            child: FadeTransition(opacity: anim, child: child),
-          ),
-          child: !hasQty
-              ? InkWell(
-                  key: const ValueKey('grid_add_btn'),
-                  onTap: onAdd,
-                  borderRadius: BorderRadius.circular(8.r),
-                  child: Center(
-                    child: Text(
-                      'ADD',
-                      style: TextStyle(
-                        color: AppColors.primary,
-                        fontSize: 12.5.sp,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                )
-              : Row(
-                  key: const ValueKey('grid_pill_stepper'),
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    InkWell(
-                      onTap: onDecrement,
-                      borderRadius: BorderRadius.circular(6.r),
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 3.w,
-                          vertical: 2.h,
-                        ),
-                        child: Icon(
-                          Icons.remove,
-                          color: AppColors.primary,
-                          size: 14.sp,
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: 3.w),
-                    Text(
-                      '$quantity',
-                      style: TextStyle(
-                        color: AppColors.primary,
-                        fontSize: 12.5.sp,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    SizedBox(width: 3.w),
-                    InkWell(
-                      onTap: onIncrement,
-                      borderRadius: BorderRadius.circular(6.r),
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 3.w,
-                          vertical: 2.h,
-                        ),
-                        child: Icon(
-                          Icons.add,
-                          color: AppColors.primary,
-                          size: 14.sp,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildVegIcon(bool isVeg, {double size = 10}) {
-    final color = isVeg ? const Color(0xFF2E8B57) : const Color(0xFFB33A3A);
+  Widget _buildVegIcon({double size = 10}) {
     return Container(
       width: size.sp,
       height: size.sp,
       decoration: BoxDecoration(
-        border: Border.all(color: color, width: 1),
+        border: Border.all(color: const Color(0xFF008A45), width: 1),
         borderRadius: BorderRadius.circular(2.r),
       ),
       alignment: Alignment.center,
       child: Container(
         width: (size * 0.4).sp,
         height: (size * 0.4).sp,
-        decoration: BoxDecoration(
-          color: color,
-          shape: isVeg ? BoxShape.circle : BoxShape.rectangle,
+        decoration: const BoxDecoration(
+          color: Color(0xFF008A45),
+          shape: BoxShape.circle,
         ),
       ),
     );
   }
 
-  Widget _buildPriceTag(int price, {double fontSize = 11}) {
+  Widget _buildNonVegIcon({double size = 10}) {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
+      width: size.sp,
+      height: size.sp,
       decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(4.r),
+        border: Border.all(color: const Color(0xFFE23744), width: 1),
+        borderRadius: BorderRadius.circular(2.r),
       ),
-      child: Text(
-        '₹$price',
-        style: TextStyle(
-          fontSize: fontSize.sp,
-          fontWeight: FontWeight.w900,
-          color: AppColors.primary,
-        ),
+      alignment: Alignment.center,
+      child: CustomPaint(
+        size: Size((size * 0.5).sp, (size * 0.5).sp),
+        painter: _StoreTrianglePainter(color: const Color(0xFFE23744)),
       ),
     );
+  }
+}
+
+class _StoreCategoryItem {
+  final String id;
+  final String name;
+  final int count;
+
+  _StoreCategoryItem({
+    required this.id,
+    required this.name,
+    required this.count,
+  });
+}
+
+class _StoreTrianglePainter extends CustomPainter {
+  final Color color;
+  _StoreTrianglePainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color;
+    final path = Path();
+    path.moveTo(size.width / 2, 0);
+    path.lineTo(size.width, size.height);
+    path.lineTo(0, size.height);
+    path.close();
+    canvas.drawPath(path, paint);
   }
 
-  Widget _placeholderImage({
-    Key? key,
-    required String assetPath,
-    required IconData fallbackIcon,
-    required double height,
-    double? width,
-    BoxShape shape = BoxShape.rectangle,
-    BorderRadius? borderRadius,
-    Color background = const Color(0xFFF5F5F5),
-    BoxBorder? border,
-    BoxFit fit = BoxFit.cover,
-  }) {
-    return Container(
-      key: key,
-      height: height,
-      width: width,
-      decoration: BoxDecoration(
-        color: background,
-        shape: shape,
-        borderRadius: shape == BoxShape.rectangle ? borderRadius : null,
-        border: border,
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: SmartImage(
-        url: assetPath,
-        category: ImageCategory.food,
-        fit: fit,
-        width: width,
-        height: height,
-      ),
-    );
-  }
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

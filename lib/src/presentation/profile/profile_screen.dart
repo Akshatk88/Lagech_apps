@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,16 +9,9 @@ import '../branding/app_colors.dart';
 import '../common_widgets/app_snackbar.dart';
 import '../../data/models/user_model.dart';
 import '../auth/viewmodels/auth_viewmodel.dart';
-import '../address/viewmodels/address_viewmodel.dart';
 import '../coupons/viewmodels/coupons_viewmodel.dart';
-import 'viewmodels/notifications_viewmodel.dart';
-import '../orders/viewmodels/orders_viewmodel.dart';
 import '../wallet/viewmodels/wallet_viewmodel.dart';
-import '../wallet/viewmodels/pay_later_viewmodel.dart';
-import '../branding/locale_provider.dart';
-import '../../../generated/l10n/app_localizations.dart';
 import '../../core/utils/localizations.dart';
-import '../branding/theme_color_provider.dart';
 import '../branding/theme_provider.dart';
 import '../home/viewmodels/veg_filter_provider.dart';
 
@@ -40,642 +32,406 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : AppColors.textPrimaryLight;
+    final textColor = isDark ? Colors.white : const Color(0xFF1E1E1E);
     final secondaryColor = isDark
         ? AppColors.textSecondaryDark
-        : AppColors.textSecondaryLight;
+        : const Color(0xFF6B7280);
     final cardColor = isDark ? AppColors.cardDark : Colors.white;
 
     final user = ref.watch(authViewModelProvider).value;
     final isLoggedIn = user != null;
 
-    final addresses = ref.watch(addressViewModelProvider);
     final coupons = ref.watch(couponsViewModelProvider);
-    final notificationSettings = ref.watch(notificationsViewModelProvider);
     final walletState = isLoggedIn ? ref.watch(walletViewModelProvider) : null;
     final walletBalance = walletState?.wallet.balance ?? 0.0;
+    final isVegOnly = ref.watch(vegFilterProvider);
+    final currentTheme = ref.watch(themeProvider);
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-          children: [
-            // 1. Header
-            _buildHeader(context, textColor, secondaryColor, isLoggedIn),
-
-            const SizedBox(height: 20),
-
-            // 2. User Profile Card / Guest Card
-            if (isLoggedIn)
-              _buildUserProfileCard(user, isDark, textColor, secondaryColor)
-            else
-              _buildGuestCard(context, isDark, textColor, secondaryColor),
-
-            const SizedBox(height: 16),
-
-            // 3. Wallet & Coupons Quick Row
-            _buildWalletCouponsRow(
-              walletBalance,
-              coupons.length,
-              cardColor,
-              isDark,
-              textColor,
-              secondaryColor,
-              isLoggedIn,
+      backgroundColor: isDark ? AppColors.backgroundDark : const Color(0xFFF9FAFB),
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(56),
+        child: Container(
+          color: isDark ? AppColors.surfaceDark : Colors.white,
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: Icon(
+                      Icons.arrow_back_rounded,
+                      color: textColor,
+                      size: 24,
+                    ),
+                    onPressed: () {
+                      Haptics.light();
+                      if (context.canPop()) {
+                        context.pop();
+                      } else {
+                        context.go(RouteNames.home);
+                      }
+                    },
+                  ),
+                ],
+              ),
             ),
-
-            const SizedBox(height: 16),
-
-            // 3b. Pay Later Tile
-            if (isLoggedIn) ...[
-              _buildPayLaterTile(cardColor, isDark, textColor, secondaryColor),
-              const SizedBox(height: 16),
-            ],
-
-            // 4. Cart & Saved Addresses Quick Row
-            _buildCartAddressesRow(
-              addresses.length,
-              cardColor,
-              isDark,
-              textColor,
-              secondaryColor,
-              isLoggedIn,
-            ),
-
-            const SizedBox(height: 16),
-
-            // 5. Account & Preferences Group
-            _buildPreferencesGroupCard(
-              notificationSettings,
-              cardColor,
-              isDark,
-              textColor,
-              secondaryColor,
-              isLoggedIn,
-            ),
-
-            const SizedBox(height: 16),
-
-            // 6. Order History Card (Breakdown + View All)
-            _buildOrderHistoryCard(
-              cardColor,
-              isDark,
-              textColor,
-              secondaryColor,
-              isLoggedIn,
-            ),
-
-            const SizedBox(height: 16),
-
-            // 7. Rewards & Sharing Group
-            _buildRewardsSharingGroupCard(
-              user?.referralCode ?? '',
-              cardColor,
-              isDark,
-              textColor,
-              secondaryColor,
-            ),
-
-            const SizedBox(height: 16),
-
-            // 8. Help, Support & Legal Group
-            _buildHelpLegalGroupCard(
-              cardColor,
-              isDark,
-              textColor,
-              secondaryColor,
-            ),
-
-            const SizedBox(height: 20),
-
-            // 9. Session Action (Logout or Login)
-            if (isLoggedIn)
-              _buildLogoutButton(cardColor, isDark)
-            else
-              _buildLoginButton(cardColor),
-
-            if (isLoggedIn) ...[
-              const SizedBox(height: 12),
-              _buildDeleteAccountButton(),
-            ],
-
-            const SizedBox(height: 16),
-          ],
+          ),
         ),
+      ),
+      body: ListView(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          12,
+          16,
+          MediaQuery.of(context).padding.bottom + 120,
+        ),
+        children: [
+          // 1. User Profile Row (Screenshot 4)
+          _buildUserProfileRow(user, isDark, textColor, secondaryColor),
+
+          const SizedBox(height: 16),
+
+          // 2. Join Lagech Gold Banner (Screenshot 4: Black card)
+          _buildGoldBanner(isDark),
+
+          const SizedBox(height: 14),
+
+          // 3. Quick Action Row: Lagech Money & Your coupons (Screenshot 4)
+          _buildQuickActionRow(
+            walletBalance,
+            coupons.length,
+            isDark,
+            textColor,
+          ),
+
+          const SizedBox(height: 16),
+
+          // 4. Action Tiles (Screenshot 4)
+          // Tile 1: Your cart
+          _buildNavTile(
+            icon: Icons.shopping_cart_outlined,
+            title: 'Your cart',
+            onTap: () {
+              Haptics.light();
+              context.push(RouteNames.cart);
+            },
+            isDark: isDark,
+          ),
+
+          // Tile 2: Your profile + 48% completed yellow badge
+          _buildNavTile(
+            icon: Icons.person_outline_rounded,
+            title: 'Your profile',
+            trailing: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF3C7),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Text(
+                '48% completed',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFFD97706),
+                ),
+              ),
+            ),
+            onTap: () {
+              Haptics.light();
+              if (isLoggedIn) {
+                context.push(RouteNames.editProfile);
+              } else {
+                context.push(
+                  '${RouteNames.login}?from=${Uri.encodeComponent(RouteNames.profile)}',
+                );
+              }
+            },
+            isDark: isDark,
+          ),
+
+          // Tile 3: Veg Mode + ON/OFF
+          _buildNavTile(
+            icon: Icons.eco_outlined,
+            iconColor: const Color(0xFF008A45),
+            title: 'Veg Mode',
+            trailing: Text(
+              isVegOnly ? 'ON' : 'OFF',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: isVegOnly
+                    ? const Color(0xFF008A45)
+                    : const Color(0xFF6B7280),
+              ),
+            ),
+            onTap: () {
+              Haptics.light();
+              ref.read(vegFilterProvider.notifier).toggle();
+            },
+            isDark: isDark,
+          ),
+
+          // Tile 4: Appearance + Theme
+          _buildNavTile(
+            icon: Icons.palette_outlined,
+            title: 'Appearance',
+            trailing: Text(
+              _getThemeString(currentTheme),
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF6B7280),
+              ),
+            ),
+            onTap: () {
+              Haptics.light();
+              _showAppearanceModal();
+            },
+            isDark: isDark,
+          ),
+
+          // Tile 5: Your rating + -- ★
+          _buildNavTile(
+            icon: Icons.star_outline_rounded,
+            title: 'Your rating',
+            trailing: const Text(
+              '-- ★',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF6B7280),
+              ),
+            ),
+            onTap: () {
+              Haptics.light();
+              _showRateAppModal();
+            },
+            isDark: isDark,
+          ),
+
+          // 5. Sections with Green Accent Line (| Section) (Screenshot 5)
+          // Section: Collections
+          _buildSectionHeader('Collections', isDark: isDark),
+          _buildNavTile(
+            icon: Icons.bookmark_border_rounded,
+            title: 'Your collections',
+            onTap: () {
+              Haptics.light();
+              context.push(RouteNames.home);
+            },
+            isDark: isDark,
+          ),
+
+          // Section: Food Orders
+          _buildSectionHeader('Food Orders', isDark: isDark),
+          _buildNavTile(
+            icon: Icons.storefront_outlined,
+            title: 'Your orders',
+            onTap: () {
+              Haptics.light();
+              context.push(RouteNames.orders);
+            },
+            isDark: isDark,
+          ),
+          _buildNavTile(
+            icon: Icons.chat_bubble_outline_rounded,
+            title: 'Hear from restaurants',
+            onTap: () {
+              Haptics.light();
+              _showHearFromRestaurantsSheet(context);
+            },
+            isDark: isDark,
+          ),
+
+          // Section: Coupons
+          _buildSectionHeader('Coupons', isDark: isDark),
+          _buildNavTile(
+            icon: Icons.percent_rounded,
+            title: 'Redeem Gold coupon',
+            onTap: () {
+              Haptics.light();
+              _showCouponsModal();
+            },
+            isDark: isDark,
+          ),
+
+          // Section: Earnings (Screenshot 1)
+          _buildSectionHeader('Earnings', isDark: isDark),
+          _buildEarningsNavTile(
+            icon: Icons.delivery_dining_rounded,
+            title: 'Join as a Delivery Man',
+            onTap: () {
+              Haptics.light();
+              _showJoinDeliveryManSheet(context);
+            },
+            isDark: isDark,
+          ),
+          _buildEarningsNavTile(
+            icon: Icons.storefront_rounded,
+            title: 'Open Vendor',
+            onTap: () {
+              Haptics.light();
+              _showOpenVendorSheet(context);
+            },
+            isDark: isDark,
+          ),
+
+          // Section: More
+          _buildSectionHeader('More', isDark: isDark),
+          _buildNavTile(
+            icon: Icons.info_outline_rounded,
+            title: 'About',
+            onTap: () {
+              Haptics.light();
+              _showAboutSheet(context);
+            },
+            isDark: isDark,
+          ),
+          _buildNavTile(
+            icon: Icons.edit_note_rounded,
+            title: 'Send feedback',
+            onTap: () {
+              Haptics.light();
+              _showFeedbackSheet(context);
+            },
+            isDark: isDark,
+          ),
+          _buildNavTile(
+            icon: Icons.warning_amber_rounded,
+            title: 'Report a safety emergency',
+            onTap: () {
+              Haptics.light();
+              _showSafetyEmergencySheet(context);
+            },
+            isDark: isDark,
+          ),
+          _buildNavTile(
+            icon: Icons.accessibility_new_rounded,
+            title: 'Accessibility',
+            onTap: () {
+              Haptics.light();
+              _showAccessibilitySheet(context);
+            },
+            isDark: isDark,
+          ),
+
+          const SizedBox(height: 16),
+
+          // Session actions
+          if (isLoggedIn) ...[
+            _buildLogoutButton(cardColor, isDark),
+            const SizedBox(height: 12),
+            _buildDeleteAccountButton(),
+          ] else
+            _buildLoginButton(cardColor),
+        ],
       ),
     );
   }
 
-  /// Top Profile Header
-  Widget _buildHeader(
-    BuildContext context,
-    Color textColor,
-    Color secondaryColor,
-    bool isLoggedIn,
-  ) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                AppLocalizations.of(context)!.profile,
-                style: TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                  color: textColor,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                isLoggedIn
-                    ? AppLocalizations.of(context)!.profileSubtitle
-                    : AppLocalizations.of(context)!.loginPromptOrders,
-                style: TextStyle(fontSize: 13, color: secondaryColor),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// User Profile Card with Edit Profile action
-  Widget _buildUserProfileCard(
+  /// User Profile Row with circular avatar (Screenshot 4)
+  Widget _buildUserProfileRow(
     UserModel? user,
     bool isDark,
     Color textColor,
     Color secondaryColor,
   ) {
-    final avatarUrl = user?.avatarUrl;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.cardDark : AppColors.primaryTintStrong,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.primaryAlpha(0.25), width: 1),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Stack(
-                children: [
-                  Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryAlpha(0.15),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: AppColors.primary, width: 2),
-                    ),
-                    child: avatarUrl == null
-                        ? ClipOval(
-                            child: Image.asset(
-                              'assets/images/user_avatar_3d.png',
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, _, _) => Icon(
-                                Icons.person_rounded,
-                                color: AppColors.primary,
-                                size: 34,
-                              ),
-                            ),
-                          )
-                        : ClipOval(
-                            child: avatarUrl.startsWith('/')
-                                ? Image.file(File(avatarUrl), fit: BoxFit.cover)
-                                : (avatarUrl.startsWith('assets/')
-                                      ? Image.asset(
-                                          avatarUrl,
-                                          fit: BoxFit.cover,
-                                        )
-                                      : Image.network(
-                                          avatarUrl,
-                                          fit: BoxFit.cover,
-                                          errorBuilder: (_, _, _) => Icon(
-                                            Icons.person_rounded,
-                                            color: AppColors.primary,
-                                            size: 34,
-                                          ),
-                                        )),
-                          ),
-                  ),
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
-                    child: InkWell(
-                      onTap: () {
-                        Haptics.light();
-                        context.push(RouteNames.editProfile);
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.camera_alt,
-                          color: Colors.white,
-                          size: 12,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      user?.name ?? 'User',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: textColor,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      user?.phone ?? '',
-                      style: TextStyle(fontSize: 13, color: secondaryColor),
-                    ),
-                    Text(
-                      user?.email ?? '',
-                      style: TextStyle(fontSize: 13, color: secondaryColor),
-                    ),
-                    const SizedBox(height: 6),
-                  ],
-                ),
-              ),
-            ],
+    final name = (user != null && user.name.isNotEmpty) ? user.name : 'John Doe';
+    final initial = name.isNotEmpty ? name[0].toUpperCase() : 'J';
+    final subtitle = (user != null && user.email.isNotEmpty)
+        ? user.email
+        : ((user?.phone ?? '').isNotEmpty ? user!.phone! : 'john@example.com');
+
+    return Row(
+      children: [
+        Container(
+          width: 52,
+          height: 52,
+          decoration: const BoxDecoration(
+            color: Color(0xFFE0F2FE),
+            shape: BoxShape.circle,
           ),
-          const SizedBox(height: 14),
-          SizedBox(
-            width: double.infinity,
-            height: 38,
-            child: OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                side: BorderSide(color: AppColors.primary),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              onPressed: () {
-                Haptics.light();
-                context.push(RouteNames.editProfile);
-              },
-              icon: Icon(
-                Icons.edit_outlined,
-                size: 16,
-                color: AppColors.primary,
-              ),
-              label: Text(
-                AppLocalizations.of(context)!.editProfile,
+          alignment: Alignment.center,
+          child: Text(
+            initial,
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF0369A1),
+            ),
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                name,
                 style: TextStyle(
-                  color: AppColors.primary,
-                  fontSize: 13,
+                  fontSize: 18,
                   fontWeight: FontWeight.bold,
+                  color: textColor,
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Guest Card when logged out
-  Widget _buildGuestCard(
-    BuildContext context,
-    bool isDark,
-    Color textColor,
-    Color secondaryColor,
-  ) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.cardDark : AppColors.primaryTintStrong,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.primaryAlpha(0.3), width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: AppColors.primaryAlpha(0.12),
-                  shape: BoxShape.circle,
+              const SizedBox(height: 3),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: secondaryColor,
                 ),
-                child: Icon(
-                  Icons.person_outline_rounded,
-                  color: AppColors.primary,
-                  size: 30,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      AppLocalizations.of(context)!.guestUser,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: textColor,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      AppLocalizations.of(context)!.loginPromptDetails,
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        color: secondaryColor,
-                        height: 1.25,
-                      ),
-                    ),
-                  ],
-                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          SizedBox(
-            width: double.infinity,
-            height: 44,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primaryButton,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              onPressed: () {
-                Haptics.light();
-                context.push(
-                  '${RouteNames.login}?from=${Uri.encodeComponent(RouteNames.profile)}',
-                );
-              },
-              child: Text(
-                AppLocalizations.of(context)!.loginSignUp,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  /// Wallet & Coupons Row
-  Widget _buildWalletCouponsRow(
-    double walletBalance,
-    int couponCount,
-    Color cardColor,
-    bool isDark,
-    Color textColor,
-    Color secondaryColor,
-    bool isLoggedIn,
-  ) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 14),
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: isDark
-            ? []
-            : [
-                BoxShadow(
-                  color: AppColors.shadow1,
-                  blurRadius: 14,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-      ),
-      child: Row(
-        children: [
-          // Wallet Tile
-          Expanded(
-            child: InkWell(
-              onTap: () {
-                Haptics.light();
-                _protectedNavigation(RouteNames.wallet, isLoggedIn);
-              },
-              child: Row(
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryAlpha(0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      Icons.account_balance_wallet_outlined,
-                      color: AppColors.primary,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          AppLocalizations.of(context)!.wallet,
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            color: secondaryColor,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          isLoggedIn
-                              ? '₹${walletBalance.toStringAsFixed(2)}'
-                              : AppLocalizations.of(context)!.viewBalance,
-                          style: TextStyle(
-                            fontSize: 14.5,
-                            fontWeight: FontWeight.bold,
-                            color: textColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    color: AppColors.primary,
-                    size: 16,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Container(
-            width: 1,
-            height: 38,
-            color: isDark ? AppColors.borderDark : const Color(0xFFE5E7EB),
-          ),
-          const SizedBox(width: 12),
-
-          // Coupons Tile
-          Expanded(
-            child: InkWell(
-              onTap: () {
-                Haptics.light();
-                _showCouponsModal();
-              },
-              child: Row(
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryAlpha(0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      Icons.local_offer_rounded,
-                      color: AppColors.primary,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          AppLocalizations.of(context)!.coupons,
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            color: secondaryColor,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          AppLocalizations.of(
-                            context,
-                          )!.activeCoupons(couponCount),
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                            color: textColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    color: AppColors.primary,
-                    size: 16,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Pay Later Tile
-  Widget _buildPayLaterTile(
-    Color cardColor,
-    bool isDark,
-    Color textColor,
-    Color secondaryColor,
-  ) {
-    final payLater = ref.watch(payLaterViewModelProvider).account;
-    final hasDue = payLater.amountDue > 0;
-    final l10n = AppLocalizations.of(context)!;
-    final subtitle = !payLater.eligible
-        ? l10n.unlocksAfterOrders
-        : hasDue
-        ? l10n.payLaterDue('₹${payLater.amountDue.toStringAsFixed(0)}')
-        : l10n.payLaterAvailable(
-            '₹${payLater.availableCredit.toStringAsFixed(0)}',
-          );
-
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 14),
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: isDark
-            ? []
-            : [
-                BoxShadow(
-                  color: AppColors.shadow1,
-                  blurRadius: 14,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-      ),
-      child: InkWell(
-        onTap: () {
-          Haptics.light();
-          context.push(RouteNames.payLater);
-        },
+  /// Join Lagech Gold Banner (Screenshot 4: Black card, gold crown)
+  Widget _buildGoldBanner(bool isDark) {
+    return InkWell(
+      onTap: () {
+        Haptics.light();
+        _showGoldMembershipSheet(context);
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E1E1E) : Colors.black,
+          borderRadius: BorderRadius.circular(16),
+        ),
         child: Row(
-          children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: hasDue
-                    ? AppColors.error.withValues(alpha: 0.12)
-                    : AppColors.primaryAlpha(0.12),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                Icons.credit_score_outlined,
-                color: hasDue ? AppColors.error : AppColors.primary,
-                size: 20,
-              ),
+          children: const [
+            Icon(
+              Icons.workspace_premium_rounded,
+              color: Color(0xFFF59E0B),
+              size: 24,
             ),
-            const SizedBox(width: 10),
+            SizedBox(width: 12),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    l10n.payLater,
-                    style: TextStyle(fontSize: 11.5, color: secondaryColor),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.bold,
-                      color: hasDue ? AppColors.error : textColor,
-                    ),
-                  ),
-                ],
+              child: Text(
+                'Join LAGECH Gold',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
             Icon(
               Icons.chevron_right_rounded,
-              color: AppColors.primary,
-              size: 16,
+              color: Colors.white,
+              size: 20,
             ),
           ],
         ),
@@ -683,656 +439,786 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  /// My Cart & Saved Addresses Row
-  Widget _buildCartAddressesRow(
-    int addressCount,
-    Color cardColor,
+  /// Quick Action Row: Lagech Money & Your coupons (Screenshot 4)
+  Widget _buildQuickActionRow(
+    double walletBalance,
+    int couponCount,
     bool isDark,
     Color textColor,
-    Color secondaryColor,
-    bool isLoggedIn,
   ) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 14),
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: isDark
-            ? []
-            : [
-                BoxShadow(
-                  color: AppColors.shadow1,
-                  blurRadius: 14,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-      ),
-      child: Row(
-        children: [
-          // My Cart Tile
-          Expanded(
-            child: InkWell(
-              onTap: () {
-                Haptics.light();
-                context.go(RouteNames.cart);
-              },
-              child: Row(
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryAlpha(0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      Icons.shopping_cart_outlined,
-                      color: AppColors.primary,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          context.l10n.myCart,
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            color: secondaryColor,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          context.l10n.viewCart,
-                          style: TextStyle(
-                            fontSize: 14.5,
-                            fontWeight: FontWeight.bold,
-                            color: textColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    color: AppColors.primary,
-                    size: 16,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Container(
-            width: 1,
-            height: 38,
-            color: isDark ? AppColors.borderDark : const Color(0xFFE5E7EB),
-          ),
-          const SizedBox(width: 12),
-
-          // Saved Addresses Tile
-          Expanded(
-            child: InkWell(
-              onTap: () {
-                Haptics.light();
-                if (isLoggedIn) {
-                  _showAddressManagerModal();
-                } else {
-                  context.push(
-                    '${RouteNames.login}?from=${Uri.encodeComponent(RouteNames.addAddress)}',
-                  );
-                }
-              },
-              child: Row(
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryAlpha(0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      Icons.location_on_outlined,
-                      color: AppColors.primary,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          context.l10n.savedAddresses,
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            color: secondaryColor,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          context.l10n.savedCount(addressCount),
-                          style: TextStyle(
-                            fontSize: 14.5,
-                            fontWeight: FontWeight.bold,
-                            color: textColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    color: AppColors.primary,
-                    size: 16,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Account & Preferences Group
-  Widget _buildPreferencesGroupCard(
-    NotificationSettingsState notifSettings,
-    Color cardColor,
-    bool isDark,
-    Color textColor,
-    Color secondaryColor,
-    bool isLoggedIn,
-  ) {
-    return Container(
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: isDark
-            ? []
-            : [
-                BoxShadow(
-                  color: AppColors.shadow1,
-                  blurRadius: 14,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-      ),
-      child: Column(
-        children: [
-          // 1. Notifications Preferences
-          _buildMenuRow(
-            icon: Icons.notifications_active_outlined,
-            title: context.l10n.notificationsAndAlerts,
-            subtitle: context.l10n.notificationsSubtitle,
-            textColor: textColor,
-            secondaryColor: secondaryColor,
-            onTap: _showNotificationsModal,
-          ),
-          Divider(
-            height: 1,
-            indent: 16,
-            endIndent: 16,
-            color: isDark ? AppColors.borderDark : AppColors.dividerLight,
-          ),
-
-          // 2. Veg Mode Toggle
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF39C96B).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.eco_rounded,
-                    color: Color(0xFF39C96B),
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        context.l10n.vegMode,
-                        style: TextStyle(
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w600,
-                          color: textColor,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        context.l10n.vegModeSubtitle,
-                        style: TextStyle(fontSize: 12, color: secondaryColor),
-                      ),
-                    ],
-                  ),
-                ),
-                Switch(
-                  value: ref.watch(vegFilterProvider),
-                  activeThumbColor: const Color(0xFF39C96B),
-                  onChanged: (val) {
-                    Haptics.light();
-                    ref.read(vegFilterProvider.notifier).set(val);
-                  },
-                ),
-              ],
-            ),
-          ),
-          Divider(
-            height: 1,
-            indent: 16,
-            endIndent: 16,
-            color: isDark ? AppColors.borderDark : AppColors.dividerLight,
-          ),
-
-          // 3. Appearance
-          _buildMenuRow(
-            icon: Icons.palette_outlined,
-            title: context.l10n.appearanceSettings,
-            subtitle: context.l10n.appearanceThemeMode(
-              _getThemeString(ref.watch(themeProvider)),
-            ),
-            textColor: textColor,
-            secondaryColor: secondaryColor,
-            onTap: _showAppearanceModal,
-          ),
-          Divider(
-            height: 1,
-            indent: 16,
-            endIndent: 16,
-            color: isDark ? AppColors.borderDark : AppColors.dividerLight,
-          ),
-
-          // 3b. App Theme (brand color)
-          _buildMenuRow(
-            icon: Icons.color_lens_outlined,
-            title: context.l10n.appTheme,
-            subtitle:
-                '${ref.watch(themeColorProvider).emoji} ${ref.watch(themeColorProvider).label}',
-            textColor: textColor,
-            secondaryColor: secondaryColor,
-            onTap: _showThemeColorModal,
-          ),
-          Divider(
-            height: 1,
-            indent: 16,
-            endIndent: 16,
-            color: isDark ? AppColors.borderDark : AppColors.dividerLight,
-          ),
-
-          // 3c. Language
-          _buildMenuRow(
-            icon: Icons.language_outlined,
-            title: context.l10n.language,
-            subtitle: ref.watch(localeProvider).languageCode == 'hi'
-                ? 'हिन्दी'
-                : 'English',
-            textColor: textColor,
-            secondaryColor: secondaryColor,
-            onTap: _showLanguageModal,
-          ),
-          Divider(
-            height: 1,
-            indent: 16,
-            endIndent: 16,
-            color: isDark ? AppColors.borderDark : AppColors.dividerLight,
-          ),
-
-          // 4. Favorites
-          _buildMenuRow(
-            icon: Icons.favorite_border_rounded,
-            title: context.l10n.favorites,
-            subtitle: context.l10n.favoritesSubtitle,
-            textColor: textColor,
-            secondaryColor: secondaryColor,
-            onTap: () => context.push(RouteNames.favorites),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Order History Summary Card
-  Widget _buildOrderHistoryCard(
-    Color cardColor,
-    bool isDark,
-    Color textColor,
-    Color secondaryColor,
-    bool isLoggedIn,
-  ) {
-    // Watch the orders state — updates automatically when any order changes.
-    final ordersState = ref.watch(ordersViewModelProvider);
-    final upcoming = isLoggedIn ? ordersState.upcomingCount.toString() : '0';
-    final completed = isLoggedIn ? ordersState.completedCount.toString() : '0';
-    final cancelled = isLoggedIn ? ordersState.cancelledCount.toString() : '0';
-    final refunded = isLoggedIn ? ordersState.refundedCount.toString() : '0';
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: isDark
-            ? []
-            : [
-                BoxShadow(
-                  color: AppColors.shadow1,
-                  blurRadius: 14,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'My Orders',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: textColor,
-                ),
-              ),
-              InkWell(
-                onTap: () =>
-                    _protectedNavigation(RouteNames.orders, isLoggedIn),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'View All Orders',
-                      style: TextStyle(
-                        color: AppColors.primary,
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Icon(
-                      Icons.chevron_right_rounded,
-                      color: AppColors.primary,
-                      size: 16,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _orderStat(
-                Icons.shopping_bag_rounded,
-                AppColors.primary,
-                upcoming,
-                'Upcoming',
-                textColor,
-                secondaryColor,
-              ),
-              _orderStat(
-                Icons.check_circle_rounded,
-                const Color(0xFF39C96B),
-                completed,
-                'Completed',
-                textColor,
-                secondaryColor,
-              ),
-              _orderStat(
-                Icons.cancel_rounded,
-                const Color(0xFFFF6464),
-                cancelled,
-                'Cancelled',
-                textColor,
-                secondaryColor,
-              ),
-              _orderStat(
-                Icons.replay_circle_filled_rounded,
-                AppColors.primary,
-                refunded,
-                'Refunds',
-                textColor,
-                secondaryColor,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _orderStat(
-    IconData icon,
-    Color color,
-    String value,
-    String label,
-    Color textColor,
-    Color secondaryColor,
-  ) {
-    return Column(
+    return Row(
       children: [
-        Container(
-          width: 42,
-          height: 42,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.12),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon, color: color, size: 20),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.bold,
-            color: textColor,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(label, style: TextStyle(fontSize: 11.5, color: secondaryColor)),
-      ],
-    );
-  }
-
-  /// Rewards & Sharing Group
-  Widget _buildRewardsSharingGroupCard(
-    String referralCode,
-    Color cardColor,
-    bool isDark,
-    Color textColor,
-    Color secondaryColor,
-  ) {
-    return Container(
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: isDark
-            ? []
-            : [
-                BoxShadow(
-                  color: AppColors.shadow1,
-                  blurRadius: 14,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-      ),
-      child: Column(
-        children: [
-          // 1. Refer & Earn
-          _buildMenuRow(
-            icon: Icons.card_giftcard_rounded,
-            title: context.l10n.referAndEarn,
-            subtitle: context.l10n.referralSubtitle(referralCode),
-            textColor: textColor,
-            secondaryColor: secondaryColor,
+        // Left: Lagech Money
+        Expanded(
+          child: InkWell(
             onTap: () {
               Haptics.light();
-              context.push(RouteNames.referral);
+              context.push(RouteNames.wallet);
             },
-          ),
-          Divider(
-            height: 1,
-            indent: 16,
-            endIndent: 16,
-            color: isDark ? AppColors.borderDark : AppColors.dividerLight,
-          ),
-
-          // 2. Rate App
-          _buildMenuRow(
-            icon: Icons.star_border_rounded,
-            title: context.l10n.rateApp,
-            subtitle: context.l10n.rateAppSubtitle,
-            textColor: textColor,
-            secondaryColor: secondaryColor,
-            onTap: _showRateAppModal,
-          ),
-          Divider(
-            height: 1,
-            indent: 16,
-            endIndent: 16,
-            color: isDark ? AppColors.borderDark : AppColors.dividerLight,
-          ),
-
-          // 3. Share App
-          _buildMenuRow(
-            icon: Icons.share_outlined,
-            title: context.l10n.shareApp,
-            subtitle: context.l10n.shareAppSubtitle,
-            textColor: textColor,
-            secondaryColor: secondaryColor,
-            onTap: () {
-              Haptics.light();
-              Clipboard.setData(
-                const ClipboardData(
-                  text:
-                      'Check out LAGECH app for delicious food delivery: https://www.lagech.in',
-                ),
-              );
-              AppSnackbar.success(
-                context,
-                'App invite link copied to clipboard! 🚀',
-                duration: const Duration(seconds: 2),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Help, Support & Legal Group
-  Widget _buildHelpLegalGroupCard(
-    Color cardColor,
-    bool isDark,
-    Color textColor,
-    Color secondaryColor,
-  ) {
-    return Container(
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: isDark
-            ? []
-            : [
-                BoxShadow(
-                  color: AppColors.shadow1,
-                  blurRadius: 14,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-      ),
-      child: Column(
-        children: [
-          // 1. Help & Support
-          _buildMenuRow(
-            icon: Icons.headset_mic_outlined,
-            title: context.l10n.helpSupport,
-            subtitle: context.l10n.helpSupportSubtitle,
-            textColor: textColor,
-            secondaryColor: secondaryColor,
-            onTap: () => context.push(RouteNames.helpSupport),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Reusable Menu Row with right arrow chevron navigation indicator
-  Widget _buildMenuRow({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required Color textColor,
-    required Color secondaryColor,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: () {
-        Haptics.light();
-        onTap();
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
+            borderRadius: BorderRadius.circular(14),
+            child: Container(
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
+                color: isDark ? AppColors.surfaceDark : Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: isDark ? AppColors.borderDark : const Color(0xFFE5E7EB),
+                  width: 1,
+                ),
               ),
-              child: Icon(icon, color: AppColors.primary, size: 19),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE8F5E9),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.account_balance_wallet_outlined,
+                      color: Color(0xFF008A45),
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   Text(
-                    title,
+                    'Lagech Money',
                     style: TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.bold,
                       color: textColor,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    subtitle,
-                    style: TextStyle(fontSize: 12, color: secondaryColor),
+                    '₹${walletBalance.toStringAsFixed(0)}',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF6B7280),
+                    ),
                   ),
                 ],
               ),
             ),
-            Icon(Icons.chevron_right_rounded, color: secondaryColor, size: 18),
-          ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        // Right: Your coupons
+        Expanded(
+          child: InkWell(
+            onTap: () {
+              Haptics.light();
+              _showCouponsModal();
+            },
+            borderRadius: BorderRadius.circular(14),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.surfaceDark : Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: isDark ? AppColors.borderDark : const Color(0xFFE5E7EB),
+                  width: 1,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF3E0),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.local_offer_outlined,
+                      color: Color(0xFFEA580C),
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Your coupons',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.bold,
+                      color: textColor,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    couponCount > 0 ? '$couponCount available' : 'View all',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF6B7280),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Section Header with Green Accent Line (Screenshot 5)
+  Widget _buildSectionHeader(String title, {bool isDark = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 18, bottom: 8),
+      child: Row(
+        children: [
+          Container(
+            width: 3.5,
+            height: 15,
+            decoration: BoxDecoration(
+              color: const Color(0xFF008A45),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white : const Color(0xFF1E1E1E),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Navigation Tile (Screenshot 4 & 5)
+  Widget _buildNavTile({
+    required IconData icon,
+    required String title,
+    Widget? trailing,
+    required VoidCallback onTap,
+    bool isDark = false,
+    Color iconColor = const Color(0xFF1E1E1E),
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surfaceDark : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark ? AppColors.borderDark : const Color(0xFFE5E7EB),
+          width: 1,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+            child: Row(
+              children: [
+                Icon(
+                  icon,
+                  size: 20,
+                  color: isDark ? Colors.white70 : iconColor,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white : const Color(0xFF1E1E1E),
+                    ),
+                  ),
+                ),
+                if (trailing != null) ...[
+                  trailing,
+                  const SizedBox(width: 6),
+                ],
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : const Color(0xFF9CA3AF),
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
 
-  void _protectedNavigation(String targetRoute, bool isLoggedIn) {
-    if (isLoggedIn) {
-      context.push(targetRoute);
-    } else {
-      context.push(
-        '${RouteNames.login}?from=${Uri.encodeComponent(targetRoute)}',
-      );
-    }
+  /// Earnings Nav Tile matching Screenshot 1 with soft red icon background
+  Widget _buildEarningsNavTile({
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+    bool isDark = false,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surfaceDark : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark ? AppColors.borderDark : const Color(0xFFE5E7EB),
+          width: 1,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFEAEA),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    icon,
+                    size: 20,
+                    color: const Color(0xFFC80A14),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white : const Color(0xFF1E1E1E),
+                    ),
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 20,
+                  color: isDark ? Colors.white54 : const Color(0xFF67B2FF),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showJoinDeliveryManSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.surfaceDark : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 20),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD1D5DB),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFEAEA),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.delivery_dining_rounded,
+                          color: Color(0xFFC80A14),
+                          size: 26,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Join as a Delivery Partner',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    '• Earn competitive delivery fees on every order\n• Flexible working hours — work when you want\n• Fast weekly payouts directly to your account\n• Accidental insurance and on-road assistance',
+                    style: TextStyle(fontSize: 14, height: 1.6, color: Color(0xFF4B5563)),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        AppSnackbar.show(
+                          context,
+                          'Delivery partner application received! We will reach out shortly.',
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFC80A14),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        'Register as Delivery Partner',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showOpenVendorSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.surfaceDark : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 20),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD1D5DB),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFEAEA),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.storefront_rounded,
+                          color: Color(0xFFC80A14),
+                          size: 26,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Partner with Lagech as Vendor',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    '• Reach thousands of hungry customers in your locality\n• Real-time order alerts & live kitchen management\n• Transparent billing and timely settlements\n• In-app promotions to boost your restaurant sales',
+                    style: TextStyle(fontSize: 14, height: 1.6, color: Color(0xFF4B5563)),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        AppSnackbar.show(
+                          context,
+                          'Merchant registration initiated! Our onboarding executive will call you.',
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFC80A14),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        'Register Your Restaurant',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showGoldMembershipSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.surfaceDark : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 20),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD1D5DB),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  Row(
+                    children: const [
+                      Icon(Icons.workspace_premium_rounded, color: Color(0xFFF59E0B), size: 28),
+                      SizedBox(width: 10),
+                      Text('Lagech Gold Membership', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('• Unlimited FREE delivery on orders above ₹99\n• Extra 10%–30% discount on 1000+ top restaurants\n• VIP Customer Support & Priority Dispatch', style: TextStyle(fontSize: 14, height: 1.6, color: Color(0xFF374151))),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        AppSnackbar.success(context, 'Joined Lagech Gold successfully!');
+                      },
+                      child: const Text('Get Gold for ₹1', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showHearFromRestaurantsSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      useRootNavigator: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.surfaceDark : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 20),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD1D5DB),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const Text('Hear from Restaurants', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  const Text('Stay updated with kitchen preparation status, exclusive chef specials, and direct updates from restaurants you love.', style: TextStyle(fontSize: 14, height: 1.4, color: Color(0xFF6B7280))),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showAboutSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      useRootNavigator: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.surfaceDark : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 20),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD1D5DB),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const Text('About LAGECH', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 10),
+                  const Text('LAGECH Food Delivery v1.0.0\nConnecting food lovers with the best authentic kitchens and beloved culinary brands.\n\nMade with ❤️ in India.', style: TextStyle(fontSize: 14, height: 1.5, color: Color(0xFF4B5563))),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showFeedbackSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          child: Container(
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.surfaceDark : Colors.white,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 20),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFD1D5DB),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const Text('Send Feedback', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    const Text('Tell us how we can make your food ordering experience even better.', style: TextStyle(fontSize: 13, color: Color(0xFF6B7280))),
+                    const SizedBox(height: 16),
+                    TextField(
+                      maxLines: 3,
+                      decoration: InputDecoration(
+                        hintText: 'Write your thoughts here...',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 46,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          AppSnackbar.success(context, 'Thank you for your valuable feedback!');
+                        },
+                        child: const Text('Submit Feedback', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showSafetyEmergencySheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      useRootNavigator: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.surfaceDark : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 20),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD1D5DB),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const Row(
+                    children: [
+                      Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
+                      SizedBox(width: 10),
+                      Text('Safety Emergency', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.red)),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  const Text('For immediate medical or police emergencies, please call 112 directly.\n\nFor delivery partner safety concerns, our 24/7 dedicated safety response team is reachable at support@lagech.in.', style: TextStyle(fontSize: 14, height: 1.5, color: Color(0xFF374151))),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showAccessibilitySheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      useRootNavigator: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.surfaceDark : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 20),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD1D5DB),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const Text('Accessibility Options', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  const Text('LAGECH supports high contrast readability, screen reader voiceovers, and dynamic font resizing natively configured from your device settings.', style: TextStyle(fontSize: 14, height: 1.5, color: Color(0xFF4B5563))),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   /// Log Out Button
@@ -1569,150 +1455,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   // DYNAMIC INTERACTIVE MODALS & BOTTOM SHEETS
   // ==========================================
 
-  void _showAddressManagerModal() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        final isDark = Theme.of(ctx).brightness == Brightness.dark;
-        final addresses = ref.watch(addressViewModelProvider);
-
-        return Container(
-          height: MediaQuery.of(ctx).size.height * 0.6,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.surfaceDark : Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Saved Addresses 📍',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(ctx),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: addresses.length,
-                  itemBuilder: (context, i) {
-                    final addr = addresses[i];
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: ListTile(
-                        leading: Icon(
-                          addr.type == 'Home'
-                              ? Icons.home_rounded
-                              : (addr.type == 'Work'
-                                    ? Icons.work_rounded
-                                    : Icons.location_on_rounded),
-                          color: AppColors.primary,
-                        ),
-                        title: Row(
-                          children: [
-                            Text(
-                              addr.title,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            if (addr.isDefault) ...[
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primaryAlpha(0.15),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  'DEFAULT',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.primary,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                        subtitle: Text(
-                          addr.fullAddress,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        trailing: IconButton(
-                          icon: const Icon(
-                            Icons.delete_outline,
-                            color: Colors.red,
-                            size: 20,
-                          ),
-                          onPressed: () {
-                            Haptics.light();
-                            ref
-                                .read(addressViewModelProvider.notifier)
-                                .deleteAddress(addr.id);
-                          },
-                        ),
-                        onTap: () {
-                          Haptics.light();
-                          ref
-                              .read(addressViewModelProvider.notifier)
-                              .setDefaultAddress(addr.id);
-                        },
-                      ),
-                    );
-                  },
-                ),
-              ),
-              SizedBox(
-                width: double.infinity,
-                height: 46,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryButton,
-                  ),
-                  onPressed: () {
-                    Haptics.light();
-                    Navigator.pop(ctx);
-                    context.push(RouteNames.addAddress);
-                  },
-                  icon: const Icon(Icons.add, color: Colors.white),
-                  label: const Text(
-                    'Add New Address',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   void _showCouponsModal() {
     showModalBottomSheet(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
@@ -1720,180 +1466,127 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         final coupons = ref.watch(couponsViewModelProvider);
 
         return Container(
-          height: MediaQuery.of(ctx).size.height * 0.6,
-          padding: const EdgeInsets.all(20),
+          height: MediaQuery.of(ctx).size.height * 0.65,
           decoration: BoxDecoration(
             color: isDark ? AppColors.surfaceDark : Colors.white,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Available Coupons 🏷️',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(ctx),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: coupons.length,
-                  itemBuilder: (context, i) {
-                    final c = coupons[i];
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.primaryAlpha(0.12),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                c.code,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.primary,
-                                  letterSpacing: 1,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    c.discountText,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    c.description,
-                                    style: const TextStyle(
-                                      fontSize: 11.5,
-                                      color: Colors.grey,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: () {
-                                Haptics.light();
-                                Clipboard.setData(ClipboardData(text: c.code));
-                                Navigator.pop(ctx);
-                                AppSnackbar.success(
-                                  context,
-                                  'Coupon code ${c.code} copied!',
-                                );
-                              },
-                              child: Text(
-                                'COPY',
-                                style: TextStyle(
-                                  color: AppColors.primary,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _showNotificationsModal() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return Consumer(
-          builder: (context, ref, child) {
-            final isDark = Theme.of(context).brightness == Brightness.dark;
-            final notifSettings = ref.watch(notificationsViewModelProvider);
-
-            return Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.surfaceDark : Colors.white,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(24),
-                ),
-              ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Notification Preferences 🔔',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD1D5DB),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 16),
-                  SwitchListTile(
-                    title: Text(context.l10n.orderStatusAlerts),
-                    value: notifSettings.orderStatus,
-                    activeThumbColor: AppColors.primary,
-                    onChanged: (val) {
-                      Haptics.light();
-                      ref
-                          .read(notificationsViewModelProvider.notifier)
-                          .toggleOrderStatus(val);
-                    },
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Available Coupons 🏷️',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
                   ),
-                  SwitchListTile(
-                    title: Text(context.l10n.promoAlerts),
-                    value: notifSettings.promoOffers,
-                    activeThumbColor: AppColors.primary,
-                    onChanged: (val) {
-                      Haptics.light();
-                      ref
-                          .read(notificationsViewModelProvider.notifier)
-                          .togglePromoOffers(val);
-                    },
-                  ),
-                  SwitchListTile(
-                    title: Text(context.l10n.soundHapticAlerts),
-                    value: notifSettings.soundAlerts,
-                    activeThumbColor: AppColors.primary,
-                    onChanged: (val) {
-                      Haptics.light();
-                      ref
-                          .read(notificationsViewModelProvider.notifier)
-                          .toggleSoundAlerts(val);
-                    },
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: coupons.length,
+                      itemBuilder: (context, i) {
+                        final c = coupons[i];
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primaryAlpha(0.12),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    c.code,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.primary,
+                                      letterSpacing: 1,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        c.discountText,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        c.description,
+                                        style: const TextStyle(
+                                          fontSize: 11.5,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: () {
+                                    Haptics.light();
+                                    Clipboard.setData(ClipboardData(text: c.code));
+                                    Navigator.pop(ctx);
+                                    AppSnackbar.success(
+                                      context,
+                                      'Coupon code ${c.code} copied!',
+                                    );
+                                  },
+                                  child: Text(
+                                    'COPY',
+                                    style: TextStyle(
+                                      color: AppColors.primary,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ],
               ),
-            );
-          },
+            ),
+          ),
         );
       },
     );
@@ -1902,206 +1595,60 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   void _showAppearanceModal() {
     showModalBottomSheet(
       context: context,
+      useRootNavigator: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
         final isDark = Theme.of(ctx).brightness == Brightness.dark;
         return Container(
-          padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: isDark ? AppColors.surfaceDark : Colors.white,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Select Theme Appearance 🎨',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD1D5DB),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const Text(
+                    'Select Theme Appearance 🎨',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+                  _themeOptionTile(
+                    ctx,
+                    'Light Mode',
+                    'Light',
+                    Icons.wb_sunny_outlined,
+                  ),
+                  _themeOptionTile(
+                    ctx,
+                    'Dark Mode',
+                    'Dark',
+                    Icons.dark_mode_outlined,
+                  ),
+                  _themeOptionTile(
+                    ctx,
+                    'System Default',
+                    'System',
+                    Icons.settings_brightness_outlined,
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              _themeOptionTile(
-                ctx,
-                'Light Mode',
-                'Light',
-                Icons.wb_sunny_outlined,
-              ),
-              _themeOptionTile(
-                ctx,
-                'Dark Mode',
-                'Dark',
-                Icons.dark_mode_outlined,
-              ),
-              _themeOptionTile(
-                ctx,
-                'System Default',
-                'System',
-                Icons.settings_brightness_outlined,
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _showLanguageModal() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        final isDark = Theme.of(ctx).brightness == Brightness.dark;
-        return Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.surfaceDark : Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                context.l10n.selectLanguage,
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              _languageOptionTile(ctx, 'English', 'en'),
-              _languageOptionTile(ctx, 'हिन्दी (Hindi)', 'hi'),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _languageOptionTile(
-    BuildContext ctx,
-    String label,
-    String languageCode,
-  ) {
-    final isSelected = ref.watch(localeProvider).languageCode == languageCode;
-    return ListTile(
-      leading: Icon(
-        Icons.language_outlined,
-        color: isSelected ? AppColors.primary : Colors.grey,
-      ),
-      title: Text(
-        label,
-        style: TextStyle(
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-        ),
-      ),
-      trailing: isSelected
-          ? Icon(Icons.check_circle_rounded, color: AppColors.primary)
-          : null,
-      onTap: () {
-        Haptics.light();
-        ref.read(localeProvider.notifier).setLocale(languageCode);
-        Navigator.pop(ctx);
-      },
-    );
-  }
-
-  void _showThemeColorModal() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        final isDark = Theme.of(ctx).brightness == Brightness.dark;
-        return Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.surfaceDark : Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'App Theme 🎨',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                context.l10n.pickBrandColor,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: isDark
-                      ? AppColors.textSecondaryDark
-                      : AppColors.textSecondaryLight,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Consumer(
-                builder: (context, ref, _) {
-                  final selected = ref.watch(themeColorProvider);
-                  return Wrap(
-                    spacing: 20,
-                    runSpacing: 20,
-                    children: AppThemeColor.values.map((option) {
-                      final isSelected = option == selected;
-                      return GestureDetector(
-                        onTap: () {
-                          Haptics.light();
-                          ref
-                              .read(themeColorProvider.notifier)
-                              .setColor(option);
-                          Navigator.pop(ctx);
-                        },
-                        child: Column(
-                          children: [
-                            Container(
-                              width: 52,
-                              height: 52,
-                              decoration: BoxDecoration(
-                                color: option.color,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: isSelected
-                                      ? (isDark ? Colors.white : Colors.black87)
-                                      : Colors.transparent,
-                                  width: 2.5,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: option.color.withValues(alpha: 0.35),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              child: isSelected
-                                  ? const Icon(
-                                      Icons.check_rounded,
-                                      color: Colors.white,
-                                      size: 24,
-                                    )
-                                  : null,
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              option.label,
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: isSelected
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
-                                color: isDark
-                                    ? AppColors.textPrimaryDark
-                                    : AppColors.textPrimaryLight,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                  );
-                },
-              ),
-              const SizedBox(height: 8),
-            ],
+            ),
           ),
         );
       },
@@ -2110,18 +1657,23 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   Widget _themeOptionTile(
     BuildContext ctx,
-    String label,
-    String value,
+    String title,
+    String themeName,
     IconData icon,
   ) {
-    final currentThemeValue = _getThemeString(ref.watch(themeProvider));
-    final isSelected = currentThemeValue == value;
+    final current = _getThemeString(ref.watch(themeProvider));
+    final isSelected = current == themeName;
+
     return ListTile(
-      leading: Icon(icon, color: isSelected ? AppColors.primary : Colors.grey),
+      leading: Icon(
+        icon,
+        color: isSelected ? AppColors.primary : Colors.grey,
+      ),
       title: Text(
-        label,
+        title,
         style: TextStyle(
           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          color: isSelected ? AppColors.primary : null,
         ),
       ),
       trailing: isSelected
@@ -2129,7 +1681,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           : null,
       onTap: () {
         Haptics.light();
-        ref.read(themeProvider.notifier).setTheme(value);
+        ref.read(themeProvider.notifier).setTheme(themeName);
         Navigator.pop(ctx);
       },
     );
@@ -2139,77 +1691,94 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     int rating = 5;
     showModalBottomSheet(
       context: context,
+      useRootNavigator: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
         final isDark = Theme.of(ctx).brightness == Brightness.dark;
         return StatefulBuilder(
           builder: (context, setSheetState) {
             return Container(
-              padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
                 color: isDark ? AppColors.surfaceDark : Colors.white,
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(24),
                 ),
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Enjoying LAGECH? ⭐',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Tap a star to rate your experience',
-                    style: TextStyle(fontSize: 13, color: Colors.grey),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(5, (index) {
-                      return IconButton(
-                        icon: Icon(
-                          index < rating
-                              ? Icons.star_rounded
-                              : Icons.star_border_rounded,
-                          color: AppColors.primary,
-                          size: 36,
-                        ),
-                        onPressed: () {
-                          Haptics.light();
-                          setSheetState(() => rating = index + 1);
-                        },
-                      );
-                    }),
-                  ),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primaryButton,
-                      ),
-                      onPressed: () {
-                        Haptics.success();
-                        Navigator.pop(ctx);
-                        AppSnackbar.success(
-                          context,
-                          'Thank you for giving us $rating stars! ❤️',
-                        );
-                        ReviewService.requestReviewIfQualified(rating);
-                      },
-                      child: const Text(
-                        'Submit Rating',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          margin: const EdgeInsets.only(bottom: 20),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFD1D5DB),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
                         ),
                       ),
-                    ),
+                      const Text(
+                        'Enjoying LAGECH? ⭐',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Tap a star to rate your experience',
+                        style: TextStyle(fontSize: 13, color: Colors.grey),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(5, (index) {
+                          return IconButton(
+                            icon: Icon(
+                              index < rating
+                                  ? Icons.star_rounded
+                                  : Icons.star_border_rounded,
+                              color: AppColors.primary,
+                              size: 36,
+                            ),
+                            onPressed: () {
+                              Haptics.light();
+                              setSheetState(() => rating = index + 1);
+                            },
+                          );
+                        }),
+                      ),
+                      const SizedBox(height: 20),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primaryButton,
+                          ),
+                          onPressed: () {
+                            Haptics.success();
+                            Navigator.pop(ctx);
+                            AppSnackbar.success(
+                              context,
+                              'Thank you for giving us $rating stars! ❤️',
+                            );
+                            ReviewService.requestReviewIfQualified(rating);
+                          },
+                          child: const Text(
+                            'Submit Rating',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             );
           },

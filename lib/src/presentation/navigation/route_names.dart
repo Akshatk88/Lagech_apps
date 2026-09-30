@@ -35,4 +35,6 @@ class RouteNames {
   static const String editProfile = '/edit-profile';
   static const String categoryDetails = '/category-details';
   static const String popularDishes = '/popular-dishes';
+  static const String restaurantReviews = '/restaurant-reviews';
+  static const String top10 = '/top-10';
 }

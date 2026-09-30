@@ -10,14 +10,9 @@ import '../../../core/utils/haptics.dart';
 import '../../../data/models/order_model.dart';
 import '../../branding/app_colors.dart';
 import '../../common_widgets/app_refresh_indicator.dart';
-import '../../common_widgets/app_snackbar.dart';
-import '../../common_widgets/expandable_text.dart';
-import '../../common_widgets/smart_image.dart';
 import '../../navigation/route_names.dart';
-import '../utils/reorder.dart';
 import '../viewmodels/active_order_viewmodel.dart';
 import '../viewmodels/orders_viewmodel.dart';
-import '../widgets/rate_order_sheet.dart';
 import '../../../core/utils/localizations.dart';
 
 class OrdersScreen extends ConsumerStatefulWidget {
@@ -34,7 +29,6 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   final ScrollController _pastScrollController = ScrollController();
   Timer? _pollingTimer;
   String _selectedFilter = 'All'; // 'All', 'Delivered', 'Cancelled'
-  String? _reorderingOrderId;
   bool _hasAutoSelectedTab = false;
 
   @override
@@ -180,28 +174,26 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       backgroundColor: backgroundColor,
       body: Column(
         children: [
-          // 1. ORANGE GRADIENT TOP HEADER WITH TAB BAR
+          // 1. CLEAN WHITE HEADER WITH TAB BAR (Screenshot 3)
           Container(
             width: double.infinity,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [AppColors.primaryDeep, AppColors.primary],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
+            color: isDark ? AppColors.surfaceDark : Colors.white,
             child: SafeArea(
               bottom: false,
               child: Column(
                 children: [
                   // App Bar Row
                   Padding(
-                    padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 14.h),
+                    padding: EdgeInsets.fromLTRB(8.w, 4.h, 16.w, 8.h),
                     child: Row(
                       children: [
-                        _CircleIconButton(
-                          icon: Icons.arrow_back_rounded,
-                          onTap: () {
+                        IconButton(
+                          icon: Icon(
+                            Icons.arrow_back_rounded,
+                            color: textColor,
+                            size: 24.sp,
+                          ),
+                          onPressed: () {
                             Haptics.light();
                             if (context.canPop()) {
                               context.pop();
@@ -210,82 +202,67 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                             }
                           },
                         ),
+                        SizedBox(width: 4.w),
                         Expanded(
-                          child: Column(
-                            children: [
-                              Text(
-                                context.l10n.myOrders,
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 18.sp,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              SizedBox(height: 2.h),
-                              Text(
-                                context.l10n.ordersSubtitle,
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.9),
-                                  fontSize: 11.5.sp,
-                                  fontWeight: FontWeight.normal,
-                                ),
-                              ),
-                            ],
+                          child: Text(
+                            context.l10n.myOrders,
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: 18.sp,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
-                        _CircleIconButton(
-                          icon: Icons.tune_rounded,
-                          onTap: _showFilterModal,
+                        IconButton(
+                          icon: Icon(
+                            Icons.tune_rounded,
+                            color: textColor,
+                            size: 22.sp,
+                          ),
+                          onPressed: _showFilterModal,
                         ),
                       ],
                     ),
                   ),
 
-                  // White rounded container holding the TabBar
-                  Container(
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: isDark ? AppColors.surfaceDark : Colors.white,
-                      borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
+                  // TabBar
+                  TabBar(
+                    controller: _tabController,
+                    labelColor: AppColors.primary,
+                    unselectedLabelColor: isDark ? AppColors.textSecondaryDark : const Color(0xFF6B7280),
+                    indicatorColor: AppColors.primary,
+                    indicatorWeight: 3.h,
+                    indicatorSize: TabBarIndicatorSize.tab,
+                    labelStyle: TextStyle(
+                      fontSize: 13.sp,
+                      fontWeight: FontWeight.bold,
                     ),
-                    child: TabBar(
-                      controller: _tabController,
-                      labelColor: AppColors.primary,
-                      unselectedLabelColor: isDark ? AppColors.textSecondaryDark : const Color(0xFF6B7280),
-                      indicatorColor: AppColors.primary,
-                      indicatorWeight: 3.h,
-                      indicatorSize: TabBarIndicatorSize.tab,
-                      labelStyle: TextStyle(
-                        fontSize: 13.sp,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      unselectedLabelStyle: TextStyle(
-                        fontSize: 13.sp,
-                        fontWeight: FontWeight.normal,
-                      ),
-                      tabs: [
-                        Tab(
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.shopping_bag_outlined, size: 16.sp),
-                              SizedBox(width: 6.w),
-                              Text(context.l10n.activeOrdersCount(activeList.length)),
-                            ],
-                          ),
-                        ),
-                        Tab(
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.shopping_bag_outlined, size: 16.sp),
-                              SizedBox(width: 6.w),
-                              Text(context.l10n.pastOrdersCount(pastList.length)),
-                            ],
-                          ),
-                        ),
-                      ],
+                    unselectedLabelStyle: TextStyle(
+                      fontSize: 13.sp,
+                      fontWeight: FontWeight.normal,
                     ),
+                    tabs: [
+                      Tab(
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.shopping_bag_outlined, size: 16.sp),
+                            SizedBox(width: 6.w),
+                            Text(context.l10n.activeOrdersCount(activeList.length)),
+                          ],
+                        ),
+                      ),
+                      Tab(
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.shopping_bag_outlined, size: 16.sp),
+                            SizedBox(width: 6.w),
+                            Text(context.l10n.pastOrdersCount(pastList.length)),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -435,7 +412,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     );
   }
 
-  /// Single Order Card matching screenshot 100%
+  /// Single Order Card matching screenshot 3 (White card, ORD-ID, Confirmed pill, Placed on, Location, Items, Green total, Track Order & Invoice)
   Widget _buildOrderCard(
     BuildContext context,
     OrderModel order,
@@ -444,34 +421,32 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     Color secondaryColor,
   ) {
     final createdDate = order.createdAt?.toLocal();
-    final dateStr = createdDate != null ? DateFormat('dd MMM yyyy').format(createdDate) : '01 Aug 2026';
-    final timeStr = createdDate != null ? DateFormat('hh:mm a').format(createdDate) : '03:08 PM';
-    final fullOrderedStr = createdDate != null ? DateFormat('dd MMM yyyy, hh:mm a').format(createdDate) : '01 Aug 2026, 03:06 PM';
+    final fullOrderedStr = createdDate != null
+        ? DateFormat('MMM dd, yyyy, hh:mm a').format(createdDate)
+        : 'Dec 16, 2025, 03:08 PM';
 
     final totalItems = order.items.fold<int>(0, (sum, item) => sum + item.quantity);
-    final isCancelled = order.isCancelled || order.orderStatus.contains('cancelled');
-    final isDelivered = order.isDelivered || order.orderStatus == 'delivered';
+    final cleanId = (order.id.isNotEmpty ? order.id : order.orderNumber).replaceAll('#', '').trim();
+    final addressCity = order.deliveryAddress.trim().isNotEmpty
+        ? order.deliveryAddress.trim()
+        : 'New York, NY';
 
     return Container(
-      margin: EdgeInsets.only(bottom: 16.h),
+      margin: EdgeInsets.only(bottom: 14.h),
       decoration: BoxDecoration(
         color: isDark ? AppColors.surfaceDark : Colors.white,
-        borderRadius: BorderRadius.circular(20.r),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-            blurRadius: 14,
-            offset: const Offset(0, 3),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(16.r),
+        border: Border.all(
+          color: isDark ? AppColors.borderDark : const Color(0xFFE5E7EB),
+          width: 1,
+        ),
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(20.r),
+          borderRadius: BorderRadius.circular(16.r),
           onTap: () {
             Haptics.light();
-            final cleanId = (order.id.isNotEmpty ? order.id : order.orderNumber).replaceAll('#', '').trim();
             context.push('/orders/details/$cleanId');
           },
           child: Padding(
@@ -479,155 +454,76 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // TOP HEADER ROW (Logo, Name, Order ID, Date/Time, Status Badge)
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Restaurant Circle Image
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(24.r),
-                      child: Container(
-                        width: 46.w,
-                        height: 46.h,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF111111),
-                          shape: BoxShape.circle,
-                        ),
-                        child: SmartImage(
-                          url: order.restaurantImage.isNotEmpty
-                              ? order.restaurantImage
-                              : 'assets/images/about_hero.png',
-                          category: ImageCategory.restaurant,
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: 12.w),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            order.restaurantName.isNotEmpty
-                                ? order.restaurantName
-                                : 'LAGECH',
-                            style: TextStyle(
-                              fontSize: 16.5.sp,
-                              fontWeight: FontWeight.bold,
-                              color: textColor,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          SizedBox(height: 2.h),
-                          Text(
-                            context.l10n.orderIdLabel('#${order.orderNumber.isNotEmpty ? order.orderNumber : order.id}'),
-                            style: TextStyle(
-                              fontSize: 11.5.sp,
-                              color: secondaryColor,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          SizedBox(height: 4.h),
-                          FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: Alignment.centerLeft,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.calendar_today_outlined,
-                                  size: 12.sp,
-                                  color: AppColors.primary,
-                                ),
-                                SizedBox(width: 4.w),
-                                Text(
-                                  dateStr,
-                                  style: TextStyle(
-                                    fontSize: 11.sp,
-                                    color: secondaryColor,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                Padding(
-                                  padding: EdgeInsets.symmetric(horizontal: 5.w),
-                                  child: Text(
-                                    '|',
-                                    style: TextStyle(
-                                      fontSize: 11.sp,
-                                      color: secondaryColor.withValues(alpha: 0.5),
-                                    ),
-                                  ),
-                                ),
-                                Icon(
-                                  Icons.access_time_outlined,
-                                  size: 12.sp,
-                                  color: AppColors.primary,
-                                ),
-                                SizedBox(width: 4.w),
-                                Text(
-                                  timeStr,
-                                  style: TextStyle(
-                                    fontSize: 11.sp,
-                                    color: secondaryColor,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    SizedBox(width: 6.w),
-                    _buildStatusBadge(order),
-                  ],
-                ),
-
-                SizedBox(height: 14.h),
-
-                // ITEMS & TOTAL PRICE ROW
+                // Top Row: Icon + Order ID + Status pill (Screenshot 3)
                 Row(
                   children: [
                     Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 7.w,
-                        vertical: 2.h,
-                      ),
+                      padding: EdgeInsets.all(6.r),
                       decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(5.r),
+                        color: const Color(0xFF008A45).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8.r),
                       ),
-                      child: Text(
-                        '${totalItems}x',
-                        style: TextStyle(
-                          color: AppColors.primary,
-                          fontSize: 12.sp,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      child: Icon(
+                        Icons.inventory_2_outlined,
+                        color: const Color(0xFF008A45),
+                        size: 18.sp,
                       ),
                     ),
                     SizedBox(width: 10.w),
                     Expanded(
                       child: Text(
-                        context.l10n.itemCountPlural(totalItems),
+                        'Order ORD-${order.orderNumber.isNotEmpty ? order.orderNumber : (order.id.length > 8 ? order.id.substring(0, 8).toUpperCase() : order.id.toUpperCase())}',
                         style: TextStyle(
-                          fontSize: 13.sp,
+                          fontSize: 14.5.sp,
+                          fontWeight: FontWeight.bold,
                           color: textColor,
-                          fontWeight: FontWeight.w600,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     SizedBox(width: 8.w),
+                    _buildScreenshotStatusPill(order),
+                  ],
+                ),
+
+                SizedBox(height: 10.h),
+
+                // Placed on date row (Screenshot 3)
+                Row(
+                  children: [
+                    Icon(
+                      Icons.access_time_rounded,
+                      size: 14.sp,
+                      color: const Color(0xFF6B7280),
+                    ),
+                    SizedBox(width: 6.w),
                     Text(
-                      '₹${order.total.toStringAsFixed(2)}',
+                      'Placed on $fullOrderedStr',
                       style: TextStyle(
-                        fontSize: 16.sp,
-                        color: textColor,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 12.sp,
+                        color: const Color(0xFF6B7280),
+                      ),
+                    ),
+                  ],
+                ),
+
+                SizedBox(height: 6.h),
+
+                // Location row (Screenshot 3)
+                Row(
+                  children: [
+                    Icon(
+                      Icons.location_on_outlined,
+                      size: 14.sp,
+                      color: const Color(0xFF6B7280),
+                    ),
+                    SizedBox(width: 6.w),
+                    Text(
+                      addressCity,
+                      style: TextStyle(
+                        fontSize: 12.sp,
+                        color: const Color(0xFF6B7280),
                       ),
                     ),
                   ],
@@ -635,168 +531,118 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
 
                 SizedBox(height: 12.h),
 
-                // COOKING REQUEST (when the customer left one)
-                if (order.note.trim().isNotEmpty) ...[
-                  Container(
-                    width: double.infinity,
-                    padding: EdgeInsets.all(10.w),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.06),
-                      borderRadius: BorderRadius.circular(10.r),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.edit_note_rounded, size: 15.sp, color: AppColors.primary),
-                            SizedBox(width: 4.w),
-                            Text(
-                              'Cooking request',
-                              style: TextStyle(
-                                fontSize: 11.5.sp,
-                                fontWeight: FontWeight.w700,
-                                color: textColor,
-                              ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: 4.h),
-                        ExpandableText(
-                          order.note.trim(),
-                          style: TextStyle(fontSize: 12.sp, color: secondaryColor, height: 1.3),
-                        ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(height: 12.h),
-                ],
-
-                // RATE CTA (if delivered & not rated)
-                if (isDelivered && !order.hasRated) ...[
-                  _buildRateCta(context, order, isDark, textColor, secondaryColor),
-                  SizedBox(height: 12.h),
-                ],
-
-                // REORDER BUTTON
-                SizedBox(
-                  width: double.infinity,
-                  height: 44.h,
-                  child: ElevatedButton.icon(
-                    onPressed: _reorderingOrderId == order.id
-                        ? null
-                        : () async {
-                            Haptics.medium();
-                            if (order.isActive) {
-                              final cleanId = (order.id.isNotEmpty ? order.id : order.orderNumber).replaceAll('#', '').trim();
-                              context.push('/orders/track/$cleanId');
-                              return;
-                            }
-                            setState(() => _reorderingOrderId = order.id);
-                            final buyAgainItems = await resolveReorderItems(
-                              ref,
-                              order,
-                            );
-                            if (!mounted) return;
-                            setState(() => _reorderingOrderId = null);
-                            if (!context.mounted) return;
-                            context.push(
-                              RouteNames.buyAgain,
-                              extra: buyAgainItems,
-                            );
-                          },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: isCancelled
-                          ? (isDark ? const Color(0xFF2C1E1E) : const Color(0xFFFFF0F0))
-                          : AppColors.primary,
-                      foregroundColor: isCancelled
-                          ? const Color(0xFFDC2626)
-                          : Colors.white,
-                      elevation: 0,
-                      shadowColor: Colors.transparent,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14.r),
-                        side: isCancelled
-                            ? const BorderSide(color: Color(0xFFFECACA), width: 1)
-                            : BorderSide.none,
-                      ),
-                    ),
-                    icon: _reorderingOrderId == order.id
-                        ? SizedBox(
-                            width: 16.sp,
-                            height: 16.sp,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: isCancelled ? const Color(0xFFDC2626) : Colors.white,
-                            ),
-                          )
-                        : Icon(
-                            order.isActive
-                                ? Icons.navigation_rounded
-                                : Icons.refresh_rounded,
-                            size: 18.sp,
-                            color: isCancelled ? const Color(0xFFDC2626) : Colors.white,
-                          ),
-                    label: Text(
-                      order.isActive ? context.l10n.trackOrderUpper : context.l10n.reorder,
-                      style: TextStyle(
-                        fontSize: 13.5.sp,
-                        fontWeight: FontWeight.bold,
-                        color: isCancelled ? const Color(0xFFDC2626) : Colors.white,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
+                // Items list (Screenshot 3)
+                Text(
+                  'Items ($totalItems):',
+                  style: TextStyle(
+                    fontSize: 12.sp,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF6B7280),
                   ),
                 ),
+                SizedBox(height: 4.h),
+                if (order.items.isNotEmpty)
+                  ...order.items.map((item) => Padding(
+                        padding: EdgeInsets.only(top: 2.h),
+                        child: Text(
+                          '• ${item.name} × ${item.quantity}',
+                          style: TextStyle(
+                            fontSize: 13.sp,
+                            fontWeight: FontWeight.w500,
+                            color: textColor,
+                          ),
+                        ),
+                      ))
+                else
+                  Text(
+                    '• ${order.restaurantName}',
+                    style: TextStyle(
+                      fontSize: 13.sp,
+                      fontWeight: FontWeight.w500,
+                      color: textColor,
+                    ),
+                  ),
 
                 SizedBox(height: 12.h),
+                Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: isDark ? AppColors.borderDark : const Color(0xFFF3F4F6),
+                ),
+                SizedBox(height: 12.h),
 
-                // FOOTER ROW
+                // Bottom row: Total on Left, [ Track Order → ] & [ Invoice ] on Right (Screenshot 3)
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Flexible(
-                      child: Text(
-                        context.l10n.orderedAtLabel(fullOrderedStr),
-                        style: TextStyle(
-                          fontSize: 11.sp,
-                          color: secondaryColor,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    SizedBox(width: 6.w),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '|  ',
+                          'Total',
                           style: TextStyle(
-                            fontSize: 11.sp,
-                            color: secondaryColor.withValues(alpha: 0.4),
+                            fontSize: 11.5.sp,
+                            color: const Color(0xFF6B7280),
                           ),
                         ),
-                        RichText(
-                          text: TextSpan(
-                            text: context.l10n.billTotalLabel,
-                            style: TextStyle(
-                              fontSize: 11.sp,
-                              color: secondaryColor,
+                        SizedBox(height: 2.h),
+                        Text(
+                          '₹${order.total.toStringAsFixed(0)}',
+                          style: TextStyle(
+                            fontSize: 16.sp,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF008A45),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        OutlinedButton(
+                          onPressed: () {
+                            Haptics.light();
+                            context.push('/orders/details/$cleanId');
+                          },
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(
+                              color: isDark ? AppColors.borderDark : const Color(0xFFD1D5DB),
                             ),
-                            children: [
-                              TextSpan(
-                                text: '₹${order.total.toStringAsFixed(2)}',
-                                style: TextStyle(
-                                  fontSize: 11.sp,
-                                  fontWeight: FontWeight.bold,
-                                  color: isCancelled
-                                      ? const Color(0xFFDC2626)
-                                      : AppColors.primary,
-                                ),
-                              ),
-                            ],
+                            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8.r),
+                            ),
+                          ),
+                          child: Text(
+                            'Track Order →',
+                            style: TextStyle(
+                              fontSize: 12.sp,
+                              fontWeight: FontWeight.w600,
+                              color: textColor,
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: 8.w),
+                        OutlinedButton(
+                          onPressed: () {
+                            Haptics.light();
+                            context.push('/orders/details/$cleanId');
+                          },
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(
+                              color: isDark ? AppColors.borderDark : const Color(0xFFD1D5DB),
+                            ),
+                            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8.r),
+                            ),
+                          ),
+                          child: Text(
+                            'Invoice',
+                            style: TextStyle(
+                              fontSize: 12.sp,
+                              fontWeight: FontWeight.w600,
+                              color: textColor,
+                            ),
                           ),
                         ),
                       ],
@@ -811,162 +657,56 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     );
   }
 
-  Widget _buildStatusBadge(OrderModel order) {
+  Widget _buildScreenshotStatusPill(OrderModel order) {
     if (order.isDelivered || order.orderStatus == 'delivered') {
       return Container(
-        padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
+        padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 3.h),
         decoration: BoxDecoration(
-          color: const Color(0xFFDCFCE7),
+          color: const Color(0xFFE8F5E9),
           borderRadius: BorderRadius.circular(20.r),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.check_circle_rounded,
-              color: const Color(0xFF16A34A),
-              size: 14.sp,
-            ),
-            SizedBox(width: 4.w),
-            Flexible(
-              child: Text(
-                context.l10n.statusDelivered,
-                style: TextStyle(
-                  fontSize: 11.sp,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF15803D),
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      );
-    } else if (order.isCancelled || order.orderStatus.contains('cancelled')) {
-      final label = order.cancelledBy.toLowerCase() == 'restaurant'
-          ? context.l10n.cancelledByRestaurant
-          : context.l10n.cancelledByYou;
-      return Container(
-        padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFFEEED),
-          borderRadius: BorderRadius.circular(20.r),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.cancel_rounded,
-              color: const Color(0xFFDC2626),
-              size: 14.sp,
-            ),
-            SizedBox(width: 4.w),
-            Flexible(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11.sp,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFFDC2626),
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      );
-    } else {
-      return Container(
-        padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
-        decoration: BoxDecoration(
-          color: AppColors.primaryTintStrong,
-          borderRadius: BorderRadius.circular(20.r),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.directions_bike_rounded,
-              color: AppColors.primary,
-              size: 14.sp,
-            ),
-            SizedBox(width: 4.w),
-            Flexible(
-              child: Text(
-                order.statusLabel.isNotEmpty ? order.statusLabel : context.l10n.onTheWay,
-                style: TextStyle(
-                  fontSize: 11.sp,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primary,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
+        child: Text(
+          'Delivered',
+          style: TextStyle(
+            color: const Color(0xFF2E7D32),
+            fontSize: 11.sp,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       );
     }
-  }
-
-  /// Prompts the user to rate a delivered order that hasn't been rated yet.
-  Widget _buildRateCta(
-    BuildContext context,
-    OrderModel order,
-    bool isDark,
-    Color textColor,
-    Color secondaryColor,
-  ) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(12.r),
-      onTap: () => _openRatingSheet(context, order),
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
+    if (order.isCancelled || order.orderStatus.contains('cancelled')) {
+      return Container(
+        padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 3.h),
         decoration: BoxDecoration(
-          color: const Color(0xFFF0FDF4),
-          borderRadius: BorderRadius.circular(12.r),
-          border: Border.all(color: const Color(0xFFBBF7D0), width: 1),
+          color: const Color(0xFFFFEBEE),
+          borderRadius: BorderRadius.circular(20.r),
         ),
-        child: Row(
-          children: [
-            Icon(Icons.star_rounded, color: const Color(0xFF16A34A), size: 18.sp),
-            SizedBox(width: 8.w),
-            Expanded(
-              child: Text(
-                'Rate your food & delivery experience',
-                style: TextStyle(
-                  fontSize: 12.sp,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF15803D),
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            Icon(
-              Icons.chevron_right_rounded,
-              size: 18.sp,
-              color: const Color(0xFF15803D),
-            ),
-          ],
+        child: Text(
+          'Cancelled',
+          style: TextStyle(
+            color: const Color(0xFFC62828),
+            fontSize: 11.sp,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      );
+    }
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 3.h),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEBF3FE),
+        borderRadius: BorderRadius.circular(20.r),
+      ),
+      child: Text(
+        'Confirmed',
+        style: TextStyle(
+          color: const Color(0xFF1976D2),
+          fontSize: 11.sp,
+          fontWeight: FontWeight.bold,
         ),
       ),
     );
-  }
-
-  Future<void> _openRatingSheet(BuildContext context, OrderModel order) async {
-    Haptics.light();
-    final result = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => RateOrderSheet(order: order),
-    );
-    if (result == true && context.mounted) {
-      AppSnackbar.success(context, 'Thanks for rating your order!');
-    }
   }
 
   /// Need Help? Card at bottom of screen matching screenshot
@@ -1062,28 +802,3 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     );
   }
 }
-
-class _CircleIconButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-
-  const _CircleIconButton({required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20.r),
-      child: Container(
-        width: 38.w,
-        height: 38.h,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          shape: BoxShape.circle,
-        ),
-        child: Icon(icon, color: const Color(0xFF1E1E1E), size: 20.sp),
-      ),
-    );
-  }
-}
-

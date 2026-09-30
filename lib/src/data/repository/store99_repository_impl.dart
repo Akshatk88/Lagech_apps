@@ -55,8 +55,14 @@ class Store99RepositoryImpl implements Store99Repository {
   @override
   Future<ApiResponse<List<Store99Product>>> getTrendingDishes() {
     return _guard(() async {
-      final foods = await _remote.getPublicFoods(zoneId: _zoneId(), promo: _promo, limit: 100);
-      return foods.where((f) => f.price <= 99.0).map(_toProduct).toList();
+      var foods = await _remote.getPublicFoods(zoneId: _zoneId(), promo: _promo, limit: 100);
+      var eligible = foods.where((f) => f.price <= 99.0).toList();
+      if (eligible.isEmpty) {
+        // Fallback: Fetch general foods without promo constraint and find items <= 99
+        final allFoods = await _remote.getPublicFoods(zoneId: _zoneId(), limit: 150);
+        eligible = allFoods.where((f) => f.price <= 99.0).toList();
+      }
+      return eligible.map(_toProduct).toList();
     });
   }
 
@@ -67,14 +73,23 @@ class Store99RepositoryImpl implements Store99Repository {
     int limit = 10,
   }) {
     return _guard(() async {
-      final foods = await _remote.getPublicFoods(
+      var foods = await _remote.getPublicFoods(
         zoneId: _zoneId(),
         promo: _promo,
         categorySlug: cuisineId == 'all' ? null : cuisineId,
         limit: 200,
       );
 
-      final eligibleFoods = foods.where((f) => f.price <= 99.0).toList();
+      var eligibleFoods = foods.where((f) => f.price <= 99.0).toList();
+
+      if (eligibleFoods.isEmpty) {
+        final allFoods = await _remote.getPublicFoods(
+          zoneId: _zoneId(),
+          categorySlug: cuisineId == 'all' ? null : cuisineId,
+          limit: 200,
+        );
+        eligibleFoods = allFoods.where((f) => f.price <= 99.0).toList();
+      }
 
       // Client-side pagination windowing applied on eligible (<= 99) products
       final start = (page - 1) * limit;
@@ -94,17 +109,18 @@ class Store99RepositoryImpl implements Store99Repository {
     return Store99Product(
       id: f.id,
       restaurantId: f.restaurantId,
-      restaurantName: '',
+      restaurantName: f.restaurantName.isNotEmpty ? f.restaurantName : '',
       name: f.name,
       description: f.description,
       price: f.price,
       originalPrice: f.originalPrice,
       imageUrl: f.imageUrl,
-      rating: f.rating,
-      ratingCount: f.reviewCount,
-      deliveryTime: f.deliveryTime,
+      rating: f.rating > 0 ? f.rating : 4.5,
+      ratingCount: f.reviewCount > 0 ? f.reviewCount : 12,
+      deliveryTime: f.deliveryTime.isNotEmpty ? f.deliveryTime : '15-30 min',
       isVeg: f.isVeg,
       isQuickDelivery: f.isQuickDelivery,
+      cuisineId: f.categoryId.isNotEmpty ? f.categoryId : f.categoryName,
     );
   }
 

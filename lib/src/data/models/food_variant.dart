@@ -58,9 +58,11 @@ class FoodVariant {
 
   /// Reads `variants`, falling back to the legacy `variations` key.
   static List<FoodVariant> listFrom(Map<String, dynamic> json) {
-    final raw = (json['variants'] as List?)?.isNotEmpty == true
-        ? json['variants'] as List
-        : (json['variations'] as List? ?? const []);
+    final vRaw = json['variants'];
+    final vLegacy = json['variations'];
+    final raw = (vRaw is List && vRaw.isNotEmpty)
+        ? vRaw
+        : (vLegacy is List ? vLegacy : const []);
     return raw
         .whereType<Map>()
         .map((e) => FoodVariant.fromApi(e.cast<String, dynamic>()))

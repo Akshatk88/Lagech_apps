@@ -44,12 +44,12 @@ class CustomBottomNav extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              // 1. Delivery / Food (Active in Screenshot)
+              // 1. Home
               _buildNavItem(
                 context: context,
-                icon: Icons.delivery_dining_outlined,
-                activeIcon: Icons.delivery_dining_rounded,
-                label: 'Delivery',
+                icon: Icons.home_outlined,
+                activeIcon: Icons.home_rounded,
+                label: 'Home',
                 index: 0,
                 isDark: isDark,
               ),
@@ -59,7 +59,7 @@ class CustomBottomNav extends StatelessWidget {
                 context: context,
                 icon: Icons.local_offer_outlined,
                 activeIcon: Icons.local_offer_rounded,
-                label: 'Offers',
+                label: '99 Store',
                 index: 98,
                 isDark: isDark,
               ),
@@ -69,7 +69,7 @@ class CustomBottomNav extends StatelessWidget {
                 context: context,
                 icon: Icons.restaurant_outlined,
                 activeIcon: Icons.restaurant_rounded,
-                label: 'Dining',
+                label: 'Orders',
                 index: 99,
                 isDark: isDark,
               ),
@@ -99,8 +99,7 @@ class CustomBottomNav extends StatelessWidget {
     required bool isDark,
   }) {
     final isSelected = currentIndex == index;
-    // Green active color matching screenshot
-    const activeColor = Color(0xFF16A34A);
+    final activeColor = AppColors.primary;
     final unselectedColor = isDark
         ? AppColors.textSecondaryDark
         : const Color(0xFF9CA3AF);
@@ -109,7 +108,7 @@ class CustomBottomNav extends StatelessWidget {
       onTap: () {
         Haptics.light();
         if (index == 98) {
-          context.push(RouteNames.allOffers);
+          context.push(RouteNames.store99);
         } else if (index == 99) {
           context.push(RouteNames.orders);
         } else {

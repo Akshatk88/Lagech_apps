@@ -9,6 +9,7 @@ class CategoryList extends StatefulWidget {
   final List<CategoryModel> categories;
   final ValueChanged<String>? onCategorySelected;
   final VoidCallback? onMealsUnder200Tap;
+  final VoidCallback? onAllCategoriesTap;
   final String selectedCategoryName;
 
   const CategoryList({
@@ -16,6 +17,7 @@ class CategoryList extends StatefulWidget {
     required this.categories,
     this.onCategorySelected,
     this.onMealsUnder200Tap,
+    this.onAllCategoriesTap,
     this.selectedCategoryName = 'All',
   });
 
@@ -46,15 +48,62 @@ class _CategoryListState extends State<CategoryList> {
       uniqueCategories.add(c);
     }
 
-    // Curate order: biryani, cake, chhole, chicken, donuts, pizza, burger, etc.
-    const firstPrefixes = ['biryani', 'cake', 'chhole', 'chicken', 'donut', 'pizza', 'burger', 'sandwich', 'momo'];
-    const lastPrefixes = ['frozen', 'bakery', 'sauce', 'toast'];
+    // Junk / Fast Food prioritized at the FRONT (Pizza, Burger, Sandwich, Momos first)
+    const junkFoodPrefixes = [
+      'pizza',
+      'burger',
+      'sandwich',
+      'momo',
+      'fries',
+      'roll',
+      'pasta',
+      'maggi',
+      'vadapav',
+      'chinese',
+      'biryani',
+      'chicken',
+      'starter',
+      'kabab',
+      'pav bhaji',
+      'snack',
+      'mutton',
+      'shake',
+      'ice cream',
+      'dessert',
+      'sweet',
+      'mocktail',
+      'coffee',
+      'juice',
+    ];
+
+    // Healthy, traditional, staples, grocery & raw foods moved to the BACK
+    const trailingPrefixes = [
+      'south indian',
+      'thali',
+      'breakfast',
+      'hotel',
+      'main course',
+      'rice',
+      'roti',
+      'egg',
+      'sup',
+      'soup',
+      'salad',
+      'diet',
+      'upwas',
+      'fast',
+      'paan',
+      'bakery',
+      'toast',
+      'frozen',
+      'sauce',
+    ];
 
     final firstItems = <CategoryModel>[];
     final lastItems = <CategoryModel>[];
     final middleItems = <CategoryModel>[];
 
-    for (final prefix in firstPrefixes) {
+    for (final prefix in junkFoodPrefixes) {
       final matches = uniqueCategories
           .where((c) =>
               c.name.toLowerCase().contains(prefix) &&
@@ -63,7 +112,7 @@ class _CategoryListState extends State<CategoryList> {
       firstItems.addAll(matches);
     }
 
-    for (final prefix in lastPrefixes) {
+    for (final prefix in trailingPrefixes) {
       final matches = uniqueCategories
           .where((c) =>
               c.name.toLowerCase().contains(prefix) &&
@@ -85,122 +134,55 @@ class _CategoryListState extends State<CategoryList> {
         .toList();
 
     return SizedBox(
-      height: 104.h,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(),
-        padding: EdgeInsets.symmetric(horizontal: 16.w),
-        itemCount: items.length + 1, // +1 for the leading "MEALS UNDER ₹200" badge
+      height: 76.h,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              padding: EdgeInsets.only(left: 16.w, right: 8.w),
+              itemCount: items.length,
         itemBuilder: (context, index) {
-          // Index 0: MEALS UNDER ₹200 Badge
-          if (index == 0) {
-            return GestureDetector(
-              onTap: () {
-                Haptics.light();
-                widget.onMealsUnder200Tap?.call();
-              },
-              child: Container(
-                width: 66.w,
-                margin: EdgeInsets.only(right: 12.w, top: 4.h, bottom: 4.h),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14.r),
-                  gradient: const LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Color(0xFF1E3A8A), // Deep Navy Blue
-                      Color(0xFF1D4ED8),
-                      Color(0xFF2563EB),
-                    ],
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF1E3A8A).withValues(alpha: 0.3),
-                      blurRadius: 6,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.shield_rounded,
-                      color: Colors.white70,
-                      size: 14.sp,
-                    ),
-                    SizedBox(height: 2.h),
-                    Text(
-                      'MEALS\nUNDER\n₹200',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 9.sp,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.5,
-                        height: 1.15,
-                      ),
-                    ),
-                    SizedBox(height: 5.h),
-                    Container(
-                      padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.25),
-                        borderRadius: BorderRadius.circular(8.r),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'Explore',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 7.5.sp,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          Icon(
-                            Icons.chevron_right_rounded,
-                            color: Colors.white,
-                            size: 10.sp,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-
-          // Remaining: Circular Food Categories
-          final cat = items[index - 1];
+          // Circular Food Categories
+          final cat = items[index];
           final name = cat['name'] as String;
+          final isSelected = widget.selectedCategoryName.trim().isNotEmpty &&
+              widget.selectedCategoryName.trim().toLowerCase() == name.trim().toLowerCase();
 
           return GestureDetector(
+            behavior: HitTestBehavior.opaque,
             onTap: () {
               Haptics.light();
               widget.onCategorySelected?.call(name);
             },
             child: Container(
-              margin: EdgeInsets.only(right: 12.w),
+              margin: EdgeInsets.only(right: 10.w),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
-                    width: 60.w,
-                    height: 60.w,
+                    width: 48.w,
+                    height: 48.w,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: isDark ? AppColors.surfaceDark : Colors.white,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.06),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
+                      border: Border.all(
+                        color: isSelected ? const Color(0xFFC80A14) : Colors.transparent,
+                        width: isSelected ? 2.5 : 0,
+                      ),
+                      boxShadow: isSelected
+                          ? [
+                              BoxShadow(
+                                color: const Color(0xFFC80A14).withValues(alpha: 0.35),
+                                blurRadius: 6,
+                                spreadRadius: 1,
+                              ),
+                            ]
+                          : null,
                     ),
+                    padding: EdgeInsets.all(isSelected ? 2.0 : 0.0),
                     child: ClipOval(
                       child: SmartImage(
                         url: cat['imageUrl'] as String,
@@ -209,27 +191,66 @@ class _CategoryListState extends State<CategoryList> {
                       ),
                     ),
                   ),
-                  SizedBox(height: 6.h),
+                  SizedBox(height: 3.h),
                   SizedBox(
-                    width: 66.w,
+                    width: 56.w,
                     child: Text(
                       name,
                       textAlign: TextAlign.center,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
-                        fontSize: 11.5.sp,
-                        fontWeight: FontWeight.w600,
+                        color: isSelected
+                            ? const Color(0xFFC80A14)
+                            : (isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight),
+                        fontSize: 10.5.sp,
+                        fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
                       ),
                     ),
                   ),
+                  if (isSelected)
+                    Container(
+                      margin: EdgeInsets.only(top: 1.5.h),
+                      width: 14.w,
+                      height: 2.h,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFC80A14),
+                        borderRadius: BorderRadius.circular(2.r),
+                      ),
+                    )
+                  else
+                    SizedBox(height: 3.5.h),
                 ],
               ),
             ),
           );
         },
       ),
-    );
+    ),
+
+    // Red tune icon on the right side - clicking opens all categories
+    Padding(
+      padding: EdgeInsets.only(right: 12.w, left: 2.w),
+      child: InkWell(
+        onTap: () {
+          Haptics.light();
+          widget.onAllCategoriesTap?.call();
+        },
+        borderRadius: BorderRadius.circular(20.r),
+        child: Container(
+          width: 34.w,
+          height: 34.w,
+          alignment: Alignment.center,
+          child: Icon(
+            Icons.tune_rounded,
+            color: const Color(0xFFC80A14), // Red color
+            size: 20.sp,
+          ),
+        ),
+      ),
+    ),
+  ],
+),
+);
   }
 }

@@ -29,7 +29,6 @@ class CartRecommendationsSection extends ConsumerStatefulWidget {
 
 class _CartRecommendationsSectionState extends ConsumerState<CartRecommendationsSection> {
   int _selectedTabIndex = 0;
-  int _categoryCount = 0;
   final _tabScrollController = ScrollController();
   final _tabKeys = <GlobalKey>[];
 
@@ -96,7 +95,6 @@ class _CartRecommendationsSectionState extends ConsumerState<CartRecommendations
             .toList();
         if (categories.isEmpty) return const SizedBox.shrink();
         final tabIndex = _selectedTabIndex % categories.length;
-        _categoryCount = categories.length;
         while (_tabKeys.length < categories.length) {
           _tabKeys.add(GlobalKey());
         }

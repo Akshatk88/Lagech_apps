@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../data/models/food_model.dart';
 import '../../../data/models/food_variant.dart';
-import '../../../di/catalog_providers.dart';
 import '../../branding/app_colors.dart';
 import '../../restaurant/widgets/food_detail_sheet.dart';
 import '../../restaurant/widgets/variant_picker_sheet.dart';
@@ -50,14 +49,11 @@ Future<void> addFoodToCart(
   List<FoodAddon> selectedAddonDetails = const [],
   bool fromBottomSheet = false,
 }) async {
-  // Check if item has backend variants or add-ons and hasn't been configured yet
+  // Check if item has backend variants and hasn't been configured yet
   final hasVariants = food.variants.isNotEmpty;
-  final addons = ref.read(restaurantAddonsProvider(food.restaurantId)).value ?? const <FoodAddon>[];
-  final hasAddons = addons.isNotEmpty;
 
-  final needsSelection = (hasVariants || hasAddons) &&
+  final needsSelection = hasVariants &&
       selectedVariant == null &&
-      selectedAddons.isEmpty &&
       !fromBottomSheet;
 
   if (needsSelection) {
@@ -69,9 +65,9 @@ Future<void> addFoodToCart(
       food,
       selectedVariant: selection.variant?.name,
       selectedVariantPrice: selection.variantDelta(food.price),
-      selectedAddons: selection.addons.map((a) => a.id).toList(),
-      selectedAddonsPrice: selection.addonTotal,
-      selectedAddonDetails: selection.addons,
+      selectedAddons: const [],
+      selectedAddonsPrice: 0.0,
+      selectedAddonDetails: const [],
       fromBottomSheet: true,
     );
     return;

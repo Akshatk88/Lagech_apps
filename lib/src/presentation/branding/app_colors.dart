@@ -91,7 +91,7 @@ class AppColors {
   static const Color borderDark = Color(0xFF302F3B);
 
   // ==================== LIGHT THEME COLORS ====================
-  static const Color backgroundLight = neutral50;
+  static const Color backgroundLight = Color(0xFFFFFFFF);
   static const Color surfaceLight = Color(0xFFFFFFFF);
   static const Color secondarySurfaceLight = neutral100;
   static const Color lightContainer = neutral50;

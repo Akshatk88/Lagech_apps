@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/haptics.dart';
 import '../../../data/models/food_model.dart';
 import '../../../data/models/food_variant.dart';
-import '../../../di/catalog_providers.dart';
 import '../../branding/app_colors.dart';
 
 /// What the user chose in the sheet.
@@ -49,8 +48,8 @@ class VariantPickerSheet extends ConsumerStatefulWidget {
 
   /// True when there is something for the user to choose. Callers use this to
   /// decide between showing the sheet and adding directly.
-  static bool needsSelection(FoodModel food, List<FoodAddon> addons) =>
-      food.variants.isNotEmpty || addons.isNotEmpty;
+  static bool needsSelection(FoodModel food, [List<FoodAddon>? _]) =>
+      food.variants.isNotEmpty;
 
   @override
   ConsumerState<VariantPickerSheet> createState() => _VariantPickerSheetState();
@@ -58,7 +57,6 @@ class VariantPickerSheet extends ConsumerStatefulWidget {
 
 class _VariantPickerSheetState extends ConsumerState<VariantPickerSheet> {
   FoodVariant? _variant;
-  final Set<String> _addonIds = {};
 
   @override
   void initState() {
@@ -77,11 +75,7 @@ class _VariantPickerSheetState extends ConsumerState<VariantPickerSheet> {
     final secondaryColor =
         isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
 
-    final addons = ref.watch(restaurantAddonsProvider(widget.food.restaurantId)).value ??
-        const <FoodAddon>[];
-    final selected = addons.where((a) => _addonIds.contains(a.id)).toList();
-    final basePrice = _variant?.price ?? widget.food.price;
-    final total = basePrice + selected.fold(0.0, (sum, a) => sum + a.price);
+    final total = _variant?.price ?? widget.food.price;
 
     return Container(
       constraints: BoxConstraints(
@@ -135,10 +129,6 @@ class _VariantPickerSheetState extends ConsumerState<VariantPickerSheet> {
                   ),
                   const SizedBox(height: 8),
                 ],
-                if (addons.isNotEmpty) ...[
-                  _sectionTitle('Add extras', textColor),
-                  ...addons.map((a) => _addonTile(a, textColor, secondaryColor)),
-                ],
                 const SizedBox(height: 12),
               ],
             ),
@@ -165,7 +155,7 @@ class _VariantPickerSheetState extends ConsumerState<VariantPickerSheet> {
                   Haptics.light();
                   Navigator.pop(
                     context,
-                    VariantSelection(variant: _variant, addons: selected),
+                    VariantSelection(variant: _variant),
                   );
                 },
                 child: Text(
@@ -250,66 +240,6 @@ class _VariantPickerSheetState extends ConsumerState<VariantPickerSheet> {
             ],
             Text(
               '₹${v.price.toStringAsFixed(0)}',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                color: textColor,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _addonTile(FoodAddon a, Color textColor, Color secondaryColor) {
-    final isSelected = _addonIds.contains(a.id);
-    return InkWell(
-      onTap: () {
-        Haptics.light();
-        setState(() {
-          if (isSelected) {
-            _addonIds.remove(a.id);
-          } else {
-            _addonIds.add(a.id);
-          }
-        });
-      },
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        child: Row(
-          children: [
-            Icon(
-              isSelected ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
-              color: isSelected ? AppColors.primary : secondaryColor,
-              size: 20,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    a.name,
-                    style: TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                      color: textColor,
-                    ),
-                  ),
-                  if (a.description.isNotEmpty)
-                    Text(
-                      a.description,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 12, color: secondaryColor),
-                    ),
-                ],
-              ),
-            ),
-            Text(
-              '+₹${a.price.toStringAsFixed(0)}',
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.bold,

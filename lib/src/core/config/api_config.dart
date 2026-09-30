@@ -99,6 +99,7 @@ class ApiPaths {
 
   // ---- Zones ----
   static const String zoneDetect = '/food/zones/detect';
+  static const String zonesList = '/food/zones';
 
   // ---- Orders ----
   static const String orders = '/food/orders';

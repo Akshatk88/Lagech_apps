@@ -103,7 +103,7 @@ flutter:
     - assets/images/
     - assets/videos/
     - assets/audio/
-    - assets/gif/
+
 
 # Launcher Icons Configuration for Lagech App
 flutter_launcher_icons:

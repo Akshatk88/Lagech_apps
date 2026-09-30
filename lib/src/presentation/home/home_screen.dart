@@ -12,6 +12,7 @@ import '../branding/app_colors.dart';
 import '../cart/widgets/floating_view_cart_bar.dart';
 import '../navigation/route_names.dart';
 import '../../data/models/restaurant_model.dart';
+import '../../data/models/food_model.dart';
 import '../../data/models/category_model.dart';
 import '../orders/viewmodels/active_order_viewmodel.dart';
 import 'screens/home_filter_screen.dart';
@@ -24,6 +25,11 @@ import 'widgets/home_header_banner.dart';
 import 'widgets/restaurant_card.dart';
 import 'widgets/explore_more_section.dart';
 import 'widgets/home_filter_chips_row.dart';
+import 'widgets/home_filter_bottom_sheet.dart';
+import 'widgets/recommended_grid_section.dart';
+import 'widgets/spotlight_carousel.dart';
+import '../restaurant/viewmodels/restaurant_detail_viewmodel.dart';
+import 'screens/category_details_screen.dart';
 
 /// TEMP DEBUG WIDGET — shows the exact error inline instead of a blank
 /// SizedBox.shrink(). Remove once the root cause of missing data is fixed.
@@ -63,25 +69,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   final GlobalKey<FloatingViewCartBarState> _cartBarKey =
       GlobalKey<FloatingViewCartBarState>();
   final ScrollController _scrollController = ScrollController();
-  final String _selectedCategory = 'All';
-  String? _activeFilter;
+  String _selectedCategory = 'All';
+  RestaurantFilterCriteria _filterCriteria = const RestaurantFilterCriteria();
   // Flips once the sticky header has mostly collapsed, so the status bar
   // icon color can switch from light (over the banner) to dark (over the
   // plain background) — only triggers a rebuild on the threshold crossing,
   // not on every scroll frame.
   bool _headerCollapsed = false;
 
-  // One consistent rhythm for the whole feed instead of a different gap
-  // between every pair of sections: a tight gap under each section's own
-  // title, and a slightly larger one separating one section from the next.
 
-
-  double get _bannerToBlockOverlap =>
-      26.h; // preserves the original floating-overlap look
-  double get _collapsedTopPadding =>
-      8.h; // breathing room below the status bar once pinned
-  double get _headerRange =>
-      315.h - _bannerToBlockOverlap - _collapsedTopPadding;
 
   @override
   void initState() {
@@ -103,7 +99,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   void _handleScroll() {
     if (!_scrollController.hasClients) return;
-    final collapsed = _scrollController.offset > _headerRange * 0.7;
+    // Collapse flag flips after scrolling 180px — approximate point
+    // where the banner is fully off screen and categories are pinned.
+    const threshold = 180.0;
+    final collapsed = _scrollController.offset > threshold;
     if (collapsed != _headerCollapsed) {
       setState(() => _headerCollapsed = collapsed);
     }
@@ -125,6 +124,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
+    final allCategories = homeState.categories.asData?.value ?? const <CategoryModel>[];
+    final activeCategoryModel = (_selectedCategory == 'All' || _selectedCategory == 'More')
+        ? null
+        : (allCategories.where((c) => c.name.toLowerCase() == _selectedCategory.toLowerCase()).firstOrNull ??
+            CategoryModel(id: '', name: _selectedCategory, imageUrl: '', slug: _selectedCategory.toLowerCase()));
+
+    final categoryDishes = activeCategoryModel != null
+        ? (ref.watch(categoryFoodsProvider(activeCategoryModel)).asData?.value ?? const <FoodModel>[])
+        : const <FoodModel>[];
+
+    final categoryRests = activeCategoryModel != null
+        ? (ref.watch(categoryRestaurantsProvider(activeCategoryModel)).asData?.value ?? const <RestaurantModel>[])
+        : const <RestaurantModel>[];
+
+    final popularFoods = homeState.popularFoods.asData?.value ?? const <FoodModel>[];
+    final activeCatQuery = _selectedCategory.toLowerCase().trim();
+    final activeCatSingular = (activeCatQuery.endsWith('s') && activeCatQuery.length > 3)
+        ? activeCatQuery.substring(0, activeCatQuery.length - 1)
+        : activeCatQuery;
+
+    final matchingDishes = <FoodModel>[
+      ...categoryDishes,
+      if (_selectedCategory != 'All' && _selectedCategory != 'More')
+        ...popularFoods.where((f) {
+          final text = '${f.name} ${f.categoryName} ${f.description}'.toLowerCase();
+          return text.contains(activeCatQuery) || text.contains(activeCatSingular);
+        })
+      else
+        ...popularFoods,
+    ];
 
     return PopScope(
       canPop: false,
@@ -178,102 +207,339 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     controller: _scrollController,
                     physics: const AlwaysScrollableScrollPhysics(),
                     slivers: [
-                      SliverToBoxAdapter(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // 1. Top Header Banner (Lavender wash, Appzeto, Location, Search+Veg, Special Offer Banner)
-                            const HomeHeaderBanner(),
+                      // 1. Top Header Banner
+                      const SliverToBoxAdapter(
+                        child: HomeHeaderBanner(),
+                      ),
 
-                            SizedBox(height: 12.h),
-
-                            // 2. Categories Row with Leading "MEALS UNDER ₹200" badge
-                            CategoryList(
+                      // 2. Sticky Pinned Categories Row (Pizza, Burger, Sandwich stays fixed when scrolling)
+                      SliverPersistentHeader(
+                        pinned: true,
+                        delegate: _StickyCategoryHeaderDelegate(
+                          height: 76.h,
+                          child: Container(
+                            height: 76.h,
+                            decoration: BoxDecoration(
+                              color: isDark ? AppColors.backgroundDark : Colors.white,
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: isDark
+                                      ? AppColors.borderDark.withValues(alpha: 0.5)
+                                      : const Color(0xFFE5E7EB),
+                                  width: 0.8,
+                                ),
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.04),
+                                  blurRadius: 3,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: CategoryList(
                               categories: homeState.categories.asData?.value ?? const [],
                               selectedCategoryName: _selectedCategory,
                               onMealsUnder200Tap: () {
                                 Haptics.light();
                                 context.push(RouteNames.store99);
                               },
-                              onCategorySelected: (catName) {
-                                final categories = homeState.categories.asData?.value ?? [];
-                                final cat = categories
-                                    .where((c) => c.name.toLowerCase() == catName.toLowerCase())
-                                    .firstOrNull;
-                                if (cat != null) {
-                                  context.push(
-                                    RouteNames.categoryDetails,
-                                    extra: cat,
-                                  );
-                                }
-                              },
-                            ),
-
-                            SizedBox(height: 14.h),
-
-                            // 3. Filter Chips Row: Filters, Under 30 mins, Under 45 mins, Under 1km
-                            HomeFilterChipsRow(
-                              activeFilter: _activeFilter,
-                              onFiltersTap: () {
+                              onAllCategoriesTap: () {
                                 _showCategoryFilterSheet(
                                   context,
                                   isDark,
                                   homeState.categories.asData?.value ?? const [],
                                 );
                               },
+                              onCategorySelected: (catName) {
+                                Haptics.light();
+                                final categories = homeState.categories.asData?.value ?? const [];
+                                final cat = categories
+                                    .where((c) => c.name.toLowerCase() == catName.toLowerCase())
+                                    .firstOrNull ??
+                                    CategoryModel(
+                                      id: '',
+                                      name: catName,
+                                      imageUrl: '',
+                                      slug: catName.toLowerCase(),
+                                    );
+                                context.push(RouteNames.categoryDetails, extra: cat);
+                              },
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      // 3. Rest of Feed
+                      SliverToBoxAdapter(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(height: 10.h),
+
+                            // Active category pill if category selected
+                            if (_selectedCategory != 'All') ...[
+                              Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 2.h),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 5.h),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFC80A14).withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(20.r),
+                                        border: Border.all(color: const Color(0xFFC80A14), width: 1),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            'Category: $_selectedCategory',
+                                            style: TextStyle(
+                                              color: const Color(0xFFC80A14),
+                                              fontSize: 11.5.sp,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          SizedBox(width: 6.w),
+                                          GestureDetector(
+                                            onTap: () {
+                                              Haptics.light();
+                                              setState(() {
+                                                _selectedCategory = 'All';
+                                              });
+                                            },
+                                            child: Icon(
+                                              Icons.close_rounded,
+                                              size: 14.sp,
+                                              color: const Color(0xFFC80A14),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    GestureDetector(
+                                      onTap: () {
+                                        Haptics.light();
+                                        final categories = homeState.categories.asData?.value ?? [];
+                                        final cat = categories
+                                            .where((c) => c.name.toLowerCase() == _selectedCategory.toLowerCase())
+                                            .firstOrNull;
+                                        if (cat != null) {
+                                          context.push(RouteNames.categoryDetails, extra: cat);
+                                        }
+                                      },
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            'Explore all $_selectedCategory',
+                                            style: TextStyle(
+                                              color: const Color(0xFFC80A14),
+                                              fontSize: 11.5.sp,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          Icon(
+                                            Icons.chevron_right_rounded,
+                                            size: 14.sp,
+                                            color: const Color(0xFFC80A14),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              SizedBox(height: 6.h),
+                            ],
+
+                            // 3. Filter Chips Row: Filters, Under 30 mins, Under 45 mins, Under 1km
+                            HomeFilterChipsRow(
+                              activeFilter: _filterCriteria.deliveryTime == '30mins'
+                                  ? '30mins'
+                                  : (_filterCriteria.deliveryTime == '45mins'
+                                      ? '45mins'
+                                      : (_filterCriteria.distance == '1km' ? '1km' : null)),
+                              activeFiltersCount: _filterCriteria.activeFiltersCount,
+                              onFiltersTap: () {
+                                HomeFilterBottomSheet.show(
+                                  context,
+                                  initialCriteria: _filterCriteria,
+                                  categories: homeState.categories.asData?.value ?? const [],
+                                  onApply: (newCriteria) {
+                                    setState(() {
+                                      _filterCriteria = newCriteria;
+                                    });
+                                  },
+                                );
+                              },
                               onUnder30MinsTap: () {
                                 setState(() {
-                                  _activeFilter = (_activeFilter == '30mins') ? null : '30mins';
+                                  final isCurrent = _filterCriteria.deliveryTime == '30mins';
+                                  _filterCriteria = _filterCriteria.copyWith(
+                                    deliveryTime: isCurrent ? 'any' : '30mins',
+                                  );
                                 });
                               },
                               onUnder45MinsTap: () {
                                 setState(() {
-                                  _activeFilter = (_activeFilter == '45mins') ? null : '45mins';
+                                  final isCurrent = _filterCriteria.deliveryTime == '45mins';
+                                  _filterCriteria = _filterCriteria.copyWith(
+                                    deliveryTime: isCurrent ? 'any' : '45mins',
+                                  );
                                 });
                               },
                               onUnder1KmTap: () {
                                 setState(() {
-                                  _activeFilter = (_activeFilter == '1km') ? null : '1km';
+                                  final isCurrent = _filterCriteria.distance == '1km';
+                                  _filterCriteria = _filterCriteria.copyWith(
+                                    distance: isCurrent ? 'any' : '1km',
+                                  );
                                 });
                               },
                             ),
 
-                            SizedBox(height: 16.h),
+                             SizedBox(height: 12.h),
 
-                            // 4. EXPLORE MORE Section: Offers, Gourmet, Top 10, Collections
-                            ExploreMoreSection(
-                              onOffersTap: () => context.push(RouteNames.allOffers),
-                              onGourmetTap: () => _openFilter(
-                                title: 'Gourmet',
-                                emptyMessage: 'No gourmet restaurants found right now',
-                                emptyIcon: Icons.room_service_rounded,
-                                matches: (r) => r.rating >= 4.2,
-                              ),
-                              onTop10Tap: () => _openFilter(
-                                title: 'Top 10',
-                                emptyMessage: 'No top rated restaurants found',
-                                emptyIcon: Icons.workspace_premium_rounded,
-                                matches: (r) => r.rating >= 4.0,
-                              ),
-                              onCollectionsTap: () => context.push(RouteNames.store99),
+                            // 3.5. RECOMMENDED FOR YOU — filtered by selected category
+                            homeState.nearbyRestaurants.maybeWhen(
+                              data: (allRestaurants) {
+                                if (allRestaurants.isEmpty) return const SizedBox.shrink();
+                                final filtered = _filterRestaurants(
+                                  allRestaurants,
+                                  matchingDishes: matchingDishes,
+                                  categoryRestaurants: categoryRests,
+                                );
+                                final displayList = _selectedCategory == 'All'
+                                    ? (filtered.isNotEmpty ? filtered : allRestaurants)
+                                    : filtered;
+                                if (displayList.isEmpty) return const SizedBox.shrink();
+
+                                return Column(
+                                  children: [
+                                    RecommendedGridSection(
+                                      key: ValueKey('$_selectedCategory-${displayList.length}'),
+                                      restaurants: displayList,
+                                      selectedCategory: _selectedCategory,
+                                      categoryDishes: matchingDishes,
+                                      title: _selectedCategory == 'All'
+                                          ? 'RECOMMENDED FOR YOU'
+                                          : '${_selectedCategory.toUpperCase()} NEAR YOU',
+                                      onRestaurantTap: (rest) {
+                                        context.push(RouteNames.restaurantDetail, extra: rest);
+                                      },
+                                    ),
+                                    SizedBox(height: 10.h),
+                                  ],
+                                );
+                              },
+                              orElse: () => const SizedBox.shrink(),
                             ),
 
-                            SizedBox(height: 20.h),
+                            // 4. Explore More Section: Offers, Gourmet, Top 10, Collections
+                            ExploreMoreSection(
+                              // Offers → Opens the full Offers/Store99 deals screen
+                              onOffersTap: () {
+                                Haptics.light();
+                                context.push(RouteNames.allOffers);
+                              },
+                              // Gourmet → Top Hotels (rating >= 4.0, sorted best first)
+                              onGourmetTap: () => _openFilter(
+                                title: 'Gourmet & Top Hotels',
+                                emptyMessage: 'No top rated restaurants found in your area right now',
+                                emptyIcon: Icons.emoji_events_rounded,
+                                matches: (r) => r.rating >= 4.0,
+                              ),
+                              // Top 10 / Top Orders → Signature Top 10 Screen with Golden Banner
+                              onTop10Tap: () {
+                                Haptics.light();
+                                context.push(RouteNames.top10);
+                              },
+                              // Collections → Popular restaurants (most ordered / well rated)
+                              onCollectionsTap: () => _openFilter(
+                                title: 'Popular Near You',
+                                emptyMessage: 'No popular restaurants found in your area right now',
+                                emptyIcon: Icons.local_fire_department_rounded,
+                                matches: (r) => r.rating >= 3.8 || r.offerBadges.isNotEmpty,
+                              ),
+                              onSeeAllTap: () => context.push(RouteNames.allOffers),
+                            ),
+
+                            // 4.5. IN THE SPOTLIGHT (Screenshot 3: spotlight carousel with indicator dots)
+                            homeState.nearbyRestaurants.maybeWhen(
+                              data: (allRestaurants) {
+                                if (allRestaurants.isEmpty) return const SizedBox.shrink();
+                                return Column(
+                                  children: [
+                                    SizedBox(height: 8.h),
+                                    SpotlightCarousel(
+                                      restaurants: allRestaurants,
+                                      onRestaurantTap: (rest) {
+                                        context.push(RouteNames.restaurantDetail, extra: rest);
+                                      },
+                                    ),
+                                    SizedBox(height: 10.h),
+                                  ],
+                                );
+                              },
+                              orElse: () => const SizedBox.shrink(),
+                            ),
+
+                            SizedBox(height: 4.h),
 
                             // 5. Featured Restaurants Section (Matching Screenshot)
                             homeState.nearbyRestaurants.when(
                               data: (allRestaurants) {
-                                final restaurants = _filterRestaurants(allRestaurants);
+                                final restaurants = _filterRestaurants(
+                                  allRestaurants,
+                                  matchingDishes: matchingDishes,
+                                  categoryRestaurants: categoryRests,
+                                );
                                 if (restaurants.isEmpty) {
                                   return Padding(
-                                    padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 20.h),
+                                    padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 28.h),
                                     child: Center(
-                                      child: Text(
-                                        'No restaurants available matching criteria',
-                                        style: TextStyle(
-                                          color: isDark ? Colors.white70 : Colors.black54,
-                                          fontSize: 14.sp,
-                                        ),
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.filter_list_off_rounded,
+                                            size: 46.sp,
+                                            color: isDark ? Colors.white38 : Colors.grey.shade400,
+                                          ),
+                                          SizedBox(height: 10.h),
+                                          Text(
+                                            'No restaurants match your selected filters',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              color: isDark ? Colors.white70 : Colors.black87,
+                                              fontSize: 14.sp,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          if (!_filterCriteria.isDefault) ...[
+                                            SizedBox(height: 12.h),
+                                            TextButton.icon(
+                                              onPressed: () {
+                                                Haptics.light();
+                                                setState(() {
+                                                  _filterCriteria = const RestaurantFilterCriteria();
+                                                  _selectedCategory = 'All';
+                                                });
+                                              },
+                                              icon: const Icon(Icons.refresh_rounded, color: Color(0xFFC80A14)),
+                                              label: const Text(
+                                                'Clear Filters',
+                                                style: TextStyle(
+                                                  color: Color(0xFFC80A14),
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
                                       ),
                                     ),
                                   );
@@ -300,13 +566,44 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                             ),
                                           ),
                                           SizedBox(height: 3.h),
-                                          Text(
-                                            'Featured',
-                                            style: TextStyle(
-                                              fontSize: 22.sp,
-                                              fontWeight: FontWeight.w900,
-                                              color: isDark ? Colors.white : const Color(0xFF111827),
-                                            ),
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Text(
+                                                'Restaurants near you',
+                                                style: TextStyle(
+                                                  fontSize: 22.sp,
+                                                  fontWeight: FontWeight.w900,
+                                                  color: isDark ? Colors.white : const Color(0xFF111827),
+                                                ),
+                                              ),
+                                              if (!_filterCriteria.isDefault)
+                                                InkWell(
+                                                  onTap: () {
+                                                    Haptics.light();
+                                                    setState(() {
+                                                      _filterCriteria = const RestaurantFilterCriteria();
+                                                    });
+                                                  },
+                                                  child: Padding(
+                                                    padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
+                                                    child: Row(
+                                                      children: [
+                                                        Icon(Icons.close_rounded, size: 14.sp, color: const Color(0xFFC80A14)),
+                                                        SizedBox(width: 3.w),
+                                                        Text(
+                                                          'Clear filters',
+                                                          style: TextStyle(
+                                                            fontSize: 12.sp,
+                                                            fontWeight: FontWeight.w700,
+                                                            color: const Color(0xFFC80A14),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                            ],
                                           ),
                                         ],
                                       ),
@@ -324,6 +621,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                         return RestaurantCard(
                                           restaurant: restaurants[index],
                                           index: index,
+                                          selectedCategory: _selectedCategory,
                                         );
                                       },
                                     ),
@@ -383,32 +681,63 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
 
 
-  List<RestaurantModel> _filterRestaurants(List<RestaurantModel> restaurants) {
+  List<RestaurantModel> _filterRestaurants(
+    List<RestaurantModel> restaurants, {
+    required List<FoodModel> matchingDishes,
+    required List<RestaurantModel> categoryRestaurants,
+  }) {
     final isVegOnly = ref.watch(vegFilterProvider);
-    var list = restaurants;
-    if (isVegOnly) {
-      list = list.where((r) => r.isPureVeg).toList();
+    var filtered = RestaurantFilterCriteria.apply(
+      restaurants: restaurants,
+      criteria: _filterCriteria,
+      isGlobalVegMode: isVegOnly,
+      selectedCategory: 'All', // Menu-level strict filtering below
+    );
+
+    if (_selectedCategory != 'All' && _selectedCategory != 'More') {
+      final q = _selectedCategory.toLowerCase().trim();
+      final singular = (q.endsWith('s') && q.length > 3) ? q.substring(0, q.length - 1) : q;
+
+      bool foodMatches(FoodModel f) {
+        final text = '${f.name} ${f.categoryName} ${f.description}'.toLowerCase();
+        return text.contains(q) || text.contains(singular);
+      }
+
+      final matchedRestIds = matchingDishes
+          .where(foodMatches)
+          .map((f) => f.restaurantId)
+          .where((id) => id.isNotEmpty)
+          .toSet();
+
+      final matchedRestNames = matchingDishes
+          .where(foodMatches)
+          .map((f) => f.restaurantName.trim().toLowerCase())
+          .where((n) => n.isNotEmpty)
+          .toSet();
+
+      matchedRestIds.addAll(categoryRestaurants.map((r) => r.id));
+
+      for (final r in restaurants) {
+        final menu = ref.read(restaurantMenuProvider(r.id)).asData?.value;
+        if (menu != null && menu.any(foodMatches)) {
+          matchedRestIds.add(r.id);
+        }
+      }
+
+      filtered = filtered.where((r) {
+        if (matchedRestIds.contains(r.id)) return true;
+        if (matchedRestNames.contains(r.name.trim().toLowerCase())) return true;
+        final rName = r.name.toLowerCase();
+        final rTags = r.tags.map((t) => t.toLowerCase()).toList();
+        final rRestTags = r.restaurantTags.map((t) => t.toLowerCase()).toList();
+        return rTags.any((t) => t.contains(q) || t.contains(singular)) ||
+            rRestTags.any((t) => t.contains(q) || t.contains(singular)) ||
+            rName.contains(q) ||
+            rName.contains(singular);
+      }).toList();
     }
-    if (_activeFilter == '30mins') {
-      list = list.where((r) => r.deliveryTime.contains('30') || r.deliveryTime.contains('20') || r.deliveryTime.contains('15') || r.deliveryTime.contains('25')).toList();
-    } else if (_activeFilter == '45mins') {
-      list = list.where((r) => r.deliveryTime.contains('45') || r.deliveryTime.contains('30') || r.deliveryTime.contains('25') || r.deliveryTime.contains('35') || r.deliveryTime.contains('40')).toList();
-    } else if (_activeFilter == '1km') {
-      list = list.where((r) => r.distanceKm <= 1.5).toList();
-    }
-    if (_selectedCategory == 'All' || _selectedCategory == 'More') {
-      return list;
-    }
-    final query = _selectedCategory.toLowerCase().trim();
-    final singular = query.endsWith('s')
-        ? query.substring(0, query.length - 1)
-        : query;
-    return list.where((r) {
-      final haystack =
-          '${r.name} ${r.tags.join(' ')} ${r.restaurantTags.join(' ')}'
-              .toLowerCase();
-      return haystack.contains(query) || haystack.contains(singular);
-    }).toList();
+
+    return filtered;
   }
 
   void _showCategoryFilterSheet(
@@ -447,7 +776,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'All Cuisines',
+                      'All Categories',
                       style: TextStyle(
                         fontSize: 18.sp,
                         fontWeight: FontWeight.bold,
@@ -551,3 +880,39 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 }
+
+// Delegate for Sticky Persistent Category Bar on Home Screen
+class _StickyCategoryHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final Widget child;
+  final double height;
+
+  _StickyCategoryHeaderDelegate({
+    required this.child,
+    required this.height,
+  });
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    return SizedBox(
+      height: height,
+      child: child,
+    );
+  }
+
+  @override
+  double get maxExtent => height;
+
+  @override
+  double get minExtent => height;
+
+  @override
+  bool shouldRebuild(covariant _StickyCategoryHeaderDelegate oldDelegate) {
+    return oldDelegate.child != child || oldDelegate.height != height;
+  }
+}
+
+

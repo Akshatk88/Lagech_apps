@@ -76,6 +76,110 @@ class RestaurantModel {
     return (null, null);
   }
 
+  /// Robustly determines whether a restaurant is open or closed based on backend payload.
+  static bool _parseIsOpen(Map<String, dynamic> json) {
+    // 1. Explicit boolean or string 'false' for closed indicators
+    final isClosedVal = json['isClosed'] ?? json['closed'] ?? json['isStoreClosed'];
+    if (isClosedVal == true ||
+        isClosedVal?.toString().trim().toLowerCase() == 'true' ||
+        isClosedVal == 1 ||
+        isClosedVal?.toString().trim() == '1') {
+      return false;
+    }
+
+    // 2. Status string checks (closed, inactive, offline, paused, disabled)
+    final rawStatus = (json['status'] ??
+            json['restaurantStatus'] ??
+            json['storeStatus'] ??
+            json['businessStatus'])
+        ?.toString()
+        .trim()
+        .toLowerCase();
+    if (rawStatus != null && rawStatus.isNotEmpty) {
+      if (rawStatus == 'closed' ||
+          rawStatus == 'inactive' ||
+          rawStatus == 'offline' ||
+          rawStatus == 'disabled' ||
+          rawStatus == 'paused' ||
+          rawStatus == 'shut' ||
+          rawStatus == 'close') {
+        return false;
+      }
+    }
+
+    // 3. Explicit active flags: if isActive is false, restaurant is closed
+    if (json.containsKey('isActive')) {
+      final active = json['isActive'];
+      if (active == false ||
+          active?.toString().trim().toLowerCase() == 'false' ||
+          active == 0 ||
+          active?.toString().trim() == '0') {
+        return false;
+      }
+    }
+    if (json.containsKey('active')) {
+      final active = json['active'];
+      if (active == false ||
+          active?.toString().trim().toLowerCase() == 'false' ||
+          active == 0 ||
+          active?.toString().trim() == '0') {
+        return false;
+      }
+    }
+
+    // 4. isAcceptingOrders flag: if false, it cannot accept orders (closed for ordering)
+    if (json.containsKey('isAcceptingOrders')) {
+      final acc = json['isAcceptingOrders'];
+      if (acc == false ||
+          acc?.toString().trim().toLowerCase() == 'false' ||
+          acc == 0 ||
+          acc?.toString().trim() == '0') {
+        return false;
+      }
+    }
+
+    // 5. isOpen / isRestaurantOpen / open flags
+    final openVal = json['isOpen'] ?? json['isRestaurantOpen'] ?? json['open'];
+    if (openVal != null) {
+      if (openVal == false ||
+          openVal.toString().trim().toLowerCase() == 'false' ||
+          openVal == 0 ||
+          openVal.toString().trim() == '0') {
+        return false;
+      }
+      if (openVal == true ||
+          openVal.toString().trim().toLowerCase() == 'true' ||
+          openVal == 1 ||
+          openVal.toString().trim() == '1') {
+        return true;
+      }
+    }
+
+    // 6. isOnline flag
+    if (json.containsKey('isOnline')) {
+      final online = json['isOnline'];
+      if (online == false ||
+          online?.toString().trim().toLowerCase() == 'false' ||
+          online == 0 ||
+          online?.toString().trim() == '0') {
+        return false;
+      }
+    }
+
+    // 7. If isAcceptingOrders was explicitly true
+    if (json['isAcceptingOrders'] == true ||
+        json['isAcceptingOrders']?.toString().trim().toLowerCase() == 'true') {
+      return true;
+    }
+
+    // 8. If status was explicitly open/active
+    if (rawStatus == 'open' || rawStatus == 'active' || rawStatus == 'opened') {
+      return true;
+    }
+
+    return true;
+  }
+
   /// Extracts locality / area name from backend restaurant JSON.
   static String _extractLocationFromApi(Map<String, dynamic> json) {
     // 1. Direct String fields for area / locality / locationName
@@ -157,6 +261,52 @@ class RestaurantModel {
     return '';
   }
 
+  /// Parses rating from diverse backend response schemas.
+  static double _parseRating(Map<String, dynamic> json) {
+    final candidates = [
+      json['rating'],
+      json['avgRating'],
+      json['averageRating'],
+      json['ratingAverage'],
+      json['ratings'],
+      json['restaurantRating'],
+      json['starRating'],
+      json['overallRating'],
+      json['userRating'],
+      json['ratingValue'],
+      json['stars'],
+      json['rate'],
+    ];
+
+    for (final candidate in candidates) {
+      if (candidate == null) continue;
+      if (candidate is num && candidate > 0) return candidate.toDouble();
+      if (candidate is String) {
+        final parsed = double.tryParse(candidate);
+        if (parsed != null && parsed > 0) return parsed;
+      }
+      if (candidate is Map) {
+        final subCandidates = [
+          candidate['average'],
+          candidate['avg'],
+          candidate['value'],
+          candidate['rating'],
+          candidate['val'],
+          candidate['stars'],
+          candidate['rate'],
+        ];
+        for (final sub in subCandidates) {
+          if (sub is num && sub > 0) return sub.toDouble();
+          if (sub is String) {
+            final parsed = double.tryParse(sub);
+            if (parsed != null && parsed > 0) return parsed;
+          }
+        }
+      }
+    }
+    return 0.0;
+  }
+
   /// Maps a backend restaurant document.
   factory RestaurantModel.fromApi(Map<String, dynamic> json) {
     final image = json['profileImage'] ?? json['logo'] ?? json['image'];
@@ -164,11 +314,16 @@ class RestaurantModel {
         ? (image['url'] ?? image['imageUrl']) as String?
         : image as String?;
     
-    final coversRaw = (json['coverImages'] as List?)
-        ?.map((e) => e is Map ? (e['url'] ?? e['imageUrl']) as String? : e as String?)
-        .whereType<String>()
-        .where((s) => s.isNotEmpty)
-        .toList() ?? const [];
+    final covers = json['coverImages'];
+    final coversRaw = (covers is List)
+        ? covers
+            .map((e) => e is Map ? (e['url'] ?? e['imageUrl']) as String? : e as String?)
+            .whereType<String>()
+            .where((s) => s.isNotEmpty)
+            .toList()
+        : (covers is String && covers.isNotEmpty)
+            ? [covers]
+            : const <String>[];
 
     final singleCover = json['coverImage'];
     final singleCoverUrl = singleCover is Map
@@ -182,11 +337,16 @@ class RestaurantModel {
 
     final resolvedCovers = allCovers.map((c) => ApiConfig.resolveMedia(c)).toList();
 
-    final menusRaw = (json['menuImages'] as List?)
-        ?.map((e) => e is Map ? (e['url'] ?? e['imageUrl']) as String? : e as String?)
-        .whereType<String>()
-        .where((s) => s.isNotEmpty)
-        .toList() ?? const [];
+    final menus = json['menuImages'];
+    final menusRaw = (menus is List)
+        ? menus
+            .map((e) => e is Map ? (e['url'] ?? e['imageUrl']) as String? : e as String?)
+            .whereType<String>()
+            .where((s) => s.isNotEmpty)
+            .toList()
+        : (menus is String && menus.isNotEmpty)
+            ? [menus]
+            : const <String>[];
 
     final resolvedMenuImages = menusRaw.map((c) => ApiConfig.resolveMedia(c)).toList();
 
@@ -199,7 +359,9 @@ class RestaurantModel {
     final offers = <String>[];
     final offer = json['offer'];
     if (offer is String && offer.isNotEmpty) offers.add(offer);
-    for (final o in (json['offers'] as List?) ?? const []) {
+    final rawOffers = json['offers'];
+    final offersList = rawOffers is List ? rawOffers : const [];
+    for (final o in offersList) {
       if (o is Map && o['title'] is String) {
         offers.add(o['title'] as String);
       } else if (o is String && o.isNotEmpty) {
@@ -224,12 +386,20 @@ class RestaurantModel {
     final restId = (json['_id'] ?? json['id'] ?? json['restaurantId'] ?? '').toString();
     final restName = (json['restaurantName'] ?? json['name'] ?? '').toString();
 
+    final isOpen = _parseIsOpen(json);
+
     if (kDebugMode) {
-      debugPrint('[RESTAURANT_LOCATION] ID: $restId | Name: $restName | Extracted Location: "$areaName"');
+      debugPrint('[RESTAURANT] ID: $restId | Name: $restName | Location: "$areaName" | isOpen: $isOpen');
     }
 
-    final isOpen = json['isAcceptingOrders'] as bool? ?? json['isOpen'] as bool? ?? true;
-    final closes = (json['closingTime'] ?? json['closesIn'] ?? json['operatingHours'] ?? json['openingTime'] ?? '').toString();
+    final closes = (json['closingTime'] ??
+            json['closesIn'] ??
+            json['operatingHours'] ??
+            json['openingTime'] ??
+            json['timings'] ??
+            json['timing'] ??
+            '')
+        .toString();
     final featuredDishName = (json['featuredDish'] as String?)?.isNotEmpty == true ? json['featuredDish'] as String : null;
 
     double parseDouble(dynamic val) {
@@ -258,12 +428,24 @@ class RestaurantModel {
       imageUrl: primaryImageUrl,
       coverImages: resolvedCovers.isNotEmpty ? resolvedCovers : (primaryImageUrl.isNotEmpty ? [primaryImageUrl] : const []),
       menuImages: resolvedMenuImages,
-      rating: parseDouble(json['rating'] ?? json['avgRating'] ?? json['averageRating'] ?? json['ratingAverage'] ?? json['ratings']),
+      rating: _parseRating(json),
       reviewCount: parseInt(json['totalRatings'] ?? json['reviewCount']),
       deliveryTime: deliveryTimeStr,
       deliveryFee: parseDouble(json['deliveryFee']),
-      tags: (json['cuisines'] as List?)?.whereType<String>().toList() ??
-            (json['tags'] as List?)?.whereType<String>().toList() ?? const [],
+      tags: () {
+        final cuisinesRaw = json['cuisines'];
+        final tagsRaw = json['tags'];
+        if (cuisinesRaw is List) {
+          return cuisinesRaw.map((e) => e?.toString() ?? '').where((s) => s.isNotEmpty).toList();
+        } else if (cuisinesRaw is String && cuisinesRaw.isNotEmpty) {
+          return cuisinesRaw.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+        } else if (tagsRaw is List) {
+          return tagsRaw.map((e) => e?.toString() ?? '').where((s) => s.isNotEmpty).toList();
+        } else if (tagsRaw is String && tagsRaw.isNotEmpty) {
+          return tagsRaw.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+        }
+        return const <String>[];
+      }(),
       isFeatured: json['isFeatured'] as bool? ?? false,
       distanceKm: parseDouble(json['distanceInKm'] ?? (parseDouble(json['distanceMeters']) / 1000)),
       latitude: _coordsOf(json).$1,
@@ -287,17 +469,48 @@ class RestaurantModel {
 
   factory RestaurantModel.fromJson(Map<String, dynamic> json) {
     final areaVal = json['area'] as String? ?? _extractLocationFromApi(json);
+    final covers = json['coverImages'];
+    final parsedCovers = (covers is List)
+        ? covers.map((e) => e.toString()).toList()
+        : (covers is String && covers.isNotEmpty)
+            ? [covers]
+            : const <String>[];
+
+    final menus = json['menuImages'];
+    final parsedMenus = (menus is List)
+        ? menus.map((e) => e.toString()).toList()
+        : (menus is String && menus.isNotEmpty)
+            ? [menus]
+            : const <String>[];
+
+    final rawTags = json['tags'];
+    final parsedTags = (rawTags is List)
+        ? rawTags.map((e) => e.toString()).toList()
+        : (rawTags is String && rawTags.isNotEmpty)
+            ? rawTags.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList()
+            : const <String>[];
+
+    final rawOffers = json['offerBadges'];
+    final parsedOffers = (rawOffers is List)
+        ? rawOffers.map((e) => e.toString()).toList()
+        : const <String>[];
+
+    final rawRestTags = json['restaurantTags'];
+    final parsedRestTags = (rawRestTags is List)
+        ? rawRestTags.map((e) => e.toString()).toList()
+        : const <String>[];
+
     return RestaurantModel(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      imageUrl: json['imageUrl'] as String,
-      coverImages: (json['coverImages'] as List<dynamic>?)?.map((e) => e as String).toList() ?? const [],
-      menuImages: (json['menuImages'] as List<dynamic>?)?.map((e) => e as String).toList() ?? const [],
-      rating: (json['rating'] as num?)?.toDouble() ?? 0.0,
-      reviewCount: json['reviewCount'] as int? ?? 0,
+      id: (json['id'] ?? '').toString(),
+      name: (json['name'] ?? '').toString(),
+      imageUrl: (json['imageUrl'] ?? '').toString(),
+      coverImages: parsedCovers,
+      menuImages: parsedMenus,
+      rating: _parseRating(json),
+      reviewCount: (json['reviewCount'] as num?)?.toInt() ?? 0,
       deliveryTime: json['deliveryTime'] as String? ?? '',
       deliveryFee: (json['deliveryFee'] as num?)?.toDouble() ?? 0.0,
-      tags: (json['tags'] as List<dynamic>?)?.map((e) => e as String).toList() ?? const [],
+      tags: parsedTags,
       isFeatured: json['isFeatured'] as bool? ?? false,
       distanceKm: (json['distanceKm'] as num?)?.toDouble() ?? 0.0,
       latitude: (json['latitude'] as num?)?.toDouble(),
@@ -305,9 +518,9 @@ class RestaurantModel {
       priceForOne: (json['priceForOne'] as num?)?.toDouble() ?? 0.0,
       featuredDishName: json['featuredDishName'] as String?,
       isNearAndFast: json['isNearAndFast'] as bool? ?? false,
-      offerBadges: (json['offerBadges'] as List<dynamic>?)?.map((e) => e as String).toList() ?? const [],
-      restaurantTags: (json['restaurantTags'] as List<dynamic>?)?.map((e) => e as String).toList() ?? const [],
-      isOpen: json['isOpen'] as bool? ?? true,
+      offerBadges: parsedOffers,
+      restaurantTags: parsedRestTags,
+      isOpen: _parseIsOpen(json),
       closingTime: json['closingTime'] as String? ?? '',
       isPureVeg: json['isPureVeg'] as bool? ?? false,
       isFreeDelivery: json['isFreeDelivery'] as bool? ?? false,

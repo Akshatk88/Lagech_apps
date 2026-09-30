@@ -1,9 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../di/restaurant_providers.dart';
+import '../../../di/location_providers.dart';
 import '../../../data/models/category_model.dart';
 import '../../../data/models/restaurant_model.dart';
 import '../../../data/models/food_model.dart';
+import '../../../data/models/zone_model.dart';
 import '../../../domain/repository/restaurant_repository.dart';
+import 'zone_viewmodel.dart';
 
 class HomeState {
   final AsyncValue<List<CategoryModel>> categories;
@@ -43,6 +46,20 @@ class HomeViewModel extends Notifier<HomeState> {
   @override
   HomeState build() {
     _repository = ref.watch(restaurantRepositoryProvider);
+
+    // Reactively refresh when zone or location changes
+    ref.listen(currentZoneIdProvider, (previous, next) {
+      if (previous != next) {
+        loadHomeData(isRefresh: true);
+      }
+    });
+
+    ref.listen(userLatLngProvider, (previous, next) {
+      if (previous?.value != next.value && next.value != null) {
+        loadHomeData(isRefresh: true);
+      }
+    });
+
     Future.microtask(() => loadHomeData());
     return HomeState(
       categories: const AsyncValue.loading(),
@@ -64,6 +81,12 @@ class HomeViewModel extends Notifier<HomeState> {
         nearbyRestaurants: const AsyncValue.loading(),
       );
     }
+
+    // First resolve the user's location and detected admin zone
+    await Future.wait([
+      ref.read(userLatLngProvider.future).catchError((_) => null),
+      ref.read(zoneViewModelProvider.future).catchError((_) => ZoneModel.unknown),
+    ]);
 
     // Each onCache fires synchronously, right here, with whatever's still
     // cached from the last fetch — paints the screen instantly instead of a

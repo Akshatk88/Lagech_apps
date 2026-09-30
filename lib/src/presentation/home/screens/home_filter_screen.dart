@@ -14,6 +14,7 @@ import '../../navigation/route_names.dart';
 import '../viewmodels/home_viewmodel.dart';
 import '../viewmodels/near_you_viewmodel.dart';
 import '../widgets/restaurant_card.dart';
+import 'top_10_screen.dart';
 
 /// Filter screen arguments passed when opening from quick filter pills.
 class HomeFilterArgs {
@@ -36,6 +37,11 @@ class HomeFilterScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final bool isTop10 = args.title.contains('Top 10') || args.title.toLowerCase().contains('top order');
+    if (isTop10) {
+      return const Top10Screen();
+    }
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : AppColors.textPrimaryLight;
     final secondaryTextColor =
@@ -61,13 +67,34 @@ class HomeFilterScreen extends ConsumerWidget {
           icon: Icon(Icons.arrow_back_rounded, color: textColor),
           onPressed: () => context.backOr(),
         ),
-        title: Text(
-          args.title,
-          style: TextStyle(
-            color: textColor,
-            fontWeight: FontWeight.bold,
-            fontSize: 17.sp,
-          ),
+        title: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              args.title,
+              style: TextStyle(
+                color: textColor,
+                fontWeight: FontWeight.bold,
+                fontSize: 17.sp,
+              ),
+            ),
+            if (!isNearYou)
+              restaurantsAsync.maybeWhen(
+                data: (restaurants) {
+                  final count = restaurants.where(args.matches).length;
+                  final display = args.title.contains('Top 10') ? count.clamp(0, 10) : count;
+                  return Text(
+                    '$display restaurants',
+                    style: TextStyle(
+                      color: secondaryTextColor,
+                      fontSize: 11.sp,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  );
+                },
+                orElse: () => const SizedBox.shrink(),
+              ),
+          ],
         ),
       ),
       body: AppRefreshIndicator(
@@ -92,7 +119,18 @@ class HomeFilterScreen extends ConsumerWidget {
             isNearYou: isNearYou,
           ),
           data: (restaurants) {
-            final matched = isNearYou ? restaurants : restaurants.where(args.matches).toList();
+            List<RestaurantModel> matched;
+            if (isNearYou) {
+              matched = restaurants;
+            } else {
+              matched = restaurants.where(args.matches).toList();
+              // Sort by rating (best first)
+              matched.sort((a, b) => b.rating.compareTo(a.rating));
+              // For "Top 10" screen, limit to 10 results
+              if (args.title.contains('Top 10')) {
+                matched = matched.take(10).toList();
+              }
+            }
 
             if (matched.isEmpty) {
               return _buildEmptyState(

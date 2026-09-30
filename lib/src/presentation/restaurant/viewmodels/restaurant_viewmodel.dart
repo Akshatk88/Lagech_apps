@@ -20,6 +20,10 @@ class RestaurantViewModel extends Notifier<RestaurantState> {
     _service = ref.watch(restaurantServiceProvider);
 
     ref.listen<bool>(vegFilterProvider, (previous, next) {
+      state = state.copyWith(
+        isVegOnly: next,
+        isNonVegOnly: next ? false : state.isNonVegOnly,
+      );
       _updateFilteredList();
     });
 
@@ -27,8 +31,25 @@ class RestaurantViewModel extends Notifier<RestaurantState> {
   }
 
   Future<void> loadMenu(RestaurantModel restaurant, {bool isRefresh = false}) async {
-    if (!isRefresh && state.allItems.isEmpty) {
-      state = state.copyWith(restaurant: restaurant, isLoading: true);
+    final isDifferentRestaurant = state.restaurant?.id != restaurant.id;
+    final isGlobalVeg = ref.read(vegFilterProvider);
+
+    if (isDifferentRestaurant || isRefresh || state.allItems.isEmpty) {
+      state = RestaurantState(
+        restaurant: restaurant,
+        allItems: const [],
+        filteredItems: const [],
+        categories: const [],
+        selectedCategoryId: 'all',
+        searchQuery: '',
+        isVegOnly: isGlobalVeg,
+        isNonVegOnly: false,
+        isMinRating4: false,
+        isBestSellerOnly: false,
+        isRatingSort: false,
+        isLoading: true,
+        errorMessage: null,
+      );
     } else {
       state = state.copyWith(restaurant: restaurant);
     }
@@ -45,6 +66,7 @@ class RestaurantViewModel extends Notifier<RestaurantState> {
           filteredItems: filtered,
           categories: categories,
           isLoading: false,
+          errorMessage: null,
         );
       } else {
         state = state.copyWith(
@@ -119,14 +141,12 @@ class RestaurantViewModel extends Notifier<RestaurantState> {
   }
 
   List<FoodModel> _applyFilters(List<FoodModel> items, RestaurantState currentState) {
-    final isGlobalVegOnly = ref.read(vegFilterProvider);
-    final effectiveVegOnly = isGlobalVegOnly || currentState.isVegOnly;
     return _service.filterMenu(
       items: items,
       query: currentState.searchQuery,
       categoryId: currentState.selectedCategoryId,
-      isVegOnly: effectiveVegOnly,
-      isNonVegOnly: effectiveVegOnly ? false : currentState.isNonVegOnly,
+      isVegOnly: currentState.isVegOnly,
+      isNonVegOnly: currentState.isNonVegOnly,
       isMinRating4: currentState.isMinRating4,
       isBestSellerOnly: currentState.isBestSellerOnly,
       isRatingSort: currentState.isRatingSort,

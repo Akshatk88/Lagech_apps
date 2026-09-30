@@ -61,10 +61,16 @@ class FoodModel {
   /// Deduplicated because the backend keeps `image` as `images[0]`, so a naive
   /// merge of the two would repeat the primary and render a duplicate slide.
   static List<String> _galleryFrom(Map<String, dynamic> json) {
+    final imagesRaw = json['images'];
+    final List<dynamic> imagesList = imagesRaw is List
+        ? imagesRaw
+        : (imagesRaw is String && imagesRaw.trim().isNotEmpty)
+            ? [imagesRaw.trim()]
+            : const [];
+
     final raw = <String?>[
       json['image'] as String?,
-      ...((json['images'] as List<dynamic>?) ?? const [])
-          .map((e) => e?.toString()),
+      ...imagesList.map((e) => e?.toString()),
     ];
 
     final seen = <String>{};
@@ -100,11 +106,14 @@ class FoodModel {
   /// (`/public/foods`) and by each menu section's `items[]` — same shape.
   factory FoodModel.fromApi(Map<String, dynamic> json, {String? restaurantId}) {
     final price = (json['price'] as num?)?.toDouble() ?? 0.0;
-    final rawImage = (json['image'] as String?)?.trim().isNotEmpty == true
+    final imagesRaw = json['images'];
+    final rawImage = (json['image'] is String && (json['image'] as String).trim().isNotEmpty)
         ? (json['image'] as String).trim()
-        : (json['images'] is List && (json['images'] as List).isNotEmpty)
-            ? (json['images'] as List).first?.toString().trim()
-            : null;
+        : (imagesRaw is List && imagesRaw.isNotEmpty)
+            ? imagesRaw.first?.toString().trim()
+            : (imagesRaw is String && imagesRaw.trim().isNotEmpty)
+                ? imagesRaw.trim()
+                : null;
 
     return FoodModel(
       id: (json['_id'] ?? json['id'] ?? '').toString(),
@@ -134,23 +143,30 @@ class FoodModel {
   }
 
   factory FoodModel.fromJson(Map<String, dynamic> json) {
+    final imagesRaw = json['imageGallery'];
+    final List<String> parsedGallery = (imagesRaw is List)
+        ? imagesRaw.map((e) => e.toString()).toList()
+        : (imagesRaw is String && imagesRaw.isNotEmpty)
+            ? [imagesRaw]
+            : const [];
+
     return FoodModel(
-      id: json['id'] as String,
-      restaurantId: json['restaurantId'] as String,
-      name: json['name'] as String,
-      description: json['description'] as String,
-      price: (json['price'] as num).toDouble(),
+      id: (json['id'] ?? '').toString(),
+      restaurantId: (json['restaurantId'] ?? '').toString(),
+      name: (json['name'] ?? '').toString(),
+      description: (json['description'] ?? '').toString(),
+      price: (json['price'] as num?)?.toDouble() ?? 0.0,
       // Same rule as fromApi: a cached model must not resurrect a zero or
       // below-price compare-at value that the network path would have dropped.
       originalPrice: _compareAtPrice(
         json['originalPrice'],
-        (json['price'] as num).toDouble(),
+        (json['price'] as num?)?.toDouble() ?? 0.0,
       ),
-      imageUrl: json['imageUrl'] as String,
-      imageGallery: (json['imageGallery'] as List<dynamic>?)?.map((e) => e as String).toList() ?? [],
+      imageUrl: (json['imageUrl'] ?? '').toString(),
+      imageGallery: parsedGallery,
       rating: (json['rating'] as num?)?.toDouble() ?? 0.0,
-      reviewCount: json['reviewCount'] as int? ?? 0,
-      calories: json['calories'] as int? ?? 0,
+      reviewCount: (json['reviewCount'] as num?)?.toInt() ?? 0,
+      calories: (json['calories'] as num?)?.toInt() ?? 0,
       deliveryTime: json['deliveryTime'] as String? ?? '',
       isVeg: json['isVeg'] as bool? ?? false,
       isSpicy: json['isSpicy'] as bool? ?? false,

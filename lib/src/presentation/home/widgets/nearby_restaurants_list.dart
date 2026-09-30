@@ -175,7 +175,9 @@ class _RecommendedCard extends ConsumerWidget {
     final ratingText = ratingVal.toStringAsFixed(1);
 
     final String badgeText;
-    if (startingPrice != null && startingPrice > 0) {
+    if (!target.isOpen) {
+      badgeText = 'CLOSED';
+    } else if (startingPrice != null && startingPrice > 0) {
       final priceStr = startingPrice % 1 == 0
           ? startingPrice.toInt().toString()
           : startingPrice.toStringAsFixed(0);
@@ -209,7 +211,56 @@ class _RecommendedCard extends ConsumerWidget {
                   height: 108.h,
                   borderRadius: BorderRadius.circular(16.r),
                 ),
-                // Top Left Dark Pill Badge — matching reference screenshot
+                // Closed overlay
+                if (!target.isOpen)
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.42),
+                        borderRadius: BorderRadius.circular(16.r),
+                      ),
+                      child: Center(
+                        child: Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 9.w,
+                            vertical: 4.h,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xEFDC2626),
+                            borderRadius: BorderRadius.circular(6.r),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.3),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.lock_clock_rounded,
+                                size: 11.sp,
+                                color: Colors.white,
+                              ),
+                              SizedBox(width: 3.w),
+                              Text(
+                                'CLOSED',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10.5.sp,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.6,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                // Top Left Pill Badge
                 if (badgeText.isNotEmpty)
                   Positioned(
                     top: 8.h,
@@ -220,13 +271,22 @@ class _RecommendedCard extends ConsumerWidget {
                         vertical: 3.h,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.68),
+                        color: !target.isOpen
+                            ? const Color(0xFFDC2626)
+                            : Colors.black.withValues(alpha: 0.68),
                         borderRadius: BorderRadius.circular(6.r),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (target.isPureVeg) ...[
+                          if (!target.isOpen) ...[
+                            Icon(
+                              Icons.lock_clock_rounded,
+                              size: 10.sp,
+                              color: Colors.white,
+                            ),
+                            SizedBox(width: 3.w),
+                          ] else if (target.isPureVeg) ...[
                             Container(
                               width: 9.r,
                               height: 9.r,
@@ -328,9 +388,34 @@ class _RecommendedCard extends ConsumerWidget {
             ),
             SizedBox(height: 3.h),
 
-            // Subtitle: Green flash/bolt icon + "Near & Fast" (or delivery time if > 35 min)
+            // Subtitle: Closed status or Near & Fast
             Builder(
               builder: (context) {
+                if (!target.isOpen) {
+                  return Row(
+                    children: [
+                      Icon(
+                        Icons.do_not_disturb_on_rounded,
+                        color: const Color(0xFFEF4444),
+                        size: 13.sp,
+                      ),
+                      SizedBox(width: 3.w),
+                      Expanded(
+                        child: Text(
+                          'Closed for Delivery',
+                          style: TextStyle(
+                            color: const Color(0xFFEF4444),
+                            fontSize: 11.5.sp,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  );
+                }
+
                 final delTime = target.deliveryTime.trim();
                 final isSlower = delTime.contains('35') ||
                     delTime.contains('40') ||

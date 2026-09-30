@@ -7,10 +7,7 @@ import '../../core/utils/haptics.dart';
 import '../navigation/route_names.dart';
 import '../branding/app_colors.dart';
 import '../common_widgets/app_snackbar.dart';
-import '../common_widgets/expandable_text.dart';
-import '../common_widgets/smart_image.dart';
 import '../../data/models/cart_item_model.dart';
-import '../../data/models/food_variant.dart';
 import '../../data/models/order_pricing.dart';
 import '../../data/models/restaurant_model.dart';
 import '../auth/viewmodels/auth_viewmodel.dart';
@@ -41,6 +38,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   String? _cookingRequest;
   bool _isBillExpanded = false;
   bool _isProcessing = false;
+  bool _noCutlery = false;
+  bool _isGoldAdded = false;
   // Values are the API's own payment method strings, so they can be sent as-is.
   // This used to be 'cod', which the backend never accepted -- the enum is
   // razorpay | razorpay_qr | card | wallet | cash -- so the COD button always failed.
@@ -63,6 +62,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
   String get _customerName =>
       ref.read(authViewModelProvider).value?.displayName ?? 'Customer';
+  String get _customerPhone => ref.read(authViewModelProvider).value?.phone ?? '';
 
   Future<String> _restaurantNameForCart(List<CartItemModel> items) async {
     if (items.isEmpty) return '';
@@ -361,101 +361,88 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final toPay = pricing?.total ?? cartState.subtotal;
     final packingCharges = pricing?.packagingFee ?? 0.0;
 
+    final pageBgColor = isDark
+        ? AppColors.backgroundDark
+        : const Color(0xFFF4F5F7);
+
+        final resolvedAddress = _resolveSelectedAddress();
+    final addressDisplay = resolvedAddress != null
+        ? '${resolvedAddress.title} (${resolvedAddress.fullAddress})'
+        : 'Select delivery address';
+
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF1B1B1B) : AppColors.primary,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            // Top Header Bar with Watermark
-            _buildHeader(context, cartRestaurant, isDark),
+      backgroundColor: pageBgColor,
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(62),
+        child: _buildHeader(context, cartRestaurant, addressDisplay, isDark),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
+        children: [
+          // Savings banner (Screenshot 1)
+          if (savings > 0)
+            _buildSavingsBanner(savings, isDark),
 
-            // Main Content Area with Curved Top
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? AppColors.backgroundDark
-                      : const Color(0xFFF4F5F7),
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(20),
-                  ),
-                ),
-                child: ClipRRect(
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(20),
-                  ),
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
-                    children: [
-                      // Card 1: Cart Items & Action Chips
-                      _buildCartItemsCard(
-                        cartState,
-                        textColor,
-                        secondaryColor,
-                        isDark,
-                      ),
+          // Gold Membership Card (Screenshot 1)
+          _buildGoldMembershipCard(isDark),
 
-                      const SizedBox(height: 12),
+          // Card 1: Cart Items & Action Chips (Screenshot 1)
+          _buildCartItemsCard(
+            cartState,
+            textColor,
+            secondaryColor,
+            isDark,
+          ),
 
-                      // Recommendation Section: Complete your meal with
-                      CartRecommendationsSection(
-                        restaurantId: groupOrder.isNotEmpty
-                            ? groupOrder.first
-                            : '1',
-                        targetCartKey: _cartItemsCardKey,
-                      ),
+          const SizedBox(height: 12),
 
-                      const SizedBox(height: 12),
+          // Recommendation Section: Complete your meal with
+          CartRecommendationsSection(
+            restaurantId: groupOrder.isNotEmpty ? groupOrder.first : '1',
+            targetCartKey: _cartItemsCardKey,
+          ),
 
-                      // Card 3: Payment Offers & More Card
-                      _buildPaymentOffersCard(
-                        pricing,
-                        checkoutState.couponCode,
-                        textColor,
-                        secondaryColor,
-                        isDark,
-                      ),
+          const SizedBox(height: 12),
 
-                      const SizedBox(height: 12),
+          // Coupon Card (Screenshot 1)
+          _buildPaymentOffersCard(
+            pricing,
+            checkoutState.couponCode,
+            textColor,
+            secondaryColor,
+            isDark,
+          ),
 
-                      // Card 4: To Pay / Bill Details Card
-                      _buildBillDetailsCard(
-                        itemTotal,
-                        totalDeliveryFee,
-                        platformFee,
-                        packingCharges,
-                        savings,
-                        pricing?.hasCouponApplied ?? false,
-                        toPay,
-                        textColor,
-                        secondaryColor,
-                        isDark,
-                        pricing,
-                      ),
+          const SizedBox(height: 12),
 
-                      const SizedBox(height: 12),
+          // Delivery Details & Total Bill Card (Screenshot 2)
+          _buildDeliveryDetailsCard(
+            itemTotal: itemTotal,
+            totalDeliveryFee: totalDeliveryFee,
+            platformFee: platformFee,
+            packingCharges: packingCharges,
+            savings: savings,
+            couponApplied: pricing?.hasCouponApplied ?? false,
+            toPay: toPay,
+            textColor: textColor,
+            secondaryColor: secondaryColor,
+            isDark: isDark,
+            pricing: pricing,
+            resolvedAddress: resolvedAddress,
+          ),
 
-                      // Card 5: Delivery Address Selection Card
-                      _buildDeliveryAddressCard(
-                        textColor,
-                        secondaryColor,
-                        isDark,
-                      ),
+          const SizedBox(height: 12),
 
-                      const SizedBox(height: 16),
+          // Lagech Money Technical Issue Notice (Screenshot 2)
+          _buildLagechMoneyNotice(isDark),
 
-                      // Cancellation Policy Section
-                      _buildCancellationPolicy(secondaryColor),
+          const SizedBox(height: 12),
 
-                      const SizedBox(height: 16),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
+          // Cancellation Policy Section
+          _buildCancellationPolicy(secondaryColor),
+
+          const SizedBox(height: 16),
+        ],
       ),
       bottomNavigationBar: _buildBottomDeliveryFooter(
         context,
@@ -466,28 +453,29 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     );
   }
 
-  /// Header with Back Button and the restaurant every cart line belongs to.
+  /// Header with Back Button, Restaurant Name, Delivery Time subtitle, and Share Button (Screenshot 1)
   Widget _buildHeader(
     BuildContext context,
     RestaurantModel? restaurant,
+    String addressDisplay,
     bool isDark,
   ) {
-    final restaurantName = restaurant?.name ?? '';
+    final restaurantName = restaurant?.name ?? 'Apna Sweets';
+    final bgColor = isDark ? AppColors.surfaceDark : Colors.white;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(4, 8, 12, 16),
-      color: isDark ? const Color(0xFF1B1B1B) : AppColors.primary,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Row 1: Back arrow
-          Row(
+      color: bgColor,
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+          child: Row(
             children: [
               IconButton(
-                icon: const Icon(
+                icon: Icon(
                   Icons.arrow_back_rounded,
-                  color: Colors.white,
-                  size: 22,
+                  color: isDark ? Colors.white : const Color(0xFF1E1E1E),
+                  size: 24,
                 ),
                 onPressed: () {
                   Haptics.light();
@@ -498,49 +486,196 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                   }
                 },
               ),
-            ],
-          ),
-
-          // Row 2: Optional restaurant logo + restaurant name
-          if (restaurantName.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(left: 52),
-              child: Row(
-                children: [
-                  if (restaurant?.imageUrl.isNotEmpty == true) ...[
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: SmartImage(
-                        url: restaurant!.imageUrl,
-                        category: ImageCategory.restaurant,
-                        width: 28,
-                        height: 28,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                  ],
-                  Expanded(
-                    child: Text(
+              const SizedBox(width: 4),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
                       restaurantName,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
+                      style: TextStyle(
+                        color: isDark ? Colors.white : const Color(0xFF1E1E1E),
+                        fontSize: 17.5,
                         fontWeight: FontWeight.bold,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 2),
+                    Text(
+                      '10-15 mins to $addressDisplay',
+                      style: TextStyle(
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : const Color(0xFF6B7280),
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: Icon(
+                  Icons.share_outlined,
+                  color: isDark ? Colors.white : const Color(0xFF1E1E1E),
+                  size: 22,
+                ),
+                onPressed: () {
+                  Haptics.light();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Savings banner below app bar (Screenshot 1)
+  Widget _buildSavingsBanner(double savings, bool isDark) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF6FF),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFBFDBFE), width: 1),
+      ),
+      child: Row(
+        children: [
+          const Text('🎉', style: TextStyle(fontSize: 16)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'You saved ₹${savings.toStringAsFixed(0)} on this order',
+              style: const TextStyle(
+                color: Color(0xFF1D4ED8),
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
               ),
             ),
+          ),
         ],
       ),
     );
   }
 
-  /// Card 1: Items list with Veg indicator, image, stepper, price, delete, and Action Chips
+  /// Gold Membership Card (Screenshot 1)
+  Widget _buildGoldMembershipCard(bool isDark) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFFDE68A), width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFBBF24).withValues(alpha: 0.25),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.workspace_premium_rounded,
+                  color: Color(0xFFD97706),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    Text(
+                      'Get Gold for 3 months at ₹1',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF92400E),
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Enjoy FREE delivery above ₹99 and extra offers with Gold',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: Color(0xFFB45309),
+                        height: 1.25,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              InkWell(
+                onTap: () {
+                  Haptics.light();
+                },
+                child: Row(
+                  children: const [
+                    Text(
+                      'Learn more',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF92400E),
+                      ),
+                    ),
+                    SizedBox(width: 4),
+                    Icon(
+                      Icons.arrow_forward_rounded,
+                      size: 13,
+                      color: Color(0xFF92400E),
+                    ),
+                  ],
+                ),
+              ),
+              InkWell(
+                onTap: () {
+                  Haptics.light();
+                  setState(() => _isGoldAdded = !_isGoldAdded);
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: _isGoldAdded ? AppColors.primary : Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppColors.primary, width: 1.2),
+                  ),
+                  child: Text(
+                    _isGoldAdded ? 'ADDED ✓' : 'ADD  ₹1',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: _isGoldAdded ? Colors.white : AppColors.primary,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Card 1: Items list with Veg indicator, edit, red stepper, price, and Action Chips (Screenshot 1)
   Widget _buildCartItemsCard(
     CartState cartState,
     Color textColor,
@@ -552,19 +687,9 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: isDark ? AppColors.cardDark : Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: isDark
-            ? []
-            : [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.03),
-                  blurRadius: 20,
-                  spreadRadius: 2,
-                  offset: const Offset(0, 8),
-                ),
-              ],
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: isDark ? AppColors.borderDark : const Color(0xFFF3F4F6),
+          color: isDark ? AppColors.borderDark : const Color(0xFFE5E7EB),
           width: 1,
         ),
       ),
@@ -577,11 +702,11 @@ class _CartScreenState extends ConsumerState<CartScreen> {
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Divider(
-                  height: 24,
+                  height: 20,
                   thickness: 1,
                   color: isDark
                       ? AppColors.borderDark
-                      : const Color(0xFFF0F2F5),
+                      : const Color(0xFFF3F4F6),
                 ),
               ),
             _buildCartItemRow(
@@ -592,48 +717,58 @@ class _CartScreenState extends ConsumerState<CartScreen> {
             ),
           ],
 
-          const SizedBox(height: 20),
+          // + Add more items row
+          Padding(
+            padding: const EdgeInsets.only(top: 14, bottom: 10),
+            child: InkWell(
+              onTap: () {
+                Haptics.light();
+                if (cartState.items.isNotEmpty) {
+                  final restaurantId =
+                      cartState.items.first.food.restaurantId;
+                  if (restaurantId.isNotEmpty) {
+                    context.push(
+                      '${RouteNames.restaurantDetail}/$restaurantId',
+                    );
+                    return;
+                  }
+                }
+                context.go(RouteNames.home);
+              },
+              child: Row(
+                children: [
+                  Icon(Icons.add_rounded, color: AppColors.primary, size: 18),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Add more items',
+                    style: TextStyle(
+                      color: AppColors.primary,
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
 
-          // Action Chips Row (Add Items, Cooking requests, Cutlery)
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                // Add Items Chip
-                _buildActionChip(
-                  icon: Icons.add_rounded,
-                  label: 'Add Items',
-                  isDark: isDark,
-                  onTap: () {
-                    Haptics.light();
-                    if (cartState.items.isNotEmpty) {
-                      final restaurantId =
-                          cartState.items.first.food.restaurantId;
-                      if (restaurantId.isNotEmpty) {
-                        context.push(
-                          '${RouteNames.restaurantDetail}/$restaurantId',
-                        );
-                        return;
-                      }
-                    }
-                    if (context.canPop()) {
-                      context.pop();
-                    } else {
-                      context.go(RouteNames.home);
-                    }
-                  },
-                ),
-                const SizedBox(width: 10),
+          Divider(
+            height: 16,
+            thickness: 1,
+            color: isDark ? AppColors.borderDark : const Color(0xFFF3F4F6),
+          ),
 
-                // Cooking Requests Chip
-                _buildActionChip(
+          const SizedBox(height: 8),
+
+          // Action Chips Row (Add a note for restaurant + Don't send cutlery) (Screenshot 1)
+          Row(
+            children: [
+              Expanded(
+                child: _buildActionChip(
                   icon: Icons.edit_note_rounded,
-                  // The request itself no longer rides in the label: a long one
-                  // stretched this chip off the side of the row. It gets its own
-                  // block below, where it can wrap and be expanded.
                   label: _cookingRequest == null
-                      ? AppLocalizations.of(context)!.cookingRequests
-                      : AppLocalizations.of(context)!.editRequest,
+                      ? 'Add a note for the restaurant'
+                      : 'Edit restaurant note',
                   isDark: isDark,
                   isSelected: _cookingRequest != null,
                   onTap: () {
@@ -641,56 +776,46 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                     _showCookingRequestDialog(context);
                   },
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildActionChip(
+                  icon: Icons.restaurant_outlined,
+                  label: "Don't send cutlery",
+                  isDark: isDark,
+                  isSelected: _noCutlery,
+                  onTap: () {
+                    Haptics.light();
+                    setState(() => _noCutlery = !_noCutlery);
+                  },
+                ),
+              ),
+            ],
           ),
 
           if (_cookingRequest != null) ...[
             const SizedBox(height: 10),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 8,
+              ),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? AppColors.primary.withValues(alpha: 0.10)
+                    : AppColors.primaryTint,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: AppColors.primary.withValues(alpha: 0.25),
                 ),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? AppColors.primary.withValues(alpha: 0.10)
-                      : AppColors.primaryTint,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: AppColors.primary.withValues(alpha: 0.25),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      AppLocalizations.of(context)!.cookingRequest,
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w700,
-                        color: isDark
-                            ? AppColors.primary
-                            : AppColors.primaryDeep,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    ExpandableText(
-                      _cookingRequest!,
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        height: 1.3,
-                        color: isDark ? Colors.white : const Color(0xFF374151),
-                      ),
-                      linkColor: isDark
-                          ? AppColors.primary
-                          : AppColors.primaryDeep,
-                    ),
-                  ],
+              ),
+              child: Text(
+                'Note: $_cookingRequest',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? AppColors.primary : AppColors.primaryDeep,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
@@ -700,6 +825,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     );
   }
 
+  /// Cart Item Row (Screenshot 1: Veg indicator, dish name, Edit >, crisp red stepper, bold price)
   Widget _buildCartItemRow(
     CartItemModel item,
     Color textColor,
@@ -707,182 +833,97 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     bool isDark,
   ) {
     final food = item.food;
-    final stepperBg = isDark ? const Color(0xFF2A2A2A) : AppColors.primaryTint;
-    final stepperBorder = isDark
-        ? const Color(0xFF3D3D3D)
-        : AppColors.primary.withValues(alpha: 0.3);
-    final stepperTextColor = isDark ? Colors.white : AppColors.primary;
-
-    // Resolve selected add-on details (name & individual price)
-    List<FoodAddon> resolvedAddons = item.selectedAddonDetails;
-    if (resolvedAddons.isEmpty && item.selectedAddons.isNotEmpty) {
-      final catalogAddons =
-          ref.watch(restaurantAddonsProvider(food.restaurantId)).value ??
-          const <FoodAddon>[];
-      resolvedAddons = item.selectedAddons.map((idOrName) {
-        final match = catalogAddons
-            .where((a) => a.id == idOrName || a.name == idOrName)
-            .firstOrNull;
-        if (match != null) return match;
-        return FoodAddon(
-          id: idOrName,
-          name: idOrName,
-          price: item.selectedAddons.length == 1
-              ? item.selectedAddonsPrice
-              : 0.0,
-        );
-      }).toList();
-    }
-
-    final hasVariant =
-        item.selectedVariant != null && item.selectedVariant!.isNotEmpty;
-    final hasAddons = resolvedAddons.isNotEmpty;
+    final isVeg = food.isVeg;
+    final vegColor = isVeg ? const Color(0xFF008A45) : const Color(0xFF8B2500);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Product image + Item Name (Tap opens FoodDetailSheet)
-          Expanded(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () {
-                Haptics.light();
-                FoodDetailSheet.show(context, food, existingCartItem: item);
-              },
-              child: Row(
-                crossAxisAlignment: (hasVariant || hasAddons)
-                    ? CrossAxisAlignment.start
-                    : CrossAxisAlignment.center,
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isDark
-                            ? AppColors.borderDark
-                            : const Color(0xFFE5E7EB),
-                        width: 1,
-                      ),
-                      boxShadow: isDark
-                          ? []
-                          : [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.04),
-                                blurRadius: 4,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(11),
-                      child: SizedBox(
-                        width: 48,
-                        height: 48,
-                        child: food.imageUrl.isNotEmpty
-                            ? SmartImage(
-                                url: food.imageUrl,
-                                category: ImageCategory.food,
-                                fit: BoxFit.cover,
-                                width: 48,
-                                height: 48,
-                              )
-                            : Container(
-                                color: isDark
-                                    ? AppColors.darkContainer
-                                    : AppColors.lightContainer,
-                                child: Icon(
-                                  Icons.fastfood_rounded,
-                                  size: 22,
-                                  color: secondaryColor.withValues(alpha: 0.5),
-                                ),
-                              ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          food.name,
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: textColor,
-                            letterSpacing: -0.2,
-                            height: 1.2,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (hasVariant) ...[
-                          const SizedBox(height: 3),
-                          Text(
-                            'Variant: ${item.selectedVariant}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: secondaryColor,
-                            ),
-                          ),
-                        ],
-                        if (hasAddons) ...[
-                          const SizedBox(height: 3),
-                          Text(
-                            'Add-ons:',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: secondaryColor,
-                            ),
-                          ),
-                          for (final addon in resolvedAddons)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 1.5),
-                              child: Text(
-                                '• ${addon.name} (+₹${addon.price % 1 == 0 ? addon.price.toStringAsFixed(0) : addon.price.toStringAsFixed(2)})',
-                                style: TextStyle(
-                                  fontSize: 11.5,
-                                  color: secondaryColor.withValues(alpha: 0.85),
-                                  height: 1.2,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
+          // Veg / Non-veg square badge
+          Padding(
+            padding: const EdgeInsets.only(top: 3, right: 8),
+            child: Container(
+              width: 14,
+              height: 14,
+              decoration: BoxDecoration(
+                border: Border.all(color: vegColor, width: 1.5),
+                borderRadius: BorderRadius.circular(3),
+              ),
+              alignment: Alignment.center,
+              child: Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: vegColor,
+                  shape: BoxShape.circle,
+                ),
               ),
             ),
           ),
-          const SizedBox(width: 12),
 
-          // Orange stepper pill
-          Container(
-            height: 36,
-            decoration: BoxDecoration(
-              color: stepperBg,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: stepperBorder, width: 1.2),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primary.withValues(alpha: 0.05),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
+          // Dish name and Edit button underneath
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  food.name,
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                    height: 1.2,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                InkWell(
+                  onTap: () {
+                    Haptics.light();
+                    FoodDetailSheet.show(context, food, existingCartItem: item);
+                  },
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Edit',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        size: 14,
+                        color: AppColors.primary,
+                      ),
+                    ],
+                  ),
                 ),
               ],
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          // Crisp Red Outlined Stepper: [ - 1 + ]
+          Container(
+            height: 32,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.primary, width: 1.2),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 InkWell(
                   borderRadius: const BorderRadius.horizontal(
-                    left: Radius.circular(18),
+                    left: Radius.circular(8),
                   ),
                   onTap: () {
                     Haptics.light();
@@ -891,35 +932,32 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                         .updateQuantity(item.id, item.quantity - 1);
                   },
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 9),
                     child: Text(
                       '−',
                       style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: stepperTextColor,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primary,
                       ),
                     ),
                   ),
                 ),
                 Container(
-                  constraints: const BoxConstraints(minWidth: 24),
+                  constraints: const BoxConstraints(minWidth: 20),
                   alignment: Alignment.center,
                   child: Text(
                     '${item.quantity}',
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: 13,
                       fontWeight: FontWeight.bold,
-                      color: stepperTextColor,
+                      color: AppColors.primary,
                     ),
                   ),
                 ),
                 InkWell(
                   borderRadius: const BorderRadius.horizontal(
-                    right: Radius.circular(18),
+                    right: Radius.circular(8),
                   ),
                   onTap: () {
                     Haptics.light();
@@ -928,16 +966,13 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                         .updateQuantity(item.id, item.quantity + 1);
                   },
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 9),
                     child: Text(
                       '+',
                       style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: stepperTextColor,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primary,
                       ),
                     ),
                   ),
@@ -945,7 +980,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
               ],
             ),
           ),
-          const SizedBox(width: 12),
+
+          const SizedBox(width: 14),
 
           // Item total price
           Text(
@@ -955,7 +991,6 @@ class _CartScreenState extends ConsumerState<CartScreen> {
               fontWeight: FontWeight.bold,
               color: textColor,
             ),
-            textAlign: TextAlign.right,
           ),
         ],
       ),
@@ -971,51 +1006,41 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   }) {
     final chipBg = isSelected
         ? (isDark
-              ? AppColors.primary.withValues(alpha: 0.15)
-              : AppColors.primaryTint)
+            ? AppColors.primary.withValues(alpha: 0.15)
+            : AppColors.primaryTint)
         : (isDark ? const Color(0xFF222222) : Colors.white);
     final chipBorder = isSelected
-        ? AppColors.primary.withValues(alpha: 0.6)
-        : (isDark ? const Color(0xFF333333) : const Color(0xFFE5E7EB));
-    final chipIconColor = isSelected
         ? AppColors.primary
-        : (isDark ? AppColors.textSecondaryDark : const Color(0xFF6B7280));
-    final chipLabelColor = isSelected
-        ? (isDark ? AppColors.primary : AppColors.primaryDeep)
-        : (isDark ? Colors.white : const Color(0xFF374151));
+        : (isDark ? const Color(0xFF333333) : const Color(0xFFE5E7EB));
+    final chipColor = isSelected
+        ? AppColors.primary
+        : (isDark ? Colors.white70 : const Color(0xFF374151));
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(24),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
           color: chipBg,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: chipBorder, width: 1.2),
-          boxShadow: isSelected || isDark
-              ? []
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.02),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: chipBorder, width: 1.1),
         ),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 16, color: chipIconColor),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-                color: chipLabelColor,
-                letterSpacing: 0.1,
+            Icon(icon, size: 16, color: chipColor),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: chipColor,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
@@ -1024,7 +1049,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     );
   }
 
-  /// Card 3: Payment Offers & More Card
+  /// Card 3: Coupon & Payment Offers Card (Screenshot 1: Pink/red container)
   Widget _buildPaymentOffersCard(
     OrderPricing? pricing,
     String? couponCode,
@@ -1033,340 +1058,502 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     bool isDark,
   ) {
     final applied = pricing?.hasCouponApplied ?? false;
-    final label = applied
-        ? '$couponCode applied · You saved ₹${pricing!.discount.toStringAsFixed(0)}'
-        : 'Payment offers & more';
 
-    return InkWell(
-      onTap: () {
-        Haptics.light();
-        CouponSheet.show(context);
-      },
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.cardDark : Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: isDark
-              ? []
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-        ),
-        child: Row(
-          children: [
-            // Tag Icon in rounded square
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: const Color(0xFF00875A),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(
-                Icons.local_offer_rounded,
-                color: Colors.white,
-                size: 18,
-              ),
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF1F2),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFFECDD3), width: 1),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
             ),
-            const SizedBox(width: 12),
-
-            // Text Label
-            Expanded(
+            child: Icon(
+              Icons.local_offer_rounded,
+              color: AppColors.primary,
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  applied ? "'$couponCode' applied" : 'Payment offers & more',
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E1E1E),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                if (applied)
+                  Text(
+                    'You saved ₹${pricing!.discount.toStringAsFixed(0)}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF008A45),
+                    ),
+                  )
+                else
+                  const Text(
+                    'View all restaurant coupons',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: Color(0xFF6B7280),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (applied)
+            TextButton(
+              onPressed: () {
+                Haptics.light();
+                ref.read(checkoutViewModelProvider.notifier).removeCoupon();
+              },
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+              ),
               child: Text(
-                label,
+                'Remove',
                 style: TextStyle(
-                  fontSize: 14.5,
-                  fontWeight: FontWeight.w600,
-                  color: applied ? const Color(0xFF00875A) : textColor,
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
                 ),
               ),
+            )
+          else
+            InkWell(
+              onTap: () {
+                Haptics.light();
+                CouponSheet.show(context);
+              },
+              child: Row(
+                children: [
+                  Text(
+                    'View all',
+                    style: TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12.5,
+                    ),
+                  ),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: AppColors.primary,
+                    size: 18,
+                  ),
+                ],
+              ),
             ),
-
-            // Chevron Right Icon
-            Icon(
-              Icons.chevron_right_rounded,
-              color: isDark ? AppColors.textSecondaryDark : Colors.black87,
-              size: 22,
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }
 
-  /// Card 4: To Pay / Bill Details Accordion Card
-  /// "GST (5%)" when the server sent the rate, plain "GST" when it did not —
-  /// never a guessed percentage.
-  static String _gstLabel(
-    String name,
-    double rate, {
-    double defaultRate = 5.0,
+  /// Delivery Details & Total Bill Card (Screenshot 2)
+  Widget _buildDeliveryDetailsCard({
+    required double itemTotal,
+    required double totalDeliveryFee,
+    required double platformFee,
+    required double packingCharges,
+    required double savings,
+    required bool couponApplied,
+    required double toPay,
+    required Color textColor,
+    required Color secondaryColor,
+    required bool isDark,
+    required OrderPricing? pricing,
+    required AddressModel? resolvedAddress,
   }) {
-    final effectiveRate = rate > 0 ? rate : defaultRate;
-    final shown = effectiveRate == effectiveRate.roundToDouble()
-        ? effectiveRate.toStringAsFixed(0)
-        : effectiveRate.toStringAsFixed(1);
-    return '$name ($shown%)';
-  }
+    final customerName = _customerName;
+    final customerPhone = _customerPhone;
+    final hasSavedAddress = ref.watch(addressViewModelProvider).isNotEmpty;
+    final addressDisplay = resolvedAddress != null
+        ? resolvedAddress.fullAddress
+        : (hasSavedAddress
+            ? 'Select a delivery address'
+            : 'Add a delivery address to proceed');
 
-  Widget _buildBillDetailsCard(
-    double itemTotal,
-    double deliveryFee,
-    double platformFee,
-    double packingCharges,
-    double savings,
-    bool couponApplied,
-    double toPay,
-    Color textColor,
-    Color secondaryColor,
-    bool isDark,
-    OrderPricing? pricing,
-  ) {
+    void openAddressPicker() {
+      Haptics.light();
+      if (hasSavedAddress) {
+        _showAddressSelectionBottomSheet(context);
+      } else {
+        unawaited(_openAddAddressScreen());
+      }
+    }
+
     return Container(
-      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: isDark ? AppColors.cardDark : Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: isDark
-            ? []
-            : [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.03),
-                  blurRadius: 20,
-                  spreadRadius: 2,
-                  offset: const Offset(0, 8),
-                ),
-              ],
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: isDark ? AppColors.borderDark : const Color(0xFFF3F4F6),
+          color: isDark ? AppColors.borderDark : const Color(0xFFE5E7EB),
           width: 1,
         ),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Accordion Header
-          InkWell(
-            borderRadius: BorderRadius.circular(16),
-            onTap: () {
-              Haptics.light();
-              setState(() => _isBillExpanded = !_isBillExpanded);
-            },
+          // 1. Delivery time row
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
             child: Row(
               children: [
-                // Receipt icon in a premium rounded square
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? const Color(0xFF2A2A2A)
-                        : const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isDark
-                          ? AppColors.borderDark
-                          : const Color(0xFFE2E8F0),
-                      width: 1,
-                    ),
-                  ),
-                  child: Icon(
-                    Icons.receipt_long_rounded,
-                    color: isDark ? Colors.white : const Color(0xFF334155),
-                    size: 22,
-                  ),
+                const Icon(
+                  Icons.access_time_rounded,
+                  size: 20,
+                  color: Color(0xFF1E1E1E),
                 ),
-                const SizedBox(width: 16),
-
-                // Title & To Pay amount
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+                    children: const [
                       Text(
-                        AppLocalizations.of(context)!.billDetails,
+                        'Delivery in 10-15 mins',
                         style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: secondaryColor,
-                          letterSpacing: 0.2,
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1E1E1E),
                         ),
                       ),
-                      const SizedBox(height: 2),
+                      SizedBox(height: 2),
                       Text(
-                        'To Pay  ₹${toPay.toStringAsFixed(0)}',
+                        'Want this later? Schedule it',
                         style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: textColor,
+                          fontSize: 11.5,
+                          color: Color(0xFF6B7280),
                         ),
                       ),
                     ],
                   ),
                 ),
+              ],
+            ),
+          ),
+          Divider(height: 1, color: isDark ? AppColors.borderDark : const Color(0xFFF3F4F6)),
 
-                // Incl. taxes badge + chevron
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF10B981).withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        AppLocalizations.of(context)!.inclTaxes,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF059669),
-                          letterSpacing: 0.3,
-                        ),
-                      ),
+          // 2. Delivery fleet row
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.two_wheeler_rounded,
+                  size: 20,
+                  color: Color(0xFF1E1E1E),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Choose delivery fleet type',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1E1E1E),
                     ),
-                    const SizedBox(height: 6),
-                    Icon(
-                      _isBillExpanded
-                          ? Icons.keyboard_arrow_up_rounded
-                          : Icons.keyboard_arrow_down_rounded,
-                      color: isDark
-                          ? AppColors.textSecondaryDark
-                          : const Color(0xFF94A3B8),
-                      size: 24,
-                    ),
-                  ],
+                  ),
+                ),
+                const Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: Color(0xFF6B7280),
+                  size: 22,
                 ),
               ],
             ),
           ),
+          Divider(height: 1, color: isDark ? AppColors.borderDark : const Color(0xFFF3F4F6)),
 
-          // Expanded Bill Details Breakdown
-          if (_isBillExpanded) ...[
-            const SizedBox(height: 20),
-            Divider(
-              height: 1,
-              thickness: 1,
-              color: isDark ? AppColors.borderDark : const Color(0xFFF1F5F9),
-            ),
-            const SizedBox(height: 16),
-
-            _buildBillRow(
-              AppLocalizations.of(context)!.itemTotal,
-              '₹${itemTotal.toStringAsFixed(0)}',
-              secondaryColor,
-              textColor,
-            ),
-            const SizedBox(height: 12),
-
-            _buildBillRow(
-              AppLocalizations.of(context)!.deliveryFee,
-              deliveryFee == 0
-                  ? AppLocalizations.of(context)!.pillFreeCaps
-                  : '₹${deliveryFee.toStringAsFixed(0)}',
-              secondaryColor,
-              deliveryFee == 0 ? const Color(0xFF059669) : textColor,
-            ),
-            const SizedBox(height: 12),
-
-            _buildBillRow(
-              AppLocalizations.of(context)!.platformFee,
-              '₹${platformFee.toStringAsFixed(0)}',
-              secondaryColor,
-              textColor,
-              originalAmount: null,
-            ),
-
-            if (packingCharges > 0) ...[
-              const SizedBox(height: 12),
-              _buildBillRow(
-                AppLocalizations.of(context)!.packingCharges,
-                '₹${packingCharges.toStringAsFixed(0)}',
-                secondaryColor,
-                textColor,
+          // 3. Delivery address row
+          InkWell(
+            onTap: openAddressPicker,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.location_on_outlined,
+                    size: 20,
+                    color: Color(0xFF1E1E1E),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Delivery at ${resolvedAddress?.title ?? "Home"}',
+                          style: const TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1E1E1E),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          addressDisplay,
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            color: Color(0xFF6B7280),
+                            height: 1.3,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          'Add instructions for delivery partner',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: Color(0xFF6B7280),
+                    size: 22,
+                  ),
+                ],
               ),
-            ],
-
-            // Two rows rather than one merged "Taxes": the item GST and the
-            // delivery-fee GST are charged at different rates, so a single
-            // figure cannot be labelled with the rate behind it.
-            if ((pricing?.tax ?? 0) > 0) ...[
-              const SizedBox(height: 12),
-              _buildBillRow(
-                _gstLabel(
-                  AppLocalizations.of(context)!.gstLabel,
-                  pricing?.gstRate ?? 5.0,
-                  defaultRate: 5.0,
-                ),
-                '₹${pricing!.tax.toStringAsFixed(2)}',
-                secondaryColor,
-                textColor,
-              ),
-            ],
-
-            if ((pricing?.deliveryFeeGst ?? 0) > 0) ...[
-              const SizedBox(height: 12),
-              _buildBillRow(
-                _gstLabel(
-                  AppLocalizations.of(context)!.taxesLabel,
-                  pricing?.deliveryFeeGstRate ?? 18.0,
-                  defaultRate: 18.0,
-                ),
-                '₹${pricing!.deliveryFeeGst.toStringAsFixed(2)}',
-                secondaryColor,
-                textColor,
-              ),
-            ],
-
-            if (savings > 0) ...[
-              const SizedBox(height: 12),
-              _buildBillRow(
-                couponApplied
-                    ? AppLocalizations.of(context)!.couponDiscount
-                    : AppLocalizations.of(context)!.discount,
-                '−₹${savings.toStringAsFixed(0)}',
-                const Color(0xFF059669),
-                const Color(0xFF059669),
-              ),
-            ],
-
-            const SizedBox(height: 16),
-            Divider(
-              height: 1,
-              thickness: 1,
-              color: isDark ? AppColors.borderDark : const Color(0xFFF1F5F9),
             ),
-            const SizedBox(height: 16),
+          ),
+          Divider(height: 1, color: isDark ? AppColors.borderDark : const Color(0xFFF3F4F6)),
 
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          // 4. Customer contact row
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+            child: Row(
               children: [
-                Text(
-                  AppLocalizations.of(context)!.grandTotal,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: textColor,
+                const Icon(
+                  Icons.phone_outlined,
+                  size: 20,
+                  color: Color(0xFF1E1E1E),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    customerPhone.isNotEmpty
+                        ? '$customerName, $customerPhone'
+                        : customerName,
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1E1E1E),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                Text(
-                  '₹${toPay.toStringAsFixed(0)}',
-                  style: TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.w900,
-                    color: AppColors.primary,
-                  ),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: Color(0xFF6B7280),
+                  size: 22,
                 ),
               ],
+            ),
+          ),
+          Divider(height: 1, color: isDark ? AppColors.borderDark : const Color(0xFFF3F4F6)),
+
+          // 5. Total Bill row (Collapsible)
+          InkWell(
+            onTap: () {
+              Haptics.light();
+              setState(() => _isBillExpanded = !_isBillExpanded);
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.receipt_long_outlined,
+                    size: 20,
+                    color: Color(0xFF1E1E1E),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Text(
+                              'Total Bill',
+                              style: TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF1E1E1E),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            if (savings > 0) ...[
+                              Text(
+                                '₹${(toPay + savings).toStringAsFixed(0)}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Color(0xFF9CA3AF),
+                                  decoration: TextDecoration.lineThrough,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                            ],
+                            Text(
+                              '₹${toPay.toStringAsFixed(0)}',
+                              style: const TextStyle(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF1E1E1E),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 6,
+                          runSpacing: 2,
+                          children: [
+                            if (savings > 0)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF008A45).withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  'You saved ₹${savings.toStringAsFixed(0)}',
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF008A45),
+                                  ),
+                                ),
+                              ),
+                            const Text(
+                              'Incl. taxes and charges',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Color(0xFF6B7280),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    _isBillExpanded
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    color: const Color(0xFF6B7280),
+                    size: 22,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Expanded Bill breakdown
+          if (_isBillExpanded) ...[
+            Divider(height: 1, color: isDark ? AppColors.borderDark : const Color(0xFFF3F4F6)),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  _buildBillRow(
+                    AppLocalizations.of(context)!.itemTotal,
+                    '₹${itemTotal.toStringAsFixed(0)}',
+                    secondaryColor,
+                    textColor,
+                  ),
+                  const SizedBox(height: 10),
+                  _buildBillRow(
+                    AppLocalizations.of(context)!.deliveryFee,
+                    totalDeliveryFee == 0
+                        ? AppLocalizations.of(context)!.pillFreeCaps
+                        : '₹${totalDeliveryFee.toStringAsFixed(0)}',
+                    secondaryColor,
+                    totalDeliveryFee == 0 ? const Color(0xFF059669) : textColor,
+                  ),
+                  const SizedBox(height: 10),
+                  _buildBillRow(
+                    AppLocalizations.of(context)!.platformFee,
+                    '₹${platformFee.toStringAsFixed(0)}',
+                    secondaryColor,
+                    textColor,
+                  ),
+                  if (packingCharges > 0) ...[
+                    const SizedBox(height: 10),
+                    _buildBillRow(
+                      AppLocalizations.of(context)!.packingCharges,
+                      '₹${packingCharges.toStringAsFixed(0)}',
+                      secondaryColor,
+                      textColor,
+                    ),
+                  ],
+                  if ((pricing?.tax ?? 0) > 0) ...[
+                    const SizedBox(height: 10),
+                    _buildBillRow(
+                      'GST',
+                      '₹${pricing!.tax.toStringAsFixed(2)}',
+                      secondaryColor,
+                      textColor,
+                    ),
+                  ],
+                  if (savings > 0) ...[
+                    const SizedBox(height: 10),
+                    _buildBillRow(
+                      couponApplied
+                          ? AppLocalizations.of(context)!.couponDiscount
+                          : AppLocalizations.of(context)!.discount,
+                      '−₹${savings.toStringAsFixed(0)}',
+                      const Color(0xFF059669),
+                      const Color(0xFF059669),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  Divider(height: 1, color: isDark ? AppColors.borderDark : const Color(0xFFF3F4F6)),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        AppLocalizations.of(context)!.grandTotal,
+                        style: TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.bold,
+                          color: textColor,
+                        ),
+                      ),
+                      Text(
+                        '₹${toPay.toStringAsFixed(0)}',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ],
         ],
@@ -1387,7 +1574,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         Text(
           label,
           style: TextStyle(
-            fontSize: 14,
+            fontSize: 13,
             color: labelColor,
             fontWeight: FontWeight.w500,
           ),
@@ -1398,10 +1585,9 @@ class _CartScreenState extends ConsumerState<CartScreen> {
               Text(
                 originalAmount,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 11.5,
                   color: labelColor.withValues(alpha: 0.6),
                   decoration: TextDecoration.lineThrough,
-                  decorationColor: labelColor.withValues(alpha: 0.6),
                 ),
               ),
               const SizedBox(width: 6),
@@ -1409,7 +1595,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
             Text(
               value,
               style: TextStyle(
-                fontSize: 14.5,
+                fontSize: 13.5,
                 fontWeight: FontWeight.w600,
                 color: valueColor,
               ),
@@ -1417,6 +1603,58 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           ],
         ),
       ],
+    );
+  }
+
+  /// Lagech Money Technical Issue Notice (Screenshot 2)
+  Widget _buildLagechMoneyNotice(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surfaceDark : const Color(0xFFF9FAFB),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE0E7FF),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.account_balance_wallet_outlined,
+              color: Color(0xFF4F46E5),
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                Text(
+                  'Lagech Money',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E1E1E),
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Facing technical issues. Will be back shortly!',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: Color(0xFF6B7280),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1430,16 +1668,16 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           Text(
             'Cancellation policy:',
             style: TextStyle(
-              fontSize: 12.5,
+              fontSize: 12,
               fontWeight: FontWeight.bold,
               color: secondaryColor.withValues(alpha: 0.9),
             ),
           ),
-          const SizedBox(height: 3),
+          const SizedBox(height: 2),
           Text(
             'Please double-check your order and address details. Orders are non-refundable once placed.',
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 11.5,
               color: secondaryColor.withValues(alpha: 0.8),
               height: 1.35,
             ),
@@ -1448,6 +1686,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       ),
     );
   }
+
 
   /// Opens the add-address screen and selects whatever it saved.
   ///
@@ -1883,155 +2122,6 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   }
 
   /// Card 5: Delivery Address Selection Card
-  Widget _buildDeliveryAddressCard(
-    Color textColor,
-    Color secondaryColor,
-    bool isDark,
-  ) {
-    final resolvedAddress = _resolveSelectedAddress();
-    // Nothing saved yet: offering to "change" or "select" an address points at
-    // an empty list. Send these customers straight to the add screen instead.
-    final hasSavedAddress = ref.watch(addressViewModelProvider).isNotEmpty;
-    final addressTitle =
-        resolvedAddress?.title ??
-        (hasSavedAddress ? 'Delivery Address' : 'No address added yet');
-    final addressDisplay = resolvedAddress != null
-        ? (resolvedAddress.city.isNotEmpty
-              ? '${resolvedAddress.title} · ${resolvedAddress.city}, ${resolvedAddress.fullAddress}'
-              : '${resolvedAddress.title} · ${resolvedAddress.fullAddress}')
-        : (hasSavedAddress
-              ? 'Select a delivery address'
-              : 'Add a delivery address to see the delivery fee and place your order');
-
-    void openAddressPicker() {
-      Haptics.light();
-      if (hasSavedAddress) {
-        _showAddressSelectionBottomSheet(context);
-      } else {
-        unawaited(_openAddAddressScreen());
-      }
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.cardDark : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: isDark
-            ? []
-            : [
-                const BoxShadow(
-                  color: AppColors.shadow2,
-                  blurRadius: 10,
-                  offset: Offset(0, 2),
-                ),
-              ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.location_on_rounded,
-                    color: AppColors.primary,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Delivery Address',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: textColor,
-                    ),
-                  ),
-                ],
-              ),
-              InkWell(
-                onTap: openAddressPicker,
-                child: Text(
-                  hasSavedAddress ? 'CHANGE' : '+ ADD',
-                  style: TextStyle(
-                    color: AppColors.primary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          InkWell(
-            onTap: openAddressPicker,
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: isDark
-                    ? AppColors.surfaceDark
-                    : AppColors.secondarySurfaceLight,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: AppColors.primary.withValues(alpha: 0.3),
-                  width: 1,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      Icons.location_on_rounded,
-                      color: AppColors.primary,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          addressTitle,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: textColor,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          addressDisplay,
-                          style: TextStyle(fontSize: 12, color: secondaryColor),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    color: secondaryColor,
-                    size: 20,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Payment Method Selection Bottom Sheet
   void _showPaymentMethodBottomSheet(
     BuildContext context,
     double toPay,
