@@ -1343,7 +1343,7 @@ class _RestaurantScreenState extends ConsumerState<RestaurantScreen> {
             child: Container(
               margin: EdgeInsets.only(right: 6.w),
               padding: EdgeInsets.symmetric(horizontal: 10.w),
-c:\Users\admin\AppData\Local\Packages\5319275A.WhatsAppDesktop_cv1g1gvanyjgm\LocalState\sessions\1F3983F8D483EA7A8AAB9069D54DBAFD6B6FA4E0\transfers\2026-40\WhatsApp Image 2026-09-29 at 23.55.18.jpeg              decoration: BoxDecoration(
+              decoration: BoxDecoration(
                 color: hasAnyFilter
                     ? AppColors.primary.withValues(alpha: 0.1)
                     : (isDark ? AppColors.surfaceDark : Colors.white),
