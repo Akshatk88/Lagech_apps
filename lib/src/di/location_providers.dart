@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../data/models/zone_model.dart';
 import '../platform/location/location_service.dart';
 import '../presentation/address/viewmodels/address_viewmodel.dart';
@@ -28,15 +29,64 @@ class UserLocationInfo {
 }
 
 class ActiveLocationNotifier extends Notifier<UserLocationInfo?> {
+  static const _prefTitleKey = 'active_loc_title';
+  static const _prefSubtitleKey = 'active_loc_subtitle';
+  static const _prefLatKey = 'active_loc_lat';
+  static const _prefLngKey = 'active_loc_lng';
+  static const _prefManualKey = 'active_loc_manual';
+
   @override
-  UserLocationInfo? build() => null;
+  UserLocationInfo? build() {
+    _loadFromPrefs();
+    return null;
+  }
+
+  Future<void> _loadFromPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final title = prefs.getString(_prefTitleKey);
+      final subtitle = prefs.getString(_prefSubtitleKey);
+      final isManual = prefs.getBool(_prefManualKey) ?? false;
+      final lat = prefs.getDouble(_prefLatKey);
+      final lng = prefs.getDouble(_prefLngKey);
+
+      if (title != null && title.isNotEmpty && isManual) {
+        state = UserLocationInfo(
+          title: title,
+          subtitle: subtitle ?? '',
+          latitude: lat,
+          longitude: lng,
+          isManual: isManual,
+        );
+      }
+    } catch (_) {}
+  }
 
   void setLocation(UserLocationInfo info) {
     state = info;
+    _saveToPrefs(info);
+  }
+
+  Future<void> _saveToPrefs(UserLocationInfo info) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_prefTitleKey, info.title);
+      await prefs.setString(_prefSubtitleKey, info.subtitle);
+      await prefs.setBool(_prefManualKey, info.isManual);
+      if (info.latitude != null) await prefs.setDouble(_prefLatKey, info.latitude!);
+      if (info.longitude != null) await prefs.setDouble(_prefLngKey, info.longitude!);
+    } catch (_) {}
   }
 
   void clear() {
     state = null;
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.remove(_prefTitleKey);
+      prefs.remove(_prefSubtitleKey);
+      prefs.remove(_prefLatKey);
+      prefs.remove(_prefLngKey);
+      prefs.remove(_prefManualKey);
+    });
   }
 
   /// Automatically fetches current GPS location, reverse geocodes it,

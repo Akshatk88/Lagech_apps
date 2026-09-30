@@ -211,6 +211,7 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
       await _moveCameraTo(lat, lng);
     }
 
+    if (!mounted) return;
     Haptics.success();
     AppSnackbar.success(
       context,
@@ -406,14 +407,39 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
       }
     }
 
-    final locationTitle = areaText.isNotEmpty
-        ? areaText
-        : (buildingText.isNotEmpty
-            ? buildingText
-            : (cityText.isNotEmpty ? cityText : savedName));
+    final locationTitle = savedName.isNotEmpty
+        ? savedName
+        : (areaText.isNotEmpty
+            ? areaText
+            : (buildingText.isNotEmpty
+                ? buildingText
+                : (cityText.isNotEmpty ? cityText : 'Home')));
     final locationSubtitle = fullAddress.isNotEmpty
         ? fullAddress
         : (cityText.isNotEmpty ? '$cityText, $stateText' : 'Selected Location');
+
+    final addressModel = AddressModel(
+      id: '',
+      title: locationTitle,
+      fullAddress: fullAddress.isNotEmpty ? fullAddress : 'Delivery Address',
+      type: _selectedType,
+      street: streetText.isNotEmpty ? streetText : buildingText,
+      city: cityText,
+      state: stateText,
+      zipCode: zipText,
+      latitude: latitude,
+      longitude: longitude,
+      contactName: _useAccountDetails ? _accountName : null,
+      contactPhone: _useAccountDetails ? _accountPhone : null,
+      isDefault: true,
+    );
+
+    setState(() => _isSaving = true);
+    await ref
+        .read(addressViewModelProvider.notifier)
+        .addAddress(addressModel);
+    if (!mounted) return;
+    setState(() => _isSaving = false);
 
     // 1. Immediately apply the chosen manual location to activeLocationProvider
     ref.read(activeLocationProvider.notifier).setLocation(
@@ -431,53 +457,12 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
     ref.invalidate(zoneViewModelProvider);
     ref.invalidate(homeViewModelProvider);
 
-    final isLoggedIn = ref.read(authViewModelProvider).value != null;
-    if (!isLoggedIn) {
-      Haptics.success();
-      context.pop<Map<String, String>>({
-        'type': _selectedType,
-        'title': locationTitle,
-        'subtitle': locationSubtitle,
-      });
-      return;
-    }
-
-    final addressModel = AddressModel(
-      id: '',
-      title: savedName,
-      fullAddress: fullAddress.isNotEmpty ? fullAddress : 'Delivery Address',
-      type: _selectedType,
-      street: streetText.isNotEmpty ? streetText : buildingText,
-      city: cityText,
-      state: stateText,
-      zipCode: zipText,
-      latitude: latitude,
-      longitude: longitude,
-      contactName: _useAccountDetails ? _accountName : null,
-      contactPhone: _useAccountDetails ? _accountPhone : null,
-    );
-
-    setState(() => _isSaving = true);
-    final success = await ref
-        .read(addressViewModelProvider.notifier)
-        .addAddress(addressModel);
-    if (!mounted) return;
-    setState(() => _isSaving = false);
-
-    if (success) {
-      Haptics.success();
-      context.pop<Map<String, String>>({
-        'type': _selectedType,
-        'title': locationTitle,
-        'subtitle': locationSubtitle,
-      });
-    } else {
-      final err = ref.read(addressViewModelProvider.notifier).error;
-      AppSnackbar.error(
-        context,
-        err ?? 'Could not save address. Please try again.',
-      );
-    }
+    Haptics.success();
+    context.pop<Map<String, String>>({
+      'type': _selectedType,
+      'title': locationTitle,
+      'subtitle': locationSubtitle,
+    });
   }
 
   @override
@@ -975,6 +960,83 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
     );
   }
 
+  void _populateFormFromAddress(AddressModel addr) {
+    setState(() {
+      final t = addr.type.isNotEmpty
+          ? addr.type
+          : (addr.title.toLowerCase().contains('office')
+              ? 'Office'
+              : (addr.title.toLowerCase().contains('home') ? 'Home' : 'Other'));
+      _selectedType = ['Home', 'Office', 'Other'].contains(t) ? t : 'Other';
+      _saveAsController.text = addr.title;
+      _streetController.text = addr.street;
+      _buildingController.text = addr.street;
+      _areaController.text = addr.street.isNotEmpty ? addr.street : addr.title;
+      _cityController.text = addr.city;
+      _stateController.text = addr.state;
+      _pincodeController.text = addr.zipCode;
+
+      if (addr.latitude != null && addr.longitude != null) {
+        _latitude = addr.latitude;
+        _longitude = addr.longitude;
+        _hasRealMapPosition = true;
+        _suppressNextIdle = true;
+        _mapController?.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(
+              target: LatLng(addr.latitude!, addr.longitude!),
+              zoom: 16.5,
+            ),
+          ),
+        );
+      }
+    });
+    AppSnackbar.success(context, 'Loaded "${addr.title}" into form');
+  }
+
+  void _clearForm() {
+    setState(() {
+      _saveAsController.clear();
+      _buildingController.clear();
+      _streetController.clear();
+      _areaController.clear();
+      _cityController.clear();
+      _stateController.clear();
+      _pincodeController.clear();
+      _instructionsController.clear();
+      _selectedType = 'Home';
+    });
+  }
+
+  Future<void> _selectAndDeliverToAddress(AddressModel addr) async {
+    await ref.read(addressViewModelProvider.notifier).setDefaultAddress(addr.id);
+
+    final title = addr.title.isNotEmpty
+        ? addr.title
+        : (addr.street.isNotEmpty
+            ? addr.street
+            : (addr.city.isNotEmpty ? addr.city : 'Selected Address'));
+    final subtitle = addr.fullAddress.isNotEmpty
+        ? addr.fullAddress
+        : [addr.street, addr.city, addr.state, addr.zipCode]
+            .where((s) => s.isNotEmpty)
+            .join(', ');
+
+    ref.read(activeLocationProvider.notifier).setLocation(
+      UserLocationInfo(
+        title: title,
+        subtitle: subtitle,
+        latitude: addr.latitude,
+        longitude: addr.longitude,
+        isManual: true,
+      ),
+    );
+
+    ref.invalidate(userLatLngProvider);
+    ref.invalidate(zoneViewModelProvider);
+    ref.invalidate(homeViewModelProvider);
+  }
+
   void _showSavedAddressesSheet(BuildContext context) {
     Haptics.light();
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -998,7 +1060,7 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
             return SafeArea(
               child: Container(
                 constraints: BoxConstraints(
-                  maxHeight: MediaQuery.of(context).size.height * 0.78,
+                  maxHeight: MediaQuery.of(context).size.height * 0.85,
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                 child: Column(
@@ -1018,26 +1080,39 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
 
-                    // Sheet Header
+                    // Sheet Header with count badge and close icon
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Row(
                           children: [
-                            Icon(
-                              Icons.bookmark_rounded,
-                              color: AppColors.primary,
-                              size: 22,
+                            Text(
+                              'Saved Addresses',
+                              style: TextStyle(
+                                fontSize: 19,
+                                fontWeight: FontWeight.w800,
+                                color: textColor,
+                              ),
                             ),
                             const SizedBox(width: 8),
-                            Text(
-                              'Saved Addresses (${addresses.length})',
-                              style: TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.bold,
-                                color: textColor,
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 9,
+                                vertical: 2.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFD1FAE5),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                '${addresses.length}',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF059669),
+                                ),
                               ),
                             ),
                           ],
@@ -1057,18 +1132,13 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
                             child: Icon(
                               Icons.close,
                               size: 18,
-                              color: isDark ? Colors.white : Colors.black54,
+                              color: isDark ? Colors.white : Colors.black87,
                             ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    Divider(
-                      height: 1,
-                      color: isDark ? AppColors.borderDark : const Color(0xFFE5E7EB),
-                    ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 14),
 
                     // Addresses List or Empty View
                     if (addresses.isEmpty)
@@ -1093,7 +1163,7 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'Fill the form to save your first delivery location',
+                                'Fill the form and save your first delivery location',
                                 style: TextStyle(
                                   fontSize: 13,
                                   color: secondaryColor,
@@ -1105,185 +1175,271 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
                       )
                     else
                       Flexible(
-                        child: ListView.separated(
+                        child: ListView.builder(
                           shrinkWrap: true,
                           itemCount: addresses.length,
-                          separatorBuilder: (_, index) => Divider(
-                            height: 1,
-                            color: isDark
-                                ? AppColors.borderDark
-                                : const Color(0xFFF3F4F6),
-                          ),
                           itemBuilder: (context, index) {
                             final addr = addresses[index];
 
-                            IconData icon = Icons.location_on_outlined;
-                            if (addr.type.toLowerCase() == 'home' ||
-                                addr.title.toLowerCase().contains('home')) {
+                            IconData icon = Icons.location_on_rounded;
+                            Color iconColor = const Color(0xFF9333EA);
+                            Color iconBg = const Color(0xFFF3E8FF);
+
+                            final lowerTitle = addr.title.toLowerCase();
+                            final lowerType = addr.type.toLowerCase();
+
+                            if (lowerType == 'home' || lowerTitle.contains('home')) {
                               icon = Icons.home_rounded;
-                            } else if (addr.type.toLowerCase() == 'office' ||
-                                addr.title.toLowerCase().contains('office') ||
-                                addr.title.toLowerCase().contains('work')) {
-                              icon = Icons.work_rounded;
+                              iconColor = const Color(0xFFEA580C);
+                              iconBg = const Color(0xFFFFEDD5);
+                            } else if (lowerType == 'office' ||
+                                lowerTitle.contains('office') ||
+                                lowerTitle.contains('work')) {
+                              icon = Icons.business_center_rounded;
+                              iconColor = const Color(0xFF2563EB);
+                              iconBg = const Color(0xFFDBEAFE);
                             }
 
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              child: Row(
+                            final isDefault = addr.isDefault;
+
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 14),
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? AppColors.surfaceDark
+                                    : Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: isDefault
+                                      ? const Color(0xFF10B981)
+                                      : (isDark
+                                          ? AppColors.borderDark
+                                          : const Color(0xFFE5E7EB)),
+                                  width: isDefault ? 1.6 : 1.0,
+                                ),
+                                boxShadow: isDark
+                                    ? null
+                                    : [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(alpha: 0.03),
+                                          blurRadius: 6,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
+                              ),
+                              child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  // Icon Badge
-                                  Container(
-                                    width: 42,
-                                    height: 42,
-                                    decoration: BoxDecoration(
-                                      color: isDark
-                                          ? AppColors.primaryTintDark
-                                          : const Color(0xFFFEF2F2),
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: isDark
-                                            ? AppColors.primary.withValues(alpha: 0.3)
-                                            : const Color(0xFFFECACA),
-                                        width: 1,
+                                  // Top Row: [Icon] [Title  DEFAULT]  [Delete]
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    children: [
+                                      Container(
+                                        width: 44,
+                                        height: 44,
+                                        decoration: BoxDecoration(
+                                          color: iconBg,
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: Icon(
+                                          icon,
+                                          color: iconColor,
+                                          size: 24,
+                                        ),
                                       ),
-                                    ),
-                                    child: Icon(
-                                      icon,
-                                      color: AppColors.primary,
-                                      size: 22,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-
-                                  // Details
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Row(
                                           children: [
-                                            Text(
-                                              addr.title,
-                                              style: TextStyle(
-                                                fontSize: 14.5,
-                                                fontWeight: FontWeight.bold,
-                                                color: textColor,
+                                            Flexible(
+                                              child: Text(
+                                                addr.title.isNotEmpty
+                                                    ? addr.title
+                                                    : addr.type,
+                                                style: TextStyle(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: textColor,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
                                               ),
                                             ),
-                                            if (addr.isDefault) ...[
+                                            if (isDefault) ...[
                                               const SizedBox(width: 8),
                                               Container(
-                                                padding: const EdgeInsets.symmetric(
-                                                  horizontal: 6,
-                                                  vertical: 1.5,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 7,
+                                                  vertical: 2,
                                                 ),
                                                 decoration: BoxDecoration(
-                                                  color: AppColors.primary.withValues(alpha: 0.12),
-                                                  borderRadius: BorderRadius.circular(4),
+                                                  color:
+                                                      const Color(0xFFD1FAE5),
+                                                  borderRadius:
+                                                      BorderRadius.circular(5),
                                                 ),
-                                                child: Text(
+                                                child: const Text(
                                                   'DEFAULT',
                                                   style: TextStyle(
-                                                    fontSize: 9,
-                                                    fontWeight: FontWeight.w800,
-                                                    color: AppColors.primary,
+                                                    fontSize: 9.5,
+                                                    fontWeight:
+                                                        FontWeight.w800,
+                                                    color: Color(0xFF059669),
+                                                    letterSpacing: 0.4,
                                                   ),
                                                 ),
                                               ),
                                             ],
                                           ],
                                         ),
-                                        const SizedBox(height: 3),
-                                        Text(
-                                          addr.fullAddress,
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: secondaryColor,
-                                            height: 1.3,
-                                          ),
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        if (addr.contactName != null &&
-                                            addr.contactName!.isNotEmpty) ...[
-                                          const SizedBox(height: 3),
-                                          Text(
-                                            '${addr.contactName} • ${addr.contactPhone ?? ""}',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              color: secondaryColor.withValues(alpha: 0.8),
-                                            ),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-
-                                  // Deliver Here Action Pill
-                                  InkWell(
-                                    onTap: () async {
-                                      Haptics.medium();
-                                      await ref
-                                          .read(addressViewModelProvider.notifier)
-                                          .setDefaultAddress(addr.id);
-                                      if (!sheetCtx.mounted) return;
-                                      Navigator.pop(sheetCtx);
-                                      if (!context.mounted) return;
-                                      context.pop<Map<String, String>>({
-                                        'type': addr.type,
-                                        'title': addr.title,
-                                        'subtitle': addr.fullAddress,
-                                        'id': addr.id,
-                                      });
-                                    },
-                                    borderRadius: BorderRadius.circular(16),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 6,
                                       ),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.primary,
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      child: const Text(
-                                        'Select',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-
-                                  // Delete Action
-                                  IconButton(
-                                    onPressed: () {
-                                      _showDeleteConfirmationDialog(
-                                        context: sheetCtx,
-                                        title: addr.title,
-                                        onConfirm: () async {
-                                          Haptics.medium();
-                                          await ref
-                                              .read(addressViewModelProvider.notifier)
-                                              .deleteAddress(addr.id);
-                                          if (!context.mounted) return;
-                                          AppSnackbar.success(
-                                            context,
-                                            '"${addr.title}" deleted',
+                                      IconButton(
+                                        onPressed: () {
+                                          _showDeleteConfirmationDialog(
+                                            context: sheetCtx,
+                                            title: addr.title,
+                                            onConfirm: () async {
+                                              Haptics.medium();
+                                              await ref
+                                                  .read(
+                                                      addressViewModelProvider
+                                                          .notifier)
+                                                  .deleteAddress(addr.id);
+                                              if (!context.mounted) return;
+                                              AppSnackbar.success(
+                                                context,
+                                                '"${addr.title}" deleted',
+                                              );
+                                            },
                                           );
                                         },
-                                      );
-                                    },
-                                    icon: const Icon(
-                                      Icons.delete_outline_rounded,
-                                      color: Colors.redAccent,
-                                      size: 19,
+                                        icon: const Icon(
+                                          Icons.delete_outline_rounded,
+                                          color: Color(0xFFEF4444),
+                                          size: 22,
+                                        ),
+                                        visualDensity: VisualDensity.compact,
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 10),
+
+                                  // Full Address
+                                  Text(
+                                    addr.fullAddress.isNotEmpty
+                                        ? addr.fullAddress
+                                        : [
+                                            addr.street,
+                                            addr.city,
+                                            addr.state,
+                                            addr.zipCode
+                                          ]
+                                            .where((s) => s.isNotEmpty)
+                                            .join(', '),
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: secondaryColor,
+                                      height: 1.35,
                                     ),
-                                    visualDensity: VisualDensity.compact,
+                                    maxLines: 3,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  if (addr.contactName != null &&
+                                      addr.contactName!.isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '${addr.contactName} • ${addr.contactPhone ?? ""}',
+                                      style: TextStyle(
+                                        fontSize: 11.5,
+                                        color: secondaryColor
+                                            .withValues(alpha: 0.85),
+                                      ),
+                                    ),
+                                  ],
+                                  const SizedBox(height: 14),
+
+                                  // Action Buttons: [Edit in Form] [Deliver Here]
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: SizedBox(
+                                          height: 42,
+                                          child: OutlinedButton(
+                                            onPressed: () {
+                                              Navigator.pop(sheetCtx);
+                                              _populateFormFromAddress(addr);
+                                            },
+                                            style: OutlinedButton.styleFrom(
+                                              side: BorderSide(
+                                                color: isDark
+                                                    ? AppColors.borderDark
+                                                    : const Color(0xFFD1D5DB),
+                                              ),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(10),
+                                              ),
+                                              padding: EdgeInsets.zero,
+                                            ),
+                                            child: Text(
+                                              'Edit in Form',
+                                              style: TextStyle(
+                                                color: isDark
+                                                    ? Colors.white
+                                                    : const Color(0xFF111827),
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: SizedBox(
+                                          height: 42,
+                                          child: ElevatedButton(
+                                            onPressed: () async {
+                                              Haptics.medium();
+                                              await _selectAndDeliverToAddress(
+                                                  addr);
+                                              if (!sheetCtx.mounted) return;
+                                              Navigator.pop(sheetCtx);
+                                              if (!context.mounted) return;
+                                              context.pop<Map<String, String>>({
+                                                'type': addr.type,
+                                                'title': addr.title,
+                                                'subtitle': addr.fullAddress,
+                                                'id': addr.id,
+                                              });
+                                            },
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor:
+                                                  const Color(0xFF10B981),
+                                              foregroundColor: Colors.white,
+                                              elevation: 0,
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(10),
+                                              ),
+                                              padding: EdgeInsets.zero,
+                                            ),
+                                            child: const Text(
+                                              'Deliver Here',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w700,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
@@ -1294,25 +1450,34 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
 
                     const SizedBox(height: 12),
 
-                    // Add New Address Button in sheet
+                    // Add New Address Card Bottom Button
                     SizedBox(
                       width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: () => Navigator.pop(sheetCtx),
-                        style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: AppColors.primary, width: 1.2),
+                      height: 48,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(sheetCtx);
+                          _clearForm();
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF10B981),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
                         ),
-                        icon: Icon(Icons.add_rounded, color: AppColors.primary, size: 20),
-                        label: Text(
-                          'Add New Address',
+                        icon: const Icon(
+                          Icons.add_location_alt_outlined,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                        label: const Text(
+                          '+ Add New Address Card',
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: 14.5,
                             fontWeight: FontWeight.bold,
-                            color: AppColors.primary,
+                            color: Colors.white,
                           ),
                         ),
                       ),

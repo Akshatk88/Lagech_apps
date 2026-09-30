@@ -16,6 +16,7 @@ import '../../search/widgets/voice_search_dialog.dart';
 import '../../navigation/route_names.dart';
 import '../../common_widgets/smart_image.dart';
 import '../../../di/location_providers.dart';
+import '../viewmodels/home_viewmodel.dart';
 
 class HomeHeaderBanner extends ConsumerStatefulWidget {
   const HomeHeaderBanner({super.key});
@@ -273,24 +274,32 @@ class _HomeHeaderBannerState extends ConsumerState<HomeHeaderBanner> {
     String locationTitle = 'Select Location';
     String locationSubtitle = 'Tap to choose address';
 
-    if (activeLocation != null && activeLocation.title.isNotEmpty) {
+    // 1. If user explicitly entered/selected a location, show that
+    if (activeLocation != null && activeLocation.isManual && activeLocation.title.isNotEmpty) {
       locationTitle = activeLocation.title;
       locationSubtitle = activeLocation.subtitle;
-    } else if (defaultAddress != null) {
-      if (defaultAddress.title.isNotEmpty) {
-        locationTitle = defaultAddress.title;
-      } else if (defaultAddress.city.isNotEmpty) {
-        locationTitle = defaultAddress.city;
-      }
+    }
+    // 2. If user has a saved default address, show that
+    else if (defaultAddress != null) {
+      locationTitle = defaultAddress.title.isNotEmpty
+          ? defaultAddress.title
+          : (defaultAddress.street.isNotEmpty
+              ? defaultAddress.street
+              : (defaultAddress.city.isNotEmpty ? defaultAddress.city : 'Delivery Address'));
 
-      final parts = [defaultAddress.street, defaultAddress.city]
-          .where((s) => s.isNotEmpty)
-          .toList();
-      if (parts.isNotEmpty) {
-        locationSubtitle = parts.join(', ');
-      } else if (defaultAddress.fullAddress.isNotEmpty) {
+      if (defaultAddress.fullAddress.isNotEmpty) {
         locationSubtitle = defaultAddress.fullAddress;
+      } else {
+        final parts = [defaultAddress.street, defaultAddress.city]
+            .where((s) => s.isNotEmpty)
+            .toList();
+        locationSubtitle = parts.isNotEmpty ? parts.join(', ') : 'Saved Address';
       }
+    }
+    // 3. Fallback to auto-detected GPS
+    else if (activeLocation != null && activeLocation.title.isNotEmpty) {
+      locationTitle = activeLocation.title;
+      locationSubtitle = activeLocation.subtitle;
     } else {
       locationTitle = 'Indore';
       locationSubtitle = 'Madhya Pradesh';
@@ -304,9 +313,14 @@ class _HomeHeaderBannerState extends ConsumerState<HomeHeaderBanner> {
           flex: 4,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () {
+            onTap: () async {
               Haptics.light();
-              context.push(RouteNames.addAddress);
+              await context.push(RouteNames.addAddress);
+              if (context.mounted) {
+                ref.invalidate(activeLocationProvider);
+                ref.invalidate(addressViewModelProvider);
+                ref.invalidate(homeViewModelProvider);
+              }
             },
             child: Row(
               mainAxisSize: MainAxisSize.min,

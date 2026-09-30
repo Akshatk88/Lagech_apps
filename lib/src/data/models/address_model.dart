@@ -87,6 +87,38 @@ class AddressModel {
           },
       };
 
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'fullAddress': fullAddress,
+        'type': type,
+        'isDefault': isDefault,
+        'contactName': contactName,
+        'contactPhone': contactPhone,
+        'street': street,
+        'city': city,
+        'state': state,
+        'zipCode': zipCode,
+        'latitude': latitude,
+        'longitude': longitude,
+      };
+
+  factory AddressModel.fromJson(Map<String, dynamic> json) => AddressModel(
+        id: json['id'] as String? ?? '',
+        title: json['title'] as String? ?? 'Home',
+        fullAddress: json['fullAddress'] as String? ?? '',
+        type: json['type'] as String? ?? 'Home',
+        isDefault: json['isDefault'] as bool? ?? false,
+        contactName: json['contactName'] as String?,
+        contactPhone: json['contactPhone'] as String?,
+        street: json['street'] as String? ?? '',
+        city: json['city'] as String? ?? '',
+        state: json['state'] as String? ?? '',
+        zipCode: json['zipCode'] as String? ?? '',
+        latitude: (json['latitude'] as num?)?.toDouble(),
+        longitude: (json['longitude'] as num?)?.toDouble(),
+      );
+
   AddressModel copyWith({
     String? id,
     String? title,
@@ -95,6 +127,12 @@ class AddressModel {
     bool? isDefault,
     String? contactName,
     String? contactPhone,
+    String? street,
+    String? city,
+    String? state,
+    String? zipCode,
+    double? latitude,
+    double? longitude,
   }) {
     return AddressModel(
       id: id ?? this.id,
@@ -104,6 +142,12 @@ class AddressModel {
       isDefault: isDefault ?? this.isDefault,
       contactName: contactName ?? this.contactName,
       contactPhone: contactPhone ?? this.contactPhone,
+      street: street ?? this.street,
+      city: city ?? this.city,
+      state: state ?? this.state,
+      zipCode: zipCode ?? this.zipCode,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
     );
   }
 }
