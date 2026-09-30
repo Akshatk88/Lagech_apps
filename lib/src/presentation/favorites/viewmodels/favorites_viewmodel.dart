@@ -46,12 +46,12 @@ final favoriteFoodIdsProvider = Provider<Set<String>>((ref) {
 });
 
 class FavoritesViewModel extends AsyncNotifier<FavoritesState> {
-  late final FavoritesRepository _repository;
+  FavoritesRepository get _repository => ref.read(favoritesRepositoryProvider);
   final Set<String> _pendingToggles = {};
 
   @override
   Future<FavoritesState> build() async {
-    _repository = ref.watch(favoritesRepositoryProvider);
+    ref.watch(favoritesRepositoryProvider);
 
     final localR = await _repository.getFavoriteIds();
     final localF = await _repository.getFavoriteFoodIds();

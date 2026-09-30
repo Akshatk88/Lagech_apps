@@ -41,11 +41,11 @@ final homeViewModelProvider = NotifierProvider<HomeViewModel, HomeState>(() {
 });
 
 class HomeViewModel extends Notifier<HomeState> {
-  late final RestaurantRepository _repository;
+  RestaurantRepository get _repository => ref.read(restaurantRepositoryProvider);
 
   @override
   HomeState build() {
-    _repository = ref.watch(restaurantRepositoryProvider);
+    ref.watch(restaurantRepositoryProvider);
 
     // Reactively refresh when zone or location changes
     ref.listen(currentZoneIdProvider, (previous, next) {

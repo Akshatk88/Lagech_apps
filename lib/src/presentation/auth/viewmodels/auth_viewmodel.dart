@@ -24,7 +24,7 @@ final authViewModelProvider =
     AsyncNotifierProvider<AuthViewModel, UserModel?>(AuthViewModel.new);
 
 class AuthViewModel extends AsyncNotifier<UserModel?> {
-  late final AuthRepository _repository;
+  AuthRepository get _repository => ref.read(authRepositoryProvider);
 
   /// Last error surfaced by an auth action, for screens to render inline
   /// without flipping the whole provider into an error state (which would
@@ -33,7 +33,7 @@ class AuthViewModel extends AsyncNotifier<UserModel?> {
 
   @override
   FutureOr<UserModel?> build() async {
-    _repository = ref.watch(authRepositoryProvider);
+    ref.watch(authRepositoryProvider);
 
     // The network layer bumps this when a refresh fails — drop to guest mode.
     ref.listen(sessionExpiredProvider, (_, _) {
