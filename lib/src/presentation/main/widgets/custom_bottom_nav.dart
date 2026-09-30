@@ -20,6 +20,15 @@ class CustomBottomNav extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
+    // Detect current path for non-branch routes (e.g. Orders)
+    final currentPath = GoRouter.of(context)
+        .routerDelegate
+        .currentConfiguration
+        .uri
+        .path;
+    final isOrdersActive = currentPath == RouteNames.orders ||
+        currentPath.startsWith('/orders');
+
     return Container(
       decoration: BoxDecoration(
         color: isDark ? AppColors.surfaceDark : Colors.white,
@@ -44,44 +53,48 @@ class CustomBottomNav extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              // 1. Home
+              // 1. Home — Branch 0
               _buildNavItem(
                 context: context,
                 icon: Icons.home_outlined,
                 activeIcon: Icons.home_rounded,
                 label: 'Home',
-                index: 0,
+                isSelected: currentIndex == 0 && !isOrdersActive,
                 isDark: isDark,
+                onItemTap: () => onTap(0),
               ),
 
-              // 2. Offers
+              // 2. 99 Store — Branch 2
               _buildNavItem(
                 context: context,
                 icon: Icons.local_offer_outlined,
                 activeIcon: Icons.local_offer_rounded,
                 label: '99 Store',
-                index: 98,
+                isSelected: currentIndex == 2,
                 isDark: isDark,
+                onItemTap: () => onTap(2),
               ),
 
-              // 3. Dining
+              // 3. Orders — pushed route (not a shell branch)
               _buildNavItem(
                 context: context,
                 icon: Icons.restaurant_outlined,
                 activeIcon: Icons.restaurant_rounded,
                 label: 'Orders',
-                index: 99,
+                isSelected: isOrdersActive,
                 isDark: isDark,
+                onItemTap: () => context.push(RouteNames.orders),
               ),
 
-              // 4. Profile
+              // 4. Profile — Branch 3
               _buildNavItem(
                 context: context,
                 icon: Icons.person_outline_rounded,
                 activeIcon: Icons.person_rounded,
                 label: 'Profile',
-                index: 3,
+                isSelected: currentIndex == 3 && !isOrdersActive,
                 isDark: isDark,
+                onItemTap: () => onTap(3),
               ),
             ],
           ),
@@ -95,10 +108,10 @@ class CustomBottomNav extends StatelessWidget {
     required IconData icon,
     required IconData activeIcon,
     required String label,
-    required int index,
+    required bool isSelected,
     required bool isDark,
+    required VoidCallback onItemTap,
   }) {
-    final isSelected = currentIndex == index;
     final activeColor = AppColors.primary;
     final unselectedColor = isDark
         ? AppColors.textSecondaryDark
@@ -107,13 +120,7 @@ class CustomBottomNav extends StatelessWidget {
     return GestureDetector(
       onTap: () {
         Haptics.light();
-        if (index == 98) {
-          context.push(RouteNames.store99);
-        } else if (index == 99) {
-          context.push(RouteNames.orders);
-        } else {
-          onTap(index);
-        }
+        onItemTap();
       },
       behavior: HitTestBehavior.opaque,
       child: Column(
