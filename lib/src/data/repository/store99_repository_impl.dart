@@ -8,11 +8,11 @@ import '../datasources/catalog_remote_datasource.dart';
 import '../models/food_model.dart';
 import '../models/restaurant_model.dart';
 
-/// Backend-backed ?149 Meals Store.
+/// Backend-backed â‚¹99 store: every dish priced â‚¹99 or less.
 ///
-/// Fetches all public foods and filters client-side by price <= ?149.
-/// No promo-slug dependency — works with all items in the catalog.
-/// Cuisines come from the real category list and brands from restaurants.
+/// The server applies the price cap (promo `switch99`), so the store holds the
+/// whole catalog's cheap dishes. Fetching the newest 100/500 dishes and
+/// filtering here dropped every older cheap one (1,681 dishes, 489 at â‚¹99).
 class Store99RepositoryImpl implements Store99Repository {
   final CatalogRemoteDataSource _remote;
   final String? Function() _zoneId;
@@ -20,7 +20,9 @@ class Store99RepositoryImpl implements Store99Repository {
 
   const Store99RepositoryImpl(this._remote, this._zoneId, this._latLng);
 
-  static const _maxPrice = 149.0;
+  static const _promo = 'switch99'; // â‚¹99 or less, applied by the server
+  static const _maxPrice = 99.0; // same cap, re-checked on what comes back
+  static const _fetchLimit = 1000;
 
   @override
   Future<ApiResponse<List<Store99Cuisine>>> getCuisines() {
@@ -54,10 +56,10 @@ class Store99RepositoryImpl implements Store99Repository {
   @override
   Future<ApiResponse<List<Store99Product>>> getTrendingDishes() {
     return _guard(() async {
-      // Fetch all public foods (no promo filter) — show anything priced <= ?149
       final foods = await _remote.getPublicFoods(
         zoneId: _zoneId(),
-        limit: 100,
+        promo: _promo,
+        limit: _fetchLimit,
       );
       return foods.where((f) => f.price <= _maxPrice).map(_toProduct).toList();
     });
@@ -70,11 +72,12 @@ class Store99RepositoryImpl implements Store99Repository {
     int limit = 20,
   }) {
     return _guard(() async {
-      // No promo filter — fetch all foods by optional category, filter price client-side
+      // cuisineId is a category id (see getCuisines), so filter by id.
       final foods = await _remote.getPublicFoods(
         zoneId: _zoneId(),
-        categorySlug: cuisineId == 'all' ? null : cuisineId,
-        limit: 500,
+        categoryId: cuisineId == 'all' ? null : cuisineId,
+        promo: _promo,
+        limit: _fetchLimit,
       );
 
       final eligibleFoods = foods.where((f) => f.price <= _maxPrice).toList();
@@ -104,8 +107,8 @@ class Store99RepositoryImpl implements Store99Repository {
       originalPrice: f.originalPrice,
       imageUrl: f.imageUrl,
       rating: f.rating,
-      ratingCount: f.reviewCount > 0 ? f.reviewCount : 12,
-      deliveryTime: f.deliveryTime.isNotEmpty ? f.deliveryTime : '15-30 min',
+      ratingCount: f.reviewCount,
+      deliveryTime: f.deliveryTime,
       isVeg: f.isVeg,
       isQuickDelivery: f.isQuickDelivery,
       cuisineId: f.categoryId.isNotEmpty ? f.categoryId : f.categoryName,
