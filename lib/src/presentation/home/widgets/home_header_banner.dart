@@ -10,9 +10,7 @@ import '../../address/viewmodels/address_viewmodel.dart';
 import '../../../data/models/address_model.dart';
 import '../../../data/models/promo_banner_model.dart';
 import '../viewmodels/banners_viewmodel.dart';
-import '../viewmodels/veg_filter_provider.dart';
 import '../../cart/viewmodels/cart_viewmodel.dart';
-import '../../search/widgets/voice_search_dialog.dart';
 import '../../navigation/route_names.dart';
 import '../../common_widgets/smart_image.dart';
 import '../../../di/location_providers.dart';
@@ -171,32 +169,22 @@ class _HomeHeaderBannerState extends ConsumerState<HomeHeaderBanner> {
               children: [
                 Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
-                  child: Column(
-                    children: [
-                      // Top Row: Location, Lagech Logo, Wallet & Cart
-                      _buildTopRow(context, ref, isDark),
-
-                      SizedBox(height: 14.h),
-
-                      // Search Bar and VEG Mode Toggle
-                      _buildSearchBarAndVegMode(context, ref, isDark),
-                    ],
-                  ),
+                  child: _buildTopRow(context, ref, isDark),
                 ),
 
                 // Open interactive area showcasing the admin promotional banner artwork.
                 // Wrapped in IgnorePointer so any tap/drag in this space passes directly
                 // through to the banner PageView & GestureDetector underneath!
                 IgnorePointer(
-                  child: SizedBox(height: 150.h),
+                  child: SizedBox(height: 168.h),
                 ),
 
                 // Overlaid indicator dots at the bottom of the banner
                 if (banners.length > 1) ...[
                   _buildIndicatorDots(banners.length),
-                  SizedBox(height: 8.h),
-                ] else
                   SizedBox(height: 6.h),
+                ] else
+                  SizedBox(height: 4.h),
               ],
             ),
           ),
@@ -477,144 +465,5 @@ class _HomeHeaderBannerState extends ConsumerState<HomeHeaderBanner> {
       ),
     );
   }
-
-  Widget _buildSearchBarAndVegMode(BuildContext context, WidgetRef ref, bool isDark) {
-    final isVegOnly = ref.watch(vegFilterProvider);
-
-    return Row(
-      children: [
-        // Left: Rounded White Capsule Search Bar
-        Expanded(
-          child: Container(
-            height: 40.h,
-            padding: EdgeInsets.symmetric(horizontal: 12.w),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(30.r),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.08),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                // Search Icon & Prompt Click
-                Expanded(
-                  child: InkWell(
-                    onTap: () {
-                      Haptics.light();
-                      context.push(RouteNames.search);
-                    },
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.search,
-                          color: const Color(0xFFC80A14), // Red
-                          size: 18.sp,
-                        ),
-                        SizedBox(width: 6.w),
-                        Expanded(
-                          child: Text(
-                            'Search restaurants, dishes...',
-                            style: TextStyle(
-                              color: const Color(0xFF9CA3AF),
-                              fontSize: 12.sp,
-                              fontWeight: FontWeight.w400,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // Mic Icon
-                InkWell(
-                  onTap: () async {
-                    Haptics.light();
-                    final query = await VoiceSearchDialog.show(context);
-                    if (query != null && query.trim().isNotEmpty && context.mounted) {
-                      context.push(RouteNames.search, extra: query.trim());
-                    }
-                  },
-                  child: Padding(
-                    padding: EdgeInsets.only(left: 4.w),
-                    child: Icon(
-                      Icons.mic_none_rounded,
-                      color: const Color(0xFFC80A14), // Red
-                      size: 18.sp,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        SizedBox(width: 10.w),
-
-        // Right: VEG MODE Toggle Pill Button
-        InkWell(
-          onTap: () {
-            Haptics.light();
-            ref.read(vegFilterProvider.notifier).toggle();
-          },
-          borderRadius: BorderRadius.circular(8.r),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                'VEG\nMODE',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 9.sp,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white, // Pure white as in screenshot
-                  letterSpacing: 0.4,
-                  height: 1.1,
-                ),
-              ),
-              SizedBox(height: 2.h),
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                width: 32.w,
-                height: 16.h,
-                padding: EdgeInsets.all(2.r),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8.r),
-                  color: isVegOnly
-                      ? const Color(0xFF10B981) // Emerald Green as in screenshot
-                      : Colors.white.withValues(alpha: 0.35),
-                ),
-                child: AnimatedAlign(
-                  duration: const Duration(milliseconds: 200),
-                  alignment: isVegOnly ? Alignment.centerRight : Alignment.centerLeft,
-                  child: Container(
-                    width: 12.h,
-                    height: 12.h,
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black26,
-                          blurRadius: 2,
-                          offset: Offset(0, 1),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
 }
+

@@ -380,7 +380,13 @@ class RestaurantModel {
         json['isVegOnly'] == true ||
         (json['category']?.toString().toLowerCase().contains('veg') == true) ||
         (json['foodType']?.toString().toLowerCase() == 'veg');
-    final isFreeDeliv = json['isFreeDelivery'] == true || json['freeDelivery'] == true || (json['deliveryFee'] != null && (json['deliveryFee'] as num).toDouble() == 0.0);
+    final isFreeDeliv = json['isFreeDelivery'] == true ||
+        json['isFreeDelivery']?.toString().toLowerCase() == 'true' ||
+        json['freeDelivery'] == true ||
+        json['freeDelivery']?.toString().toLowerCase() == 'true' ||
+        json['free_delivery'] == true ||
+        json['free_delivery']?.toString().toLowerCase() == 'true' ||
+        json['hasFreeDelivery'] == true;
     final areaName = _extractLocationFromApi(json);
 
     final restId = (json['_id'] ?? json['id'] ?? json['restaurantId'] ?? '').toString();
@@ -523,7 +529,13 @@ class RestaurantModel {
       isOpen: _parseIsOpen(json),
       closingTime: json['closingTime'] as String? ?? '',
       isPureVeg: json['isPureVeg'] as bool? ?? false,
-      isFreeDelivery: json['isFreeDelivery'] as bool? ?? false,
+      isFreeDelivery: json['isFreeDelivery'] == true ||
+          json['isFreeDelivery']?.toString().toLowerCase() == 'true' ||
+          json['freeDelivery'] == true ||
+          json['freeDelivery']?.toString().toLowerCase() == 'true' ||
+          json['free_delivery'] == true ||
+          json['free_delivery']?.toString().toLowerCase() == 'true' ||
+          json['hasFreeDelivery'] == true,
       area: areaVal,
     );
   }

@@ -11,7 +11,7 @@ final store99ViewModelProvider =
 
 class Store99ViewModel extends Notifier<Store99State> {
   late final Store99Service _service;
-  static const int _pageSize = 6;
+  static const int _pageSize = 20;
 
   @override
   Store99State build() {

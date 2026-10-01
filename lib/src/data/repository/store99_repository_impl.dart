@@ -8,12 +8,11 @@ import '../datasources/catalog_remote_datasource.dart';
 import '../models/food_model.dart';
 import '../models/restaurant_model.dart';
 
-/// Backend-backed 99 Store.
+/// Backend-backed ?149 Meals Store.
 ///
-/// The backend models this as the `switch99` promo slug on the cross-restaurant
-/// food feed rather than a price filter, so nothing here filters on price.
-/// Cuisines come from the real category list and brands from the restaurant
-/// list â€” there are no dedicated 99-Store endpoints.
+/// Fetches all public foods and filters client-side by price <= ?149.
+/// No promo-slug dependency — works with all items in the catalog.
+/// Cuisines come from the real category list and brands from restaurants.
 class Store99RepositoryImpl implements Store99Repository {
   final CatalogRemoteDataSource _remote;
   final String? Function() _zoneId;
@@ -21,7 +20,7 @@ class Store99RepositoryImpl implements Store99Repository {
 
   const Store99RepositoryImpl(this._remote, this._zoneId, this._latLng);
 
-  static const _promo = 'switch99';
+  static const _maxPrice = 149.0;
 
   @override
   Future<ApiResponse<List<Store99Cuisine>>> getCuisines() {
@@ -55,14 +54,12 @@ class Store99RepositoryImpl implements Store99Repository {
   @override
   Future<ApiResponse<List<Store99Product>>> getTrendingDishes() {
     return _guard(() async {
-      var foods = await _remote.getPublicFoods(zoneId: _zoneId(), promo: _promo, limit: 100);
-      var eligible = foods.where((f) => f.price <= 99.0).toList();
-      if (eligible.isEmpty) {
-        // Fallback: Fetch general foods without promo constraint and find items <= 99
-        final allFoods = await _remote.getPublicFoods(zoneId: _zoneId(), limit: 150);
-        eligible = allFoods.where((f) => f.price <= 99.0).toList();
-      }
-      return eligible.map(_toProduct).toList();
+      // Fetch all public foods (no promo filter) — show anything priced <= ?149
+      final foods = await _remote.getPublicFoods(
+        zoneId: _zoneId(),
+        limit: 100,
+      );
+      return foods.where((f) => f.price <= _maxPrice).map(_toProduct).toList();
     });
   }
 
@@ -70,28 +67,19 @@ class Store99RepositoryImpl implements Store99Repository {
   Future<ApiResponse<List<Store99Product>>> getExploreProducts({
     String cuisineId = 'all',
     int page = 1,
-    int limit = 10,
+    int limit = 20,
   }) {
     return _guard(() async {
-      var foods = await _remote.getPublicFoods(
+      // No promo filter — fetch all foods by optional category, filter price client-side
+      final foods = await _remote.getPublicFoods(
         zoneId: _zoneId(),
-        promo: _promo,
         categorySlug: cuisineId == 'all' ? null : cuisineId,
-        limit: 200,
+        limit: 500,
       );
 
-      var eligibleFoods = foods.where((f) => f.price <= 99.0).toList();
+      final eligibleFoods = foods.where((f) => f.price <= _maxPrice).toList();
 
-      if (eligibleFoods.isEmpty) {
-        final allFoods = await _remote.getPublicFoods(
-          zoneId: _zoneId(),
-          categorySlug: cuisineId == 'all' ? null : cuisineId,
-          limit: 200,
-        );
-        eligibleFoods = allFoods.where((f) => f.price <= 99.0).toList();
-      }
-
-      // Client-side pagination windowing applied on eligible (<= 99) products
+      // Client-side pagination on eligible products
       final start = (page - 1) * limit;
       if (start >= eligibleFoods.length) return const <Store99Product>[];
       return eligibleFoods
@@ -134,3 +122,4 @@ class Store99RepositoryImpl implements Store99Repository {
     }
   }
 }
+

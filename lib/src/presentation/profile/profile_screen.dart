@@ -267,7 +267,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ),
           _buildEarningsNavTile(
             icon: Icons.storefront_rounded,
-            title: 'Open Vendor',
+            title: 'Join as a Vendor',
             onTap: () {
               Haptics.light();
               _showOpenVendorSheet(context);

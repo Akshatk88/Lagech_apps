@@ -22,6 +22,7 @@ import 'viewmodels/home_scroll_provider.dart';
 import 'viewmodels/veg_filter_provider.dart';
 import 'widgets/category_list.dart';
 import 'widgets/home_header_banner.dart';
+import 'widgets/home_search_bar_row.dart';
 import 'widgets/restaurant_card.dart';
 import 'widgets/explore_more_section.dart';
 import 'widgets/home_filter_chips_row.dart';
@@ -99,9 +100,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   void _handleScroll() {
     if (!_scrollController.hasClients) return;
-    // Collapse flag flips after scrolling 180px — approximate point
+    // Collapse flag flips after scrolling 210px — approximate point
     // where the banner is fully off screen and categories are pinned.
-    const threshold = 180.0;
+    const threshold = 210.0;
     final collapsed = _scrollController.offset > threshold;
     if (collapsed != _headerCollapsed) {
       setState(() => _headerCollapsed = collapsed);
@@ -123,6 +124,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final homeState = ref.watch(homeViewModelProvider);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final topInset = MediaQuery.of(context).padding.top;
+    final topPadding = topInset > 0 ? topInset : 8.h;
+    final stickyContentHeight = 132.h;
+    final totalStickyHeight = _headerCollapsed ? (topPadding + stickyContentHeight) : stickyContentHeight;
 
     final allCategories = homeState.categories.asData?.value ?? const <CategoryModel>[];
     final activeCategoryModel = (_selectedCategory == 'All' || _selectedCategory == 'More')
@@ -213,13 +218,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
 
 
-                      // 2. Sticky Pinned Categories Row (Pizza, Burger, Sandwich stays fixed when scrolling)
+                      // 2. Sticky Pinned Search Bar & Categories Row (Search bar and Pizza, Burger, Sandwich stay fixed when scrolling)
                       SliverPersistentHeader(
                         pinned: true,
                         delegate: _StickyCategoryHeaderDelegate(
-                          height: 76.h,
+                          height: totalStickyHeight,
                           child: Container(
-                            height: 76.h,
+                            height: totalStickyHeight,
                             decoration: BoxDecoration(
                               color: isDark ? AppColors.backgroundDark : Colors.white,
                               border: Border(
@@ -238,34 +243,49 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 ),
                               ],
                             ),
-                            child: CategoryList(
-                              categories: homeState.categories.asData?.value ?? const [],
-                              selectedCategoryName: _selectedCategory,
-                              onMealsUnder200Tap: () {
-                                Haptics.light();
-                                context.push(RouteNames.store99);
-                              },
-                              onAllCategoriesTap: () {
-                                _showCategoryFilterSheet(
-                                  context,
-                                  isDark,
-                                  homeState.categories.asData?.value ?? const [],
-                                );
-                              },
-                              onCategorySelected: (catName) {
-                                Haptics.light();
-                                final categories = homeState.categories.asData?.value ?? const [];
-                                final cat = categories
-                                    .where((c) => c.name.toLowerCase() == catName.toLowerCase())
-                                    .firstOrNull ??
-                                    CategoryModel(
-                                      id: '',
-                                      name: catName,
-                                      imageUrl: '',
-                                      slug: catName.toLowerCase(),
-                                    );
-                                context.push(RouteNames.categoryDetails, extra: cat);
-                              },
+                            child: ClipRect(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (_headerCollapsed)
+                                    SizedBox(height: topPadding)
+                                  else
+                                    SizedBox(height: 2.h),
+                                  Padding(
+                                    padding: EdgeInsets.fromLTRB(16.w, 4.h, 16.w, 2.h),
+                                    child: const HomeSearchBarRow(),
+                                  ),
+                                  CategoryList(
+                                    categories: homeState.categories.asData?.value ?? const [],
+                                    selectedCategoryName: _selectedCategory,
+                                    onMealsUnder200Tap: () {
+                                      Haptics.light();
+                                      context.push(RouteNames.store99);
+                                    },
+                                    onAllCategoriesTap: () {
+                                      _showCategoryFilterSheet(
+                                        context,
+                                        isDark,
+                                        homeState.categories.asData?.value ?? const [],
+                                      );
+                                    },
+                                    onCategorySelected: (catName) {
+                                      Haptics.light();
+                                      final categories = homeState.categories.asData?.value ?? const [];
+                                      final cat = categories
+                                          .where((c) => c.name.toLowerCase() == catName.toLowerCase())
+                                          .firstOrNull ??
+                                          CategoryModel(
+                                            id: '',
+                                            name: catName,
+                                            imageUrl: '',
+                                            slug: catName.toLowerCase(),
+                                          );
+                                      context.push(RouteNames.categoryDetails, extra: cat);
+                                    },
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
@@ -418,11 +438,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                     : filtered;
                                 if (displayList.isEmpty) return const SizedBox.shrink();
 
+                                final reorderedRecommended = _reorderRecommendedList(displayList);
+
                                 return Column(
                                   children: [
                                     RecommendedGridSection(
-                                      key: ValueKey('$_selectedCategory-${displayList.length}'),
-                                      restaurants: displayList,
+                                      key: ValueKey('$_selectedCategory-${reorderedRecommended.length}'),
+                                      restaurants: reorderedRecommended,
                                       selectedCategory: _selectedCategory,
                                       categoryDishes: matchingDishes,
                                       title: _selectedCategory == 'All'
@@ -476,7 +498,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                   children: [
                                     SizedBox(height: 8.h),
                                     SpotlightCarousel(
-                                      restaurants: allRestaurants,
+                                      restaurants: _reorderRecommendedList(allRestaurants),
                                       onRestaurantTap: (rest) {
                                         context.push(RouteNames.restaurantDetail, extra: rest);
                                       },
@@ -493,11 +515,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             // 5. Featured Restaurants Section (Matching Screenshot)
                             homeState.nearbyRestaurants.when(
                               data: (allRestaurants) {
-                                final restaurants = _filterRestaurants(
+                                final filtered = _filterRestaurants(
                                   allRestaurants,
                                   matchingDishes: matchingDishes,
                                   categoryRestaurants: categoryRests,
                                 );
+                                final restaurants = _reorderRecommendedList(filtered);
                                 if (restaurants.isEmpty) {
                                   return Padding(
                                     padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 28.h),
@@ -681,6 +704,66 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
 
+
+  List<RestaurantModel> _reorderRecommendedList(List<RestaurantModel> restaurants) {
+    if (restaurants.isEmpty) return restaurants;
+
+    // 1. Explicitly identify restaurants to push to the back ("hotel galaxy", "nandish bakers")
+    final pushToBack = <RestaurantModel>[];
+    // 2. Identify priority front restaurants ("phaltan delivery" or restaurants starting with / containing "phaltan" in NAME)
+    final priorityFront = <RestaurantModel>[];
+    // 3. All other restaurants
+    final others = <RestaurantModel>[];
+
+    for (final r in restaurants) {
+      final name = r.name.toLowerCase().trim();
+      if (name.contains('galaxy') || name.contains('nandish')) {
+        pushToBack.add(r);
+      } else if (name.contains('phaltan') || name.contains('delivery')) {
+        priorityFront.add(r);
+      } else {
+        others.add(r);
+      }
+    }
+
+    // Sort priorityFront: if any have distance, nearest first
+    priorityFront.sort((a, b) {
+      if (a.distanceKm > 0 && b.distanceKm > 0) {
+        return a.distanceKm.compareTo(b.distanceKm);
+      }
+      return 0;
+    });
+
+    // For others: if distance is present, sort nearest first.
+    // Otherwise reverse so restaurants from the back of the DB list appear first,
+    // and older front restaurants move towards the end.
+    final bool hasDistance = others.any((r) => r.distanceKm > 0);
+    List<RestaurantModel> sortedOthers;
+    if (hasDistance) {
+      sortedOthers = List<RestaurantModel>.from(others)
+        ..sort((a, b) {
+          if (a.distanceKm > 0 && b.distanceKm > 0) {
+            return a.distanceKm.compareTo(b.distanceKm);
+          }
+          if (a.distanceKm > 0) return -1;
+          if (b.distanceKm > 0) return 1;
+          return 0;
+        });
+    } else {
+      sortedOthers = others.reversed.toList();
+    }
+
+    if (hasDistance) {
+      pushToBack.sort((a, b) {
+        if (a.distanceKm > 0 && b.distanceKm > 0) {
+          return a.distanceKm.compareTo(b.distanceKm);
+        }
+        return 0;
+      });
+    }
+
+    return [...priorityFront, ...sortedOthers, ...pushToBack];
+  }
 
   List<RestaurantModel> _filterRestaurants(
     List<RestaurantModel> restaurants, {

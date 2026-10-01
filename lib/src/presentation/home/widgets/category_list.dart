@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../../core/utils/haptics.dart';
 import '../../../data/models/category_model.dart';
-import '../../branding/app_colors.dart';
 import '../../common_widgets/smart_image.dart';
 
 class CategoryList extends StatefulWidget {
@@ -26,6 +25,38 @@ class CategoryList extends StatefulWidget {
 }
 
 class _CategoryListState extends State<CategoryList> {
+  static String _resolveCategoryFallback(String name) {
+    final n = name.toLowerCase().trim();
+    if (n.contains('pizza')) {
+      return 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=300&auto=format&fit=crop';
+    }
+    if (n.contains('biryani') || n.contains('rice')) {
+      return 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=300&auto=format&fit=crop';
+    }
+    if (n.contains('burger')) {
+      return 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=300&auto=format&fit=crop';
+    }
+    if (n.contains('chicken')) {
+      return 'https://images.unsplash.com/photo-1598515214211-89d3c73ae83b?w=300&auto=format&fit=crop';
+    }
+    if (n.contains('roll') || n.contains('wrap') || n.contains('shawarma') || n.contains('kathi')) {
+      return 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=300&auto=format&fit=crop';
+    }
+    if (n.contains('pasta') || n.contains('spaghetti') || n.contains('macaroni')) {
+      return 'https://images.unsplash.com/photo-1621996346565-e3d5d6281691?w=300&auto=format&fit=crop';
+    }
+    if (n.contains('sandwich') || n.contains('toast')) {
+      return 'https://images.unsplash.com/photo-1528735602780-2552fd46c7af?w=300&auto=format&fit=crop';
+    }
+    if (n.contains('momo') || n.contains('dumpling')) {
+      return 'https://images.unsplash.com/photo-1625246333195-78d9c38ad449?w=300&auto=format&fit=crop';
+    }
+    if (n.contains('fries')) {
+      return 'https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=300&auto=format&fit=crop';
+    }
+    return '';
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -48,22 +79,24 @@ class _CategoryListState extends State<CategoryList> {
       uniqueCategories.add(c);
     }
 
-    // Junk / Fast Food prioritized at the FRONT (Pizza, Burger, Sandwich, Momos first)
+    // Junk / Fast Food prioritized at the FRONT matching reference screenshot:
+    // 1. Pizza, 2. Biryani, 3. Burger, 4. Chicken, 5. Rolls, 6. Pasta...
     const junkFoodPrefixes = [
       'pizza',
+      'biryani',
       'burger',
+      'chicken',
+      'roll',
+      'pasta',
       'sandwich',
       'momo',
       'fries',
-      'roll',
-      'pasta',
-      'maggi',
       'vadapav',
       'chinese',
-      'biryani',
-      'chicken',
-      'starter',
+      'maggi',
       'kabab',
+      'shawarma',
+      'starter',
       'pav bhaji',
       'snack',
       'mutton',
@@ -130,11 +163,15 @@ class _CategoryListState extends State<CategoryList> {
 
     final orderedCategories = [...firstItems, ...middleItems, ...lastItems];
     final items = orderedCategories
-        .map((c) => {'name': c.name, 'imageUrl': c.imageUrl, 'category': c})
+        .map((c) => {
+              'name': c.name,
+              'imageUrl': c.imageUrl.isNotEmpty ? c.imageUrl : _resolveCategoryFallback(c.name),
+              'category': c,
+            })
         .toList();
 
     return SizedBox(
-      height: 76.h,
+      height: 82.h,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -144,113 +181,104 @@ class _CategoryListState extends State<CategoryList> {
               physics: const BouncingScrollPhysics(),
               padding: EdgeInsets.only(left: 16.w, right: 8.w),
               itemCount: items.length,
-        itemBuilder: (context, index) {
-          // Circular Food Categories
-          final cat = items[index];
-          final name = cat['name'] as String;
-          final isSelected = widget.selectedCategoryName.trim().isNotEmpty &&
-              widget.selectedCategoryName.trim().toLowerCase() == name.trim().toLowerCase();
+              itemBuilder: (context, index) {
+                // Uniform circular food dish presentation
+                final cat = items[index];
+                final name = cat['name'] as String;
+                final imgUrl = cat['imageUrl'] as String;
+                final isSelected = widget.selectedCategoryName.trim().isNotEmpty &&
+                    widget.selectedCategoryName.trim().toLowerCase() == name.trim().toLowerCase();
 
-          return GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () {
-              Haptics.light();
-              widget.onCategorySelected?.call(name);
-            },
-            child: Container(
-              margin: EdgeInsets.only(right: 10.w),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 48.w,
-                    height: 48.w,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isDark ? AppColors.surfaceDark : Colors.white,
-                      border: Border.all(
-                        color: isSelected ? const Color(0xFFC80A14) : Colors.transparent,
-                        width: isSelected ? 2.5 : 0,
-                      ),
-                      boxShadow: isSelected
-                          ? [
-                              BoxShadow(
-                                color: const Color(0xFFC80A14).withValues(alpha: 0.35),
-                                blurRadius: 6,
-                                spreadRadius: 1,
-                              ),
-                            ]
-                          : null,
-                    ),
-                    padding: EdgeInsets.all(isSelected ? 2.0 : 0.0),
-                    child: ClipOval(
-                      child: SmartImage(
-                        url: cat['imageUrl'] as String,
-                        category: ImageCategory.category,
-                        fit: BoxFit.cover,
-                      ),
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    Haptics.light();
+                    widget.onCategorySelected?.call(name);
+                  },
+                  child: Container(
+                    margin: EdgeInsets.only(right: 14.w),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Uniform circle — no visible border, no background color.
+                        // ClipOval + BoxFit.cover ensures every image (jpeg/webp/png)
+                        // is cropped into an identical circle shape.
+                        SizedBox(
+                          width: 52.w,
+                          height: 52.w,
+                          child: ClipOval(
+                            child: SmartImage(
+                              url: imgUrl,
+                              width: 52.w,
+                              height: 52.w,
+                              category: ImageCategory.category,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                        SizedBox(height: 5.h),
+                        // Category Label Text
+                        SizedBox(
+                          width: 62.w,
+                          child: Text(
+                            name,
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: isSelected
+                                  ? const Color(0xFFC80A14)
+                                  : (isDark ? Colors.white : const Color(0xFF111827)),
+                              fontSize: 11.5.sp,
+                              fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                        ),
+                        if (isSelected)
+                          Container(
+                            margin: EdgeInsets.only(top: 2.h),
+                            width: 14.w,
+                            height: 2.h,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFC80A14),
+                              borderRadius: BorderRadius.circular(2.r),
+                            ),
+                          )
+                        else
+                          SizedBox(height: 4.h),
+                      ],
                     ),
                   ),
-                  SizedBox(height: 3.h),
-                  SizedBox(
-                    width: 56.w,
-                    child: Text(
-                      name,
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: isSelected
-                            ? const Color(0xFFC80A14)
-                            : (isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight),
-                        fontSize: 10.5.sp,
-                        fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  if (isSelected)
-                    Container(
-                      margin: EdgeInsets.only(top: 1.5.h),
-                      width: 14.w,
-                      height: 2.h,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFC80A14),
-                        borderRadius: BorderRadius.circular(2.r),
-                      ),
-                    )
-                  else
-                    SizedBox(height: 3.5.h),
-                ],
+                );
+              },
+            ),
+          ),
+
+          // Red tune icon on the right side - clicking opens all categories
+          Padding(
+            padding: EdgeInsets.only(right: 12.w, left: 2.w),
+            child: InkWell(
+              onTap: () {
+                Haptics.light();
+                widget.onAllCategoriesTap?.call();
+              },
+              borderRadius: BorderRadius.circular(20.r),
+              child: Container(
+                width: 34.w,
+                height: 34.w,
+                alignment: Alignment.center,
+                child: Icon(
+                  Icons.tune_rounded,
+                  color: const Color(0xFFC80A14),
+                  size: 20.sp,
+                ),
               ),
             ),
-          );
-        },
-      ),
-    ),
-
-    // Red tune icon on the right side - clicking opens all categories
-    Padding(
-      padding: EdgeInsets.only(right: 12.w, left: 2.w),
-      child: InkWell(
-        onTap: () {
-          Haptics.light();
-          widget.onAllCategoriesTap?.call();
-        },
-        borderRadius: BorderRadius.circular(20.r),
-        child: Container(
-          width: 34.w,
-          height: 34.w,
-          alignment: Alignment.center,
-          child: Icon(
-            Icons.tune_rounded,
-            color: const Color(0xFFC80A14), // Red color
-            size: 20.sp,
           ),
-        ),
+        ],
       ),
-    ),
-  ],
-),
-);
+    );
   }
 }

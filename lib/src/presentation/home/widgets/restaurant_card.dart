@@ -380,29 +380,30 @@ class _RestaurantCardState extends ConsumerState<RestaurantCard> {
                       ),
                     ),
 
-                    // Bottom-Left: RED "FREE delivery" badge (Requested by user in Red theme)
-                    Positioned(
-                      bottom: 0,
-                      left: 0,
-                      child: Container(
-                        padding: EdgeInsets.symmetric(horizontal: 9.w, vertical: 4.5.h),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFC80A14), // Red brand color as requested
-                          borderRadius: BorderRadius.only(
-                            topRight: Radius.circular(7.r),
+                    // Bottom-Left: RED "FREE delivery" badge (Shown only when admin configured free delivery)
+                    if (restaurant.isFreeDelivery)
+                      Positioned(
+                        bottom: 0,
+                        left: 0,
+                        child: Container(
+                          padding: EdgeInsets.symmetric(horizontal: 9.w, vertical: 4.5.h),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFC80A14), // Red brand color as requested
+                            borderRadius: BorderRadius.only(
+                              topRight: Radius.circular(7.r),
+                            ),
                           ),
-                        ),
-                        child: Text(
-                          'FREE delivery',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 10.5.sp,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.3,
+                          child: Text(
+                            'FREE delivery',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10.5.sp,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.3,
+                            ),
                           ),
                         ),
                       ),
-                    ),
 
                   ],
                 ),

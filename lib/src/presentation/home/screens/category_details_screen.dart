@@ -429,7 +429,63 @@ class _CategoryDetailsScreenState extends ConsumerState<CategoryDetailsScreen> {
   }
 
   List<RestaurantModel> _buildCategoryRecommendedList(List<RestaurantModel> apiRestaurants) {
-    return apiRestaurants;
+    if (apiRestaurants.isEmpty) return apiRestaurants;
+
+    // 1. Explicitly identify restaurants to push to the back ("hotel galaxy", "nandish bakers")
+    final pushToBack = <RestaurantModel>[];
+    // 2. Identify priority front restaurants ("phaltan delivery" or restaurants starting with / containing "phaltan" in NAME)
+    final priorityFront = <RestaurantModel>[];
+    // 3. All other restaurants
+    final others = <RestaurantModel>[];
+
+    for (final r in apiRestaurants) {
+      final name = r.name.toLowerCase().trim();
+      if (name.contains('galaxy') || name.contains('nandish')) {
+        pushToBack.add(r);
+      } else if (name.contains('phaltan') || name.contains('delivery')) {
+        priorityFront.add(r);
+      } else {
+        others.add(r);
+      }
+    }
+
+    // Sort priorityFront: if any have distance, nearest first
+    priorityFront.sort((a, b) {
+      if (a.distanceKm > 0 && b.distanceKm > 0) {
+        return a.distanceKm.compareTo(b.distanceKm);
+      }
+      return 0;
+    });
+
+    // For others: if distance is present, sort nearest first.
+    // Otherwise reverse so restaurants from the back of the DB list appear first,
+    // and older front restaurants move towards the end.
+    final bool hasDistance = others.any((r) => r.distanceKm > 0);
+    List<RestaurantModel> sortedOthers;
+    if (hasDistance) {
+      sortedOthers = List<RestaurantModel>.from(others)
+        ..sort((a, b) {
+          if (a.distanceKm > 0 && b.distanceKm > 0) {
+            return a.distanceKm.compareTo(b.distanceKm);
+          }
+          if (a.distanceKm > 0) return -1;
+          if (b.distanceKm > 0) return 1;
+          return 0;
+        });
+    } else {
+      sortedOthers = others.reversed.toList();
+    }
+
+    if (hasDistance) {
+      pushToBack.sort((a, b) {
+        if (a.distanceKm > 0 && b.distanceKm > 0) {
+          return a.distanceKm.compareTo(b.distanceKm);
+        }
+        return 0;
+      });
+    }
+
+    return [...priorityFront, ...sortedOthers, ...pushToBack];
   }
 
   @override
@@ -762,7 +818,7 @@ class _CategoryDetailsScreenState extends ConsumerState<CategoryDetailsScreen> {
                     shape: BoxShape.circle,
                     border: Border.all(
                       color: isSelected
-                          ? const Color(0xFF008A45)
+                          ? const Color(0xFFC80A14)
                           : Colors.transparent,
                       width: 2.2,
                     ),
@@ -777,7 +833,7 @@ class _CategoryDetailsScreenState extends ConsumerState<CategoryDetailsScreen> {
                         child: Icon(
                           Icons.restaurant_rounded,
                           size: 24.sp,
-                          color: isSelected ? const Color(0xFF008A45) : Colors.grey[600],
+                          color: isSelected ? const Color(0xFFC80A14) : Colors.grey[600],
                         ),
                       ),
                     ),
@@ -799,14 +855,14 @@ class _CategoryDetailsScreenState extends ConsumerState<CategoryDetailsScreen> {
                   ),
                 ),
 
-                // Green Underline Bar for selected category (matching Screenshot)
+                // Red Underline Bar for selected category
                 if (isSelected) ...[
                   SizedBox(height: 3.h),
                   Container(
                     width: 28.w,
                     height: 2.8.h,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF008A45),
+                      color: const Color(0xFFC80A14),
                       borderRadius: BorderRadius.circular(2.r),
                     ),
                   ),
