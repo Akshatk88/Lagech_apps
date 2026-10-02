@@ -507,6 +507,8 @@ class _RecommendedMiniCardState extends ConsumerState<RecommendedMiniCard> {
                               ),
                             ),
                           ),
+                        ),
+                      ),
                       // Closed Overlay
                       if (!widget.restaurant.isOpen)
                         Positioned.fill(

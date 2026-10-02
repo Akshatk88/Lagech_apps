@@ -136,6 +136,7 @@ class _SpotlightCarouselState extends State<SpotlightCarousel> {
                               ),
                             ),
                           ),
+                        ),
                         // Closed Overlay
                         if (!restaurant.isOpen)
                           Positioned.fill(
