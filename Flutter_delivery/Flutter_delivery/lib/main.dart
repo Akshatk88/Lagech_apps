@@ -66,21 +66,8 @@ class _FoodDeliveryAppState extends ConsumerState<FoodDeliveryApp>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _consumeOverlayHandoff();
-      // Re-checks full-screen-intent / overlay permissions on every resume,
-      // not just cold start — catches a rider who dismissed the Settings
-      // prompt the first time or toggled it manually while the app was
-      // backgrounded (see FcmService.ensureAndroidAlertPermissions).
-      ref.read(fcmServiceProvider).ensureAndroidAlertPermissions();
 
-      // Re-register the push token on every resume, for the same reason.
-      //
-      // Registration only happened at launch and login, so a save that failed
-      // — or a token FCM rotated while the app was closed — left the rider
-      // silently unreachable until the next relaunch. Five of six online riders
-      // were in exactly that state: apps running, GPS fresh, no token on the
-      // server, and no order offers reaching them.
-      //
-      // Idempotent server-side ($addToSet), so repeating it is free.
+      // Re-register the push token on every resume.
       unawaited(ref.read(fcmServiceProvider).registerToken());
     }
   }

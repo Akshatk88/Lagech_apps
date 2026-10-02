@@ -450,23 +450,14 @@ class FcmService {
   Future<void> ensureAndroidAlertPermissions() async {
     if (!Platform.isAndroid) return;
 
-    // Full-screen intent — only open Settings if not already granted.
-    final androidPlugin = _localNotifications
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >();
-    final hasFullScreen =
-        await androidPlugin?.canUseFullScreenIntent() ?? true;
-    if (!hasFullScreen) {
-      await androidPlugin?.requestFullScreenIntentPermission();
-    }
-
     // Overlay permission — only open Settings if not already granted.
-    // Without this guard the Settings page pops up on EVERY app resume,
-    // even when the rider already allowed "Display over other apps".
-    final hasOverlay = await NewOrderOverlayBridge.hasOverlayPermission();
-    if (!hasOverlay) {
-      await NewOrderOverlayBridge.requestOverlayPermission();
+    try {
+      final hasOverlay = await NewOrderOverlayBridge.hasOverlayPermission();
+      if (!hasOverlay) {
+        await NewOrderOverlayBridge.requestOverlayPermission();
+      }
+    } catch (e) {
+      debugPrint('[FCM] Error checking overlay permission: $e');
     }
   }
 

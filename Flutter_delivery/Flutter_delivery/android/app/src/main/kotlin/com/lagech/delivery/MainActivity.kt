@@ -186,17 +186,21 @@ class MainActivity : FlutterActivity() {
                         }
                     }
                     "canUseFullScreenIntent" -> {
-                        val granted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
-                            packageManager.checkPermission(
-                                android.Manifest.permission.USE_FULL_SCREEN_INTENT, packageName
-                            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                        else true
+                        val granted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+                            nm?.canUseFullScreenIntent() ?: true
+                        } else true
                         result.success(granted)
                     }
                     "requestFullScreenIntent" -> {
                         // Android 14+ needs the user to flip a switch in Settings.
                         // On older versions it is always granted.
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+                            if (nm?.canUseFullScreenIntent() == true) {
+                                result.success(true)
+                                return@setMethodCallHandler
+                            }
                             try {
                                 startActivity(
                                     Intent(
