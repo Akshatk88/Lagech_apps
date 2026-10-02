@@ -97,6 +97,14 @@ class MainActivity : FlutterActivity() {
 
                     "requestOverlayPermission" -> {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            // Guard: only open Settings if permission is NOT already granted.
+                            // Without this, the Settings screen pops up on every app resume
+                            // even after the rider has allowed "Display over other apps".
+                            if (Settings.canDrawOverlays(this)) {
+                                Log.d(TAG, "requestOverlayPermission: already granted, skipping")
+                                result.success(true)
+                                return@setMethodCallHandler
+                            }
                             try {
                                 val intent = Intent(
                                     Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
@@ -152,6 +160,57 @@ class MainActivity : FlutterActivity() {
                             )
                         )
                         result.success(true)
+                    }
+                    // AlertPermissionFlow uses these two via READINESS_CHANNEL
+                    "canDrawOverlays" -> {
+                        val granted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+                            Settings.canDrawOverlays(this) else true
+                        result.success(granted)
+                    }
+                    "requestOverlay" -> {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+                            !Settings.canDrawOverlays(this)) {
+                            try {
+                                startActivity(
+                                    Intent(
+                                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                        Uri.parse("package:$packageName")
+                                    )
+                                )
+                                result.success(true)
+                            } catch (e: Exception) {
+                                result.success(false)
+                            }
+                        } else {
+                            result.success(true) // already granted or pre-M
+                        }
+                    }
+                    "canUseFullScreenIntent" -> {
+                        val granted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+                            packageManager.checkPermission(
+                                android.Manifest.permission.USE_FULL_SCREEN_INTENT, packageName
+                            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                        else true
+                        result.success(granted)
+                    }
+                    "requestFullScreenIntent" -> {
+                        // Android 14+ needs the user to flip a switch in Settings.
+                        // On older versions it is always granted.
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                            try {
+                                startActivity(
+                                    Intent(
+                                        Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+                                        Uri.parse("package:$packageName")
+                                    )
+                                )
+                                result.success(true)
+                            } catch (e: Exception) {
+                                result.success(false)
+                            }
+                        } else {
+                            result.success(true)
+                        }
                     }
                     else -> result.notImplemented()
                 }
