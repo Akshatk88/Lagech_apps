@@ -117,7 +117,6 @@ object NewOrderRingtone {
     }
 
     /**
-    /**
      * Stop the ringing unconditionally.
      * Any decision (Accept, Reject, Dismiss, or manual stop) must immediately silence the audio.
      */
