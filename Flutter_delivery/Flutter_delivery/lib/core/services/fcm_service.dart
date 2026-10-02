@@ -15,7 +15,7 @@ import '../constants/app_constants.dart';
 import '../network/api_endpoints.dart';
 import '../network/dio_client.dart';
 import '../storage/token_storage.dart';
-import 'order_overlay_service.dart';
+import 'new_order_overlay_bridge.dart';
 
 /// Dedicated channel for incoming-order alerts — separate from
 /// [FcmService._channel] because it needs call-category / full-screen-intent
@@ -64,7 +64,7 @@ String? _orderIdOf(Map<String, dynamic> data) {
 /// rider whose app is closed is the one the socket `order_claimed` event cannot
 /// reach, so this is the only path that clears their screen.
 Future<void> dismissIncomingOrderAlert(String orderId) async {
-  await OrderOverlayService.closeForOrder(orderId);
+  await NewOrderOverlayBridge.dismissOverlay();
   final localNotifications = FlutterLocalNotificationsPlugin();
   await localNotifications.initialize(
     const InitializationSettings(
@@ -141,7 +141,7 @@ Future<void> _respondToOrderFromBackground({
     try {
       final localNotifications = FlutterLocalNotificationsPlugin();
       await localNotifications.cancel(incomingOrderNotificationId(orderId));
-      await OrderOverlayService.closeForOrder(orderId);
+      await NewOrderOverlayBridge.dismissOverlay();
     } catch (_) {}
   }
 }
@@ -172,6 +172,14 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   if (message.data['type'] == 'order_taken') {
     final orderId = _orderIdOf(message.data);
     if (orderId != null) await dismissIncomingOrderAlert(orderId);
+    return;
+  }
+
+  // On Android, new_order in background is owned entirely by native Kotlin
+  // (LagechMessagingService -> NewOrderOverlay / NewOrderNotifier).
+  // Return immediately so Dart posts nothing and doesn't duplicate the alert.
+  if (Platform.isAndroid && message.data['type'] == 'new_order') {
+    print('[FCM Background] new_order received on Android — handled by native Kotlin overlay/notifier');
     return;
   }
 
@@ -232,12 +240,7 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // that honestly instead of us assuming success. Whatever happens here,
   // the full-screen-intent notification below is the guaranteed fallback so
   // a delivered push is never left with nothing shown on screen.
-  // Try the overlay bubble if permission granted
-  try {
-    if (await OrderOverlayService.hasPermission()) {
-      await OrderOverlayService.showForOrder(message.data);
-    }
-  } catch (_) {}
+
 
   try {
     // A fresh isolate — the channel/plugin registered by FcmService.initialize()
@@ -453,12 +456,9 @@ class FcmService {
         >();
     await androidPlugin?.requestFullScreenIntentPermission();
 
-    // Overlay bubble permission ("display over other apps") — powers the
-    // floating home-screen bubble for new orders that arrive while the app
-    // is backgrounded (see OrderOverlayService). Separate from the
-    // full-screen-intent permission above, which only covers the locked-
-    // device case.
-    await OrderOverlayService.requestPermission();
+    // Overlay permission ("display over other apps") — powers the
+    // native WindowManager overlay for incoming orders that arrive while backgrounded.
+    await NewOrderOverlayBridge.requestOverlayPermission();
   }
 
   /// Routes a notification interaction: an Accept/Reject action button, or a
@@ -608,7 +608,7 @@ class FcmService {
     if (message.data['type'] == 'order_taken') {
       final orderId = _orderIdOf(message.data);
       if (orderId != null) {
-        OrderOverlayService.closeForOrder(orderId);
+        NewOrderOverlayBridge.dismissOverlay();
         _localNotifications.cancel(incomingOrderNotificationId(orderId));
       }
       return;

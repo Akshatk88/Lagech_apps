@@ -4,9 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:food_user_application/core/error/result.dart';
 import 'package:food_user_application/core/router/app_router.dart';
 import 'package:food_user_application/core/services/fcm_service.dart';
-import 'package:food_user_application/core/services/order_overlay_service.dart';
+import 'package:food_user_application/core/services/new_order_overlay_bridge.dart';
 import 'package:food_user_application/core/services/referral_tracking_service.dart';
 import 'package:food_user_application/core/theme/app_theme.dart';
 import 'package:food_user_application/core/theme/theme_mode_provider.dart';
@@ -15,7 +16,7 @@ import 'package:food_user_application/features/orders/application/incoming_order
 import 'package:food_user_application/features/orders/application/orders_controller.dart';
 import 'package:food_user_application/features/orders/application/orders_state.dart';
 import 'package:food_user_application/features/orders/application/pending_customer_rating_controller.dart';
-import 'package:food_user_application/features/orders/data/models/delivery_order.dart';
+import 'package:food_user_application/features/orders/data/orders_repository.dart';
 import 'package:food_user_application/features/orders/presentation/screens/active_trip_screen.dart';
 import 'package:food_user_application/features/orders/presentation/screens/incoming_order_screen.dart';
 import 'package:food_user_application/core/presentation/widgets/no_network_overlay.dart';
@@ -35,15 +36,6 @@ void main() async {
   runApp(const ProviderScope(child: FoodDeliveryApp()));
 }
 
-/// Entry point for the overlay bubble's separate Flutter engine — must stay
-/// top-level in this file with this exact name/pragma, since the native
-/// `OverlayService` resolves "overlayMain" from the app's default
-/// entrypoint library (main.dart), not by scanning every file.
-@pragma('vm:entry-point')
-void overlayMain() {
-  runApp(const OrderBubbleApp());
-}
-
 class FoodDeliveryApp extends ConsumerStatefulWidget {
   const FoodDeliveryApp({super.key});
 
@@ -60,7 +52,7 @@ class _FoodDeliveryAppState extends ConsumerState<FoodDeliveryApp>
     Future.microtask(() {
       ref.read(fcmServiceProvider).initialize();
       ReferralTrackingService.initialize();
-      _consumePendingOverlayOrder();
+      _consumeOverlayHandoff();
     });
   }
 
@@ -73,7 +65,7 @@ class _FoodDeliveryAppState extends ConsumerState<FoodDeliveryApp>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _consumePendingOverlayOrder();
+      _consumeOverlayHandoff();
       // Re-checks full-screen-intent / overlay permissions on every resume,
       // not just cold start — catches a rider who dismissed the Settings
       // prompt the first time or toggled it manually while the app was
@@ -93,22 +85,59 @@ class _FoodDeliveryAppState extends ConsumerState<FoodDeliveryApp>
     }
   }
 
-  /// Surfaces an order that arrived as a home-screen bubble (app was
-  /// backgrounded) into the same in-app IncomingOrderScreen shown for the
-  /// foreground/socket path, and dismisses the bubble now that the app is
-  /// in front.
-  Future<void> _consumePendingOverlayOrder() async {
-    await OrderOverlayService.close();
-    final data = await OrderOverlayService.consumePendingOrder();
-    if (data == null || !mounted) return;
-    final order = DeliveryOrder.fromRealtimePayload(data);
-    final incomingController = ref.read(
-      incomingOrderControllerProvider.notifier,
-    );
+  /// Consumes launch order handoff from the native overlay or fallback notification,
+  /// and flushes any pending rejections recorded natively.
+  Future<void> _consumeOverlayHandoff() async {
+    // 1. Flush any pending rejections recorded by the overlay or notification
+    try {
+      final rejectedIds = await NewOrderOverlayBridge.takePendingRejections();
+      if (rejectedIds.isNotEmpty) {
+        debugPrint('[Handoff] Flushing ${rejectedIds.length} pending rejections: $rejectedIds');
+        final incoming = ref.read(incomingOrderControllerProvider.notifier);
+        final ordersController = ref.read(ordersControllerProvider.notifier);
+        for (final id in rejectedIds) {
+          incoming.markResolved(id);
+          unawaited(ordersController.rejectOrder(id));
+        }
+      }
+    } catch (e) {
+      debugPrint('[Handoff] Error taking pending rejections: $e');
+    }
 
-    incomingController.show(order);
-    if (data['autoAccept'] == true) {
-      incomingController.accept();
+    // 2. Consume any launch order from the intent
+    try {
+      final launchData = await NewOrderOverlayBridge.consumeLaunchOrder();
+      if (launchData == null || !mounted) return;
+
+      final orderId = launchData['orderId']?.toString();
+      if (orderId == null || orderId.isEmpty) return;
+
+      final autoAccept = launchData['autoAccept'] == true;
+      debugPrint('[Handoff] Consumed launch order: orderId=$orderId, autoAccept=$autoAccept');
+
+      final incoming = ref.read(incomingOrderControllerProvider.notifier);
+
+      if (autoAccept) {
+        // Accept must never ask twice: do not show the in-app card at all.
+        // Mark resolved, call accept directly, let the trip screen appear.
+        incoming.markResolved(orderId);
+        await ref.read(ordersControllerProvider.notifier).acceptOrder(orderId);
+      } else {
+        // If not autoAccept (e.g. rider tapped fallback notification body), load details and show card
+        final repo = ref.read(ordersRepositoryProvider);
+        final result = await repo.getOrderDetails(orderId);
+        if (!mounted) return;
+        result.when(
+          success: (order) {
+            incoming.show(order);
+          },
+          failure: (err) {
+            debugPrint('[Handoff] Failed to fetch order details for $orderId: $err');
+          },
+        );
+      }
+    } catch (e) {
+      debugPrint('[Handoff] Error consuming launch order: $e');
     }
   }
 

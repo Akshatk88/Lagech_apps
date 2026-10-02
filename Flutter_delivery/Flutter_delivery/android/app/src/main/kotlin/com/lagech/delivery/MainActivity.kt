@@ -9,18 +9,120 @@ import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import android.util.Log
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    companion object {
+        private const val TAG = "MainActivity"
+        private const val OVERLAY_CHANNEL = "com.lagech.delivery/new_order_overlay"
+    }
+
     private val CHANNEL = "app.fooddelivery/unlock"
     private val ONLINE_CHANNEL = "app.fooddelivery/rider_online"
     private val READINESS_CHANNEL = "app.fooddelivery/device_readiness"
 
+    override fun onResume() {
+        super.onResume()
+        AppForeground.isForeground = true
+        Log.d(TAG, "AppForeground.isForeground = true")
+    }
+
+    override fun onPause() {
+        AppForeground.isForeground = false
+        Log.d(TAG, "AppForeground.isForeground = false")
+        super.onPause()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // launchMode is singleTop: setIntent is essential so Flutter reads the latest launch extras
+        setIntent(intent)
+        Log.d(TAG, "onNewIntent received with orderId=${intent.getStringExtra("orderId")}")
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        // Native New Order Overlay Bridge Channel
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, OVERLAY_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "consumeLaunchOrder" -> {
+                        val currentIntent = intent
+                        val orderId = currentIntent?.getStringExtra("orderId")
+                        if (!orderId.isNullOrBlank()) {
+                            val autoAccept = currentIntent.getBooleanExtra("autoAccept", false)
+                            // Clear from intent so a future resume does not re-raise this order
+                            currentIntent.removeExtra("orderId")
+                            currentIntent.removeExtra("autoAccept")
+
+                            val payload = mapOf(
+                                "orderId" to orderId,
+                                "autoAccept" to autoAccept
+                            )
+                            Log.d(TAG, "consumeLaunchOrder consumed: $payload")
+                            result.success(payload)
+                        } else {
+                            result.success(null)
+                        }
+                    }
+
+                    "takePendingRejections" -> {
+                        try {
+                            val prefs = getSharedPreferences(RejectOrderReceiver.PREFS_NAME, Context.MODE_PRIVATE)
+                            val rejections = prefs.getStringSet(RejectOrderReceiver.KEY_PENDING_REJECTIONS, emptySet())?.toList() ?: emptyList()
+                            if (rejections.isNotEmpty()) {
+                                prefs.edit().remove(RejectOrderReceiver.KEY_PENDING_REJECTIONS).apply()
+                                Log.d(TAG, "takePendingRejections returning ${rejections.size} rejections: $rejections")
+                            }
+                            result.success(rejections)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error taking pending rejections: ${e.message}")
+                            result.success(emptyList<String>())
+                        }
+                    }
+
+                    "hasOverlayPermission" -> {
+                        val hasPerm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            Settings.canDrawOverlays(this)
+                        } else {
+                            true
+                        }
+                        result.success(hasPerm)
+                    }
+
+                    "requestOverlayPermission" -> {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            try {
+                                val intent = Intent(
+                                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    Uri.parse("package:$packageName")
+                                )
+                                startActivity(intent)
+                                result.success(true)
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to open overlay permission settings: ${e.message}")
+                                result.success(false)
+                            }
+                        } else {
+                            result.success(true)
+                        }
+                    }
+
+                    "dismissOverlay" -> {
+                        NewOrderOverlay.dismiss()
+                        result.success(true)
+                    }
+
+                    else -> result.notImplemented()
+                }
+            }
+
+        // Screen Unlock Channel
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             if (call.method == "unlockScreen") {
                 unlockScreen()
@@ -30,6 +132,7 @@ class MainActivity : FlutterActivity() {
             }
         }
 
+        // Device Readiness Channel
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, READINESS_CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -54,13 +157,10 @@ class MainActivity : FlutterActivity() {
                 }
             }
 
+        // Rider Online Foreground Service Channel
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, ONLINE_CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
-                    // Failures are reported rather than thrown: going online must
-                    // not be blocked by the service. A rider whose OEM refuses the
-                    // foreground service still needs to take orders — they just
-                    // lose the keep-alive guarantee.
                     "start" -> {
                         try {
                             RiderOnlineService.start(applicationContext)
@@ -81,14 +181,6 @@ class MainActivity : FlutterActivity() {
             }
     }
 
-    /**
-     * Whether the OS has been told to stop dozing this app.
-     *
-     * Without the exemption Android puts the process into Doze when the screen has
-     * been off for a while and defers our work regardless of the foreground
-     * service, which is how riders "went online" and then quietly stopped being
-     * offered orders overnight.
-     */
     private fun isIgnoringBatteryOptimizations(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -98,57 +190,38 @@ class MainActivity : FlutterActivity() {
     private fun requestIgnoreBatteryOptimizations(): Boolean {
         if (isIgnoringBatteryOptimizations()) return true
 
-        // The direct-request dialog is the one-tap path, but Play policy makes it
-        // available only to apps that justify it, and some ROMs remove it outright.
-        // Fall back to the battery-optimisation list, then to app details, so the
-        // button always lands the rider somewhere useful instead of doing nothing.
-        val direct = Intent(
-            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-            Uri.parse("package:$packageName"),
-        )
-        if (startActivitySafely(direct)) return true
-        if (startActivitySafely(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))) return true
-        return startActivitySafely(
-            Intent(
-                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val directIntent = Intent(
+                Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
                 Uri.parse("package:$packageName"),
             )
-        )
+            if (startActivitySafely(directIntent)) return true
+        }
+
+        val settingsIntent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+        return startActivitySafely(settingsIntent)
     }
 
-    /**
-     * The OEM "autostart" / "background run" screen, which is a separate thing from
-     * battery optimisation and is the single biggest reason a foreground service
-     * still gets killed on Xiaomi, Oppo, Vivo, Realme and Huawei.
-     *
-     * There is no public API for it. These component names are the documented-by-
-     * community paths per vendor, and they move between ROM versions — hence
-     * resolving before launching, and reporting honestly when none exists so the UI
-     * can hide the step rather than offering a button that does nothing.
-     */
     private fun resolveAutoStartIntent(): Intent? {
-        val candidates = listOf(
-            "com.miui.securitycenter" to "com.miui.permcenter.autostart.AutoStartManagementActivity",
-            "com.letv.android.letvsafe" to "com.letv.android.letvsafe.AutobootManageActivity",
-            "com.huawei.systemmanager" to "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity",
-            "com.huawei.systemmanager" to "com.huawei.systemmanager.optimize.process.ProtectActivity",
-            "com.coloros.safecenter" to "com.coloros.safecenter.permission.startup.StartupAppListActivity",
-            "com.coloros.safecenter" to "com.coloros.safecenter.startupapp.StartupAppListActivity",
-            "com.oppo.safe" to "com.oppo.safe.permission.startup.StartupAppListActivity",
-            "com.iqoo.secure" to "com.iqoo.secure.ui.phoneoptimize.AddWhiteListActivity",
-            "com.iqoo.secure" to "com.iqoo.secure.ui.phoneoptimize.BgStartUpManager",
-            "com.vivo.permissionmanager" to "com.vivo.permissionmanager.activity.BgStartUpManagerActivity",
-            "com.asus.mobilemanager" to "com.asus.mobilemanager.entry.FunctionActivity",
-            "com.samsung.android.lool" to "com.samsung.android.sm.ui.battery.BatteryActivity",
+        val intents = listOf(
+            Intent().setComponent(ComponentName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity")),
+            Intent().setComponent(ComponentName("com.letv.android.letvsafe", "com.letv.android.letvsafe.AutobootManageActivity")),
+            Intent().setComponent(ComponentName("com.huawei.systemmanager", "com.huawei.systemmanager.optimize.process.ProtectActivity")),
+            Intent().setComponent(ComponentName("com.coloros.safecenter", "com.coloros.safecenter.permission.startup.StartupAppListActivity")),
+            Intent().setComponent(ComponentName("com.coloros.safecenter", "com.coloros.safecenter.startupapp.StartupAppListActivity")),
+            Intent().setComponent(ComponentName("com.oppo.safe", "com.oppo.safe.permission.startup.StartupAppListActivity")),
+            Intent().setComponent(ComponentName("com.iqoo.secure", "com.iqoo.secure.ui.phoneoptimize.AddWhiteListActivity")),
+            Intent().setComponent(ComponentName("com.iqoo.secure", "com.iqoo.secure.ui.phoneoptimize.BgStartUpManager")),
+            Intent().setComponent(ComponentName("com.vivo.permissionmanager", "com.vivo.permissionmanager.activity.BgStartUpManagerActivity")),
+            Intent().setComponent(ComponentName("com.asus.mobilemanager", "com.asus.mobilemanager.entry.FunctionActivity")).setData(Uri.parse("entry:AutoStart")),
+            Intent().setComponent(ComponentName("com.samsung.android.lool", "com.samsung.android.sm.ui.battery.BatteryActivity")),
+            Intent().setComponent(ComponentName("com.oneplus.security", "com.oneplus.security.chainlaunch.view.ChainLaunchAppListAct")),
         )
 
-        for ((pkg, cls) in candidates) {
-            val intent = Intent().setComponent(ComponentName(pkg, cls))
-            if (packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY) != null) {
-                return intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
+        val pm = packageManager
+        return intents.firstOrNull { intent ->
+            pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY).isNotEmpty()
         }
-        return null
     }
 
     private fun openAutoStartSettings(): Boolean {
@@ -156,13 +229,9 @@ class MainActivity : FlutterActivity() {
         return startActivitySafely(intent)
     }
 
-    /**
-     * Settings screens vary wildly by ROM and some throw on launch even after
-     * resolving. Never let that take the app down — the caller reports failure and
-     * the UI tells the rider to find the setting manually.
-     */
     private fun startActivitySafely(intent: Intent): Boolean {
         return try {
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(intent)
             true
         } catch (_: Exception) {
@@ -172,15 +241,17 @@ class MainActivity : FlutterActivity() {
 
     private fun unlockScreen() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-            setShowWhenLocked(false)
+            setShowWhenLocked(true)
             setTurnScreenOn(true)
             val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
             keyguardManager.requestDismissKeyguard(this, null)
         } else {
-            window.clearFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED)
+            @Suppress("DEPRECATION")
             window.addFlags(
-                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or 
-                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                        WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+                        WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+                        WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
             )
         }
     }
