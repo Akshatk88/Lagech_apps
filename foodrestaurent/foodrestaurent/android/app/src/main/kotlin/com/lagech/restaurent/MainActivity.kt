@@ -48,7 +48,7 @@ class MainActivity : FlutterActivity() {
                         // Used when the order is answered inside the app, so the alert
                         // and its ringing stop there too.
                         "stopAlertSound" -> {
-                            NewOrderRingtone.stop(call.argument<String>("orderId"))
+                            NewOrderRingtone.stop(null)
                             result.success(true)
                         }
                         "startAlertSound" -> {

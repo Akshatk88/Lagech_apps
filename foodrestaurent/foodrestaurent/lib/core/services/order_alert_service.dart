@@ -27,8 +27,25 @@ class OrderAlertService {
 
   String? get currentlyRingingOrderId => _currentlyRingingOrderId;
 
-  /// Handles an incoming order alert from Socket.IO, FCM, or polling.
+  static const _validNewOrderTypes = {
+  'new_order',
+  'order_created',
+  'order_placed',
+  'order_received',
+  'neworder',
+  'new_order_available',
+};
+
+/// Handles an incoming order alert from Socket.IO, FCM, or polling.
   Future<void> handleNewOrder(Map<String, dynamic> rawData) async {
+    final type = (rawData['type'] ?? rawData['eventType'] ?? rawData['event'])?.toString().toLowerCase().trim();
+    if (type != null && type.isNotEmpty && !_validNewOrderTypes.contains(type)) {
+      if (kDebugMode) {
+        debugPrint('[OrderAlertService] Skipped: non-new-order type $type');
+      }
+      return;
+    }
+
     final allIds = _extractAllOrderIds(rawData);
     if (allIds.isEmpty) {
       if (kDebugMode) {
@@ -124,12 +141,12 @@ class OrderAlertService {
   }
 
   /// Stop ringing sound and dismiss system notification for an order.
-  Future<void> stopAlert(String orderId) async {
-    if (_currentlyRingingOrderId == orderId || _currentlyRingingOrderId == null) {
-      _currentlyRingingOrderId = null;
+  Future<void> stopAlert([String? orderId]) async {
+    _currentlyRingingOrderId = null;
+    await NewOrderActionChannel.stopSound();
+    if (orderId != null && orderId.isNotEmpty) {
+      await NewOrderActionChannel.dismiss(orderId);
     }
-    await NewOrderActionChannel.stopSound(orderId);
-    await NewOrderActionChannel.dismiss(orderId);
   }
 
   void _cleanOldAlerts() {

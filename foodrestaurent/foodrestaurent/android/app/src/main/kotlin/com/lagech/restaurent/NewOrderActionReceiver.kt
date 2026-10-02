@@ -32,7 +32,7 @@ class NewOrderActionReceiver : BroadcastReceiver() {
         Log.i(TAG, "action=${if (accepted) "accept" else "reject"} order=$orderId")
 
         // Stop the noise first, always.
-        NewOrderRingtone.stop(orderId)
+        NewOrderRingtone.stop(null)
         try {
             val manager =
                 context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

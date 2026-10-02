@@ -8,6 +8,8 @@ import 'package:food_user_application/core/network/api_exception.dart';
 import 'package:food_user_application/features/orders/data/order_repository.dart';
 import 'package:food_user_application/features/orders/domain/order_model.dart';
 import 'package:food_user_application/features/orders/presentation/controllers/live_orders_controller.dart';
+import 'package:food_user_application/core/services/new_order_action_channel.dart';
+import 'package:food_user_application/core/services/order_alert_service.dart';
 import 'package:food_user_application/core/widgets/app_refresh_indicator.dart';
 
 /// Destination for FCM/local-notification taps (`new_order`,
@@ -82,6 +84,9 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
     final order = _order;
 
     if (order == null) return;
+
+    NewOrderActionChannel.stopSound();
+    ref.read(orderAlertServiceProvider).stopAlert(order.id);
 
     try {
       final updated = await ref

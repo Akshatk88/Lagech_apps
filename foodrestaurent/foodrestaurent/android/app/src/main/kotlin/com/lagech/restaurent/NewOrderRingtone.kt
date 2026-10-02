@@ -117,14 +117,12 @@ object NewOrderRingtone {
     }
 
     /**
-     * Stop the ring for [orderId], or unconditionally when it is null.
-     *
-     * Scoped by id so a late stop for an order that already expired cannot cut off the
-     * ring of the order that replaced it.
+    /**
+     * Stop the ringing unconditionally.
+     * Any decision (Accept, Reject, Dismiss, or manual stop) must immediately silence the audio.
      */
     @Synchronized
-    fun stop(orderId: String?) {
-        if (orderId != null && ringingFor != null && ringingFor != orderId) return
+    fun stop(orderId: String? = null) {
         stopInternal()
     }
 

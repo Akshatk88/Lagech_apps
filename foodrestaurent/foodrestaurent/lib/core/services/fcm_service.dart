@@ -405,10 +405,14 @@ class FcmService {
         return;
       }
 
-      if (type == 'order_cancelled' || type == 'cancel_order') {
-        if (orderId != null) {
-          _ref.read(orderAlertServiceProvider).stopAlert(orderId);
-        }
+      final orderStatus = (message.data['orderStatus'] ?? message.data['status'])?.toString().toLowerCase();
+      if (type == 'order_cancelled' ||
+          type == 'cancel_order' ||
+          type == 'order_rejected' ||
+          type?.contains('cancel') == true ||
+          orderStatus?.contains('cancel') == true ||
+          orderStatus?.contains('reject') == true) {
+        _ref.read(orderAlertServiceProvider).stopAlert(orderId);
       }
 
       final title =

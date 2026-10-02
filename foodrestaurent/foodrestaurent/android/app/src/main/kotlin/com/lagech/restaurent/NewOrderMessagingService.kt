@@ -38,7 +38,8 @@ class NewOrderMessagingService : FlutterFirebaseMessagingService() {
         Log.i(TAG, "FCM received: rawType=$rawType id=$orderId notifTitle=$notifTitle")
 
         val isNewOrder = rawType in NEW_ORDER_TYPES
-        val isCloseOrder = rawType in CLOSE_TYPES
+        val statusVal = (data["orderStatus"] ?: data["status"] ?: "").lowercase()
+        val isCloseOrder = rawType in CLOSE_TYPES || statusVal.contains("cancel") || statusVal.contains("reject")
 
         if (isNewOrder || isCloseOrder) {
             try {
@@ -111,7 +112,6 @@ class NewOrderMessagingService : FlutterFirebaseMessagingService() {
             "order_created",
             "order_placed",
             "neworder",
-            "order",
             "order_received",
             "new_order_available",
         )
@@ -124,6 +124,9 @@ class NewOrderMessagingService : FlutterFirebaseMessagingService() {
             "new_order_closed",
             "order_expired",
             "order_rejected",
+            "cancelled_by_restaurant",
+            "cancelled_by_user",
+            "cancelled_by_admin",
         )
 
         fun allOrderIdsOf(data: Map<String, String>): List<String> {

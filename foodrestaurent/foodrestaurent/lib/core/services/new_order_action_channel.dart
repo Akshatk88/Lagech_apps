@@ -68,10 +68,12 @@ class NewOrderActionChannel {
 
   /// Take down a showing alert and stop its ringing — used when the order is
   /// answered inside the app, or withdrawn.
-  static Future<void> dismiss(String orderId) async {
+  static Future<void> dismiss([String? orderId]) async {
     if (!Platform.isAndroid) return;
     try {
-      await _channel.invokeMethod<bool>('dismissOrderAlert', {'orderId': orderId});
+      await _channel.invokeMethod<bool>('dismissOrderAlert', {
+        'orderId': orderId,
+      });
     } on PlatformException {
       // Worst case the alert lingers until its own timeout.
     } on MissingPluginException {

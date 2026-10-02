@@ -8,6 +8,7 @@ import 'package:food_user_application/core/network/api_exception.dart';
 import 'package:food_user_application/core/services/new_order_action_channel.dart';
 import 'package:food_user_application/features/orders/data/order_repository.dart';
 import 'package:food_user_application/features/orders/domain/order_model.dart';
+import 'package:food_user_application/core/services/order_alert_service.dart';
 import 'package:food_user_application/features/orders/presentation/controllers/live_orders_controller.dart';
 
 // A push can arrive more than once in a burst (e.g. connectivity blip causing
@@ -49,6 +50,29 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
   OrderModel? _order;
   bool _loading = true;
   bool _acting = false;
+  bool _dismissed = false;
+
+  void _safeDismiss([String? snackbarMessage]) {
+    if (_dismissed) return;
+    _dismissed = true;
+    NewOrderActionChannel.stopSound();
+    NewOrderActionChannel.dismiss(widget.orderId);
+    try {
+      ref.read(orderAlertServiceProvider).stopAlert(widget.orderId);
+    } catch (_) {}
+
+    if (mounted && Navigator.canPop(context)) {
+      if (snackbarMessage != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(snackbarMessage),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      Navigator.of(context).pop();
+    }
+  }
 
   @override
   void initState() {
@@ -59,7 +83,8 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
 
   @override
   void dispose() {
-    NewOrderActionChannel.stopSound(widget.orderId);
+    _dismissed = true;
+    NewOrderActionChannel.stopSound();
     super.dispose();
   }
 
@@ -87,17 +112,9 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
         }
       }
     }
-    if (!mounted) return;
+    if (!mounted || _dismissed) return;
     if (order == null || order.isCancelled) {
-      if (mounted && Navigator.canPop(context)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Order is no longer available or was cancelled.'),
-            duration: Duration(seconds: 3),
-          ),
-        );
-        Navigator.of(context).pop();
-      }
+      _safeDismiss('Order is no longer available or was cancelled.');
       return;
     }
     setState(() {
@@ -107,6 +124,8 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
   }
 
   Future<void> _respond(String orderStatus) async {
+    if (_acting || _dismissed) return;
+
     if (orderStatus == 'cancelled_by_restaurant') {
       final confirmed = await showDialog<bool>(
         context: context,
@@ -133,46 +152,46 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
       if (confirmed != true) return;
     }
 
+    if (!mounted || _dismissed) return;
     setState(() => _acting = true);
-    NewOrderActionChannel.stopSound(widget.orderId);
+
+    // Stop ringtone and notifications immediately on rejection/acceptance
+    NewOrderActionChannel.stopSound();
     NewOrderActionChannel.dismiss(widget.orderId);
     try {
+      ref.read(orderAlertServiceProvider).stopAlert(widget.orderId);
+    } catch (_) {}
+
+    try {
+      final targetId = _order?.id ?? widget.orderId;
       await ref
           .read(liveOrdersControllerProvider.notifier)
-          .updateStatus(widget.orderId, orderStatus);
-      if (mounted) Navigator.of(context).pop();
+          .updateStatus(targetId, orderStatus);
+      _safeDismiss();
     } catch (e) {
-      setState(() => _acting = false);
-      if (!mounted) return;
-      final message = e is ApiException
-          ? e.message
-          : 'Failed to update order. Please try again.';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message), backgroundColor: AppColors.error),
-      );
+      if (mounted) {
+        setState(() => _acting = false);
+        final message = e is ApiException
+            ? e.message
+            : 'Failed to update order. Please try again.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message), backgroundColor: AppColors.error),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     ref.listen<AsyncValue<List<OrderModel>>>(liveOrdersControllerProvider, (prev, next) {
+      if (_acting || _dismissed) return;
       if (next.hasValue) {
         final orders = next.value!;
         final match = orders.where(
           (o) => o.id == widget.orderId || o.displayId == widget.orderId,
         );
         if (match.isEmpty || match.first.isCancelled) {
-          NewOrderActionChannel.stopSound(widget.orderId);
-          NewOrderActionChannel.dismiss(widget.orderId);
-          if (mounted && Navigator.canPop(context)) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Order was cancelled or updated.'),
-                duration: Duration(seconds: 3),
-              ),
-            );
-            Navigator.of(context).pop();
-          }
+          _safeDismiss('Order was cancelled or updated.');
         }
       }
     });
@@ -338,7 +357,7 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
             onPressed: _acting
                 ? null
                 : () {
-                    Navigator.of(context).pop();
+                    _safeDismiss();
                     context.push('/order-details/$detailsOrderId');
                   },
             child: Row(

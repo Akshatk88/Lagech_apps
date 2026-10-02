@@ -39,7 +39,16 @@ class LiveOrdersController extends AsyncNotifier<List<OrderModel>> {
       refresh();
     });
 
-    socket.on('order_status_update', (_) => refresh());
+    socket.on('order_status_update', (data) {
+      if (data is Map) {
+        final status = (data['orderStatus'] ?? data['status'])?.toString().toLowerCase();
+        if (status != null && (status.contains('cancel') || status.contains('reject'))) {
+          final id = (data['orderMongoId'] ?? data['orderId'] ?? data['_id'])?.toString();
+          ref.read(orderAlertServiceProvider).stopAlert(id);
+        }
+      }
+      refresh();
+    });
 
     socket.on('order_cancelled', (data) {
       if (data is Map) {
@@ -57,7 +66,15 @@ class LiveOrdersController extends AsyncNotifier<List<OrderModel>> {
       refresh();
     });
     socket.on('order_accepted', (_) => refresh());
-    socket.on('order_rejected', (_) => refresh());
+    socket.on('order_rejected', (data) {
+      if (data is Map) {
+        final id = (data['orderMongoId'] ?? data['orderId'] ?? data['_id'])?.toString();
+        ref.read(orderAlertServiceProvider).stopAlert(id);
+      } else {
+        ref.read(orderAlertServiceProvider).stopAlert();
+      }
+      refresh();
+    });
     socket.on('connect', (_) => refresh());
     ref.onDispose(() {
       socket.off('new_order');

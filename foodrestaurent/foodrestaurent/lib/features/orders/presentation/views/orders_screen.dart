@@ -13,6 +13,8 @@ import 'package:food_user_application/features/orders/domain/order_model.dart';
 import 'package:food_user_application/features/orders/presentation/controllers/live_orders_controller.dart';
 import 'package:food_user_application/features/orders/presentation/widgets/live_order_card.dart';
 import 'package:food_user_application/features/restaurant_profile/presentation/controllers/restaurant_profile_controller.dart';
+import 'package:food_user_application/core/services/new_order_action_channel.dart';
+import 'package:food_user_application/core/services/order_alert_service.dart';
 import 'package:food_user_application/core/widgets/app_refresh_indicator.dart';
 import 'package:food_user_application/core/widgets/app_drawer.dart';
 
@@ -1016,6 +1018,8 @@ class _OrderCard extends ConsumerWidget {
 
   Widget _buildActions(BuildContext context, WidgetRef ref, OrderModel order) {
     Future<void> updateStatus(String newStatus) async {
+      NewOrderActionChannel.stopSound();
+      ref.read(orderAlertServiceProvider).stopAlert(order.id);
       try {
         await ref
             .read(liveOrdersControllerProvider.notifier)
