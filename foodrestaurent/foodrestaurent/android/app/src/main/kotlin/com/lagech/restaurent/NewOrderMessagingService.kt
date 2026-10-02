@@ -57,17 +57,24 @@ class NewOrderMessagingService : FlutterFirebaseMessagingService() {
         if (isNewOrder || isCloseOrder) {
             try {
                 if (isNewOrder) {
-                    val mergedData = HashMap<String, String>(data)
-                    if (notification?.title?.isNotBlank() == true && !mergedData.containsKey("title")) {
-                        mergedData["title"] = notification.title!!
+                    val allIds = allOrderIdsOf(data)
+                    val effectiveOrderId = allIds.firstOrNull() ?: orderId
+
+                    if (isDuplicateAlert(allIds)) {
+                        Log.i(TAG, "Deduplicated new-order push for order: $effectiveOrderId (aliases=$allIds)")
+                    } else {
+                        val mergedData = HashMap<String, String>(data)
+                        if (notification?.title?.isNotBlank() == true && !mergedData.containsKey("title")) {
+                            mergedData["title"] = notification.title!!
+                        }
+                        if (notification?.body?.isNotBlank() == true && !mergedData.containsKey("body")) {
+                            mergedData["body"] = notification.body!!
+                        }
+                        if (effectiveOrderId != null && !mergedData.containsKey("orderId")) {
+                            mergedData["orderId"] = effectiveOrderId
+                        }
+                        NewOrderNotifier.show(applicationContext, mergedData)
                     }
-                    if (notification?.body?.isNotBlank() == true && !mergedData.containsKey("body")) {
-                        mergedData["body"] = notification.body!!
-                    }
-                    if (orderId != null && !mergedData.containsKey("orderId")) {
-                        mergedData["orderId"] = orderId
-                    }
-                    NewOrderNotifier.show(applicationContext, mergedData)
                 } else if (isCloseOrder) {
                     NewOrderNotifier.dismiss(applicationContext, orderId)
                 }
@@ -91,6 +98,27 @@ class NewOrderMessagingService : FlutterFirebaseMessagingService() {
 
     companion object {
         private const val TAG = "NewOrderFcm"
+        private val recentAlerts = java.util.concurrent.ConcurrentHashMap<String, Long>()
+        private const val DEDUPE_WINDOW_MS = 30_000L
+
+        fun isDuplicateAlert(ids: Collection<String>): Boolean {
+            if (ids.isEmpty()) return false
+            val now = System.currentTimeMillis()
+            val isDupe = ids.any { id ->
+                val last = recentAlerts[id]
+                last != null && (now - last) < DEDUPE_WINDOW_MS
+            }
+            if (isDupe) return true
+
+            for (id in ids) {
+                recentAlerts[id] = now
+            }
+            if (recentAlerts.size > 150) {
+                val cutoff = now - (5 * 60_000L)
+                recentAlerts.entries.removeIf { it.value < cutoff }
+            }
+            return false
+        }
 
         private val NEW_ORDER_TYPES = setOf(
             "new_order",
@@ -112,13 +140,12 @@ class NewOrderMessagingService : FlutterFirebaseMessagingService() {
             "order_rejected",
         )
 
-        fun orderIdOf(data: Map<String, String>): String? {
-            val direct = listOf("orderMongoId", "orderId", "_id", "id", "order_id", "orderDisplayId", "mongoId")
-                .asSequence()
-                .mapNotNull { data[it] }
-                .firstOrNull { it.isNotBlank() }
-
-            if (direct != null) return direct
+        fun allOrderIdsOf(data: Map<String, String>): List<String> {
+            val list = mutableListOf<String>()
+            listOf("orderMongoId", "orderId", "_id", "id", "order_id", "orderDisplayId", "mongoId")
+                .forEach { key ->
+                    data[key]?.takeIf { it.isNotBlank() }?.let { if (!list.contains(it)) list.add(it) }
+                }
 
             for (key in listOf("order", "data")) {
                 val jsonStr = data[key]
@@ -128,14 +155,17 @@ class NewOrderMessagingService : FlutterFirebaseMessagingService() {
                         for (idKey in listOf("orderMongoId", "orderId", "_id", "id", "orderDisplayId", "order_id")) {
                             if (json.has(idKey)) {
                                 val v = json.optString(idKey)
-                                if (v.isNotBlank()) return v
+                                if (v.isNotBlank() && !list.contains(v)) list.add(v)
                             }
                         }
                     } catch (_: Exception) {}
                 }
             }
+            return list
+        }
 
-            return null
+        fun orderIdOf(data: Map<String, String>): String? {
+            return allOrderIdsOf(data).firstOrNull()
         }
     }
 }

@@ -19,6 +19,7 @@ lagech backend
 **/.pub/
 
 # Android generated files & configs
+**/.kotlin/
 **/local.properties
 **/android/local.properties
 **/android/app/local.properties

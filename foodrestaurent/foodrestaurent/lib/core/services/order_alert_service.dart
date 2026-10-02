@@ -29,29 +29,37 @@ class OrderAlertService {
 
   /// Handles an incoming order alert from Socket.IO, FCM, or polling.
   Future<void> handleNewOrder(Map<String, dynamic> rawData) async {
-    final orderId = _extractOrderId(rawData);
-    if (orderId == null || orderId.isEmpty) {
+    final allIds = _extractAllOrderIds(rawData);
+    if (allIds.isEmpty) {
       if (kDebugMode) {
         debugPrint('[OrderAlertService] Skipped: no valid orderId in $rawData');
       }
       return;
     }
 
-    // Deduplicate: if alerted in the last 15 seconds, ignore duplicate event
+    // Deduplicate: if ANY candidate ID was alerted in the last 30 seconds, ignore duplicate event
     final now = DateTime.now();
-    final lastAlert = _recentAlerts[orderId];
-    if (lastAlert != null && now.difference(lastAlert).inSeconds < 15) {
+    final isDuplicate = allIds.any((id) {
+      final lastAlert = _recentAlerts[id];
+      return lastAlert != null && now.difference(lastAlert).inSeconds < 30;
+    });
+
+    if (isDuplicate) {
       if (kDebugMode) {
-        debugPrint('[OrderAlertService] Deduplicated alert for order: $orderId');
+        debugPrint('[OrderAlertService] Deduplicated alert for order IDs: $allIds');
       }
       return;
     }
-    _recentAlerts[orderId] = now;
+
+    for (final id in allIds) {
+      _recentAlerts[id] = now;
+    }
     _cleanOldAlerts();
 
+    final orderId = allIds.first;
     _currentlyRingingOrderId = orderId;
     if (kDebugMode) {
-      debugPrint('[OrderAlertService] Triggering new order alert for: $orderId');
+      debugPrint('[OrderAlertService] Triggering new order alert for: $orderId (aliases: $allIds)');
     }
 
     final stringData = <String, String>{};
@@ -129,7 +137,7 @@ class OrderAlertService {
     _recentAlerts.removeWhere((_, time) => time.isBefore(threshold));
   }
 
-  String? _extractOrderId(Map<String, dynamic> data) {
+  Set<String> _extractAllOrderIds(Map<String, dynamic> data) {
     Map<String, dynamic>? tryParseMap(dynamic val) {
       if (val is Map) return Map<String, dynamic>.from(val);
       if (val is String && val.trim().startsWith('{') && val.trim().endsWith('}')) {
@@ -173,11 +181,12 @@ class OrderAlertService {
       ],
     ];
 
+    final ids = <String>{};
     for (final c in candidates) {
       final s = c?.toString().trim();
-      if (s != null && s.isNotEmpty) return s;
+      if (s != null && s.isNotEmpty) ids.add(s);
     }
-    return null;
+    return ids;
   }
 }
 
