@@ -1550,45 +1550,54 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       },
                     ),
                   ] else if (!isRestaurant) ...[
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        // Veg Tag Icon
-                        Container(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 5.w,
-                            vertical: 1.5.h,
-                          ),
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: const Color(0xFF16A34A),
-                              width: 1.2,
+                    Builder(
+                      builder: (context) {
+                        final isVeg = (item.rawItem is FoodModel)
+                            ? (item.rawItem as FoodModel).isVeg
+                            : ((item.rawItem is Store99Product)
+                                ? (item.rawItem as Store99Product).isVeg
+                                : true);
+                        final badgeColor = isVeg ? const Color(0xFF16A34A) : const Color(0xFFDC2626);
+
+                        return Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            // Veg / Non-Veg Tag Icon
+                            Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 5.w,
+                                vertical: 1.5.h,
+                              ),
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                  color: badgeColor,
+                                  width: 1.2,
+                                ),
+                                borderRadius: BorderRadius.circular(4.r),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 5.sp,
+                                    height: 5.sp,
+                                    decoration: BoxDecoration(
+                                      color: badgeColor,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  SizedBox(width: 4.w),
+                                  Text(
+                                    isVeg ? 'Veg' : 'Non-Veg',
+                                    style: TextStyle(
+                                      color: badgeColor,
+                                      fontSize: 9.5.sp,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                            borderRadius: BorderRadius.circular(4.r),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: 5.sp,
-                                height: 5.sp,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFF16A34A),
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              SizedBox(width: 4.w),
-                              Text(
-                                'Veg',
-                                style: TextStyle(
-                                  color: const Color(0xFF16A34A),
-                                  fontSize: 9.5.sp,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
 
                         // Interactive + Add Button
                         InkWell(
@@ -1638,8 +1647,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                           ),
                         ),
                       ],
-                    ),
-                  ],
+                    );
+                  },
+                ),
+              ],
                 ],
               ),
             ),

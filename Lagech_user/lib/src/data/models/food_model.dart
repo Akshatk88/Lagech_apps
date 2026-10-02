@@ -132,7 +132,20 @@ class FoodModel {
       reviewCount: (json['totalRatings'] as num?)?.toInt() ?? 0,
       calories: (json['calories'] as num?)?.toInt() ?? 0,
       deliveryTime: (json['preparationTime'] ?? json['prepTime'] ?? json['deliveryTime'] ?? '').toString(),
-      isVeg: (json['foodType']?.toString().toLowerCase() ?? '') == 'veg',
+      isVeg: () {
+        if (json['foodType'] != null) {
+          final ft = json['foodType'].toString().trim().toLowerCase();
+          if (ft.contains('non') || ft == 'egg') return false;
+          if (ft == 'veg' || ft == 'pure veg') return true;
+        }
+        if (json['isVeg'] is bool) return json['isVeg'] as bool;
+        if (json['isVeg'] != null) {
+          final s = json['isVeg'].toString().trim().toLowerCase();
+          if (s == 'true' || s == '1') return true;
+          if (s == 'false' || s == '0') return false;
+        }
+        return false;
+      }(),
       isPopular: json['isRecommended'] as bool? ?? false,
       isQuickDelivery: json['isQuickDelivery'] as bool? ?? false,
       categoryName: (json['categoryName'] ?? '').toString(),
@@ -168,7 +181,9 @@ class FoodModel {
       reviewCount: (json['reviewCount'] as num?)?.toInt() ?? 0,
       calories: (json['calories'] as num?)?.toInt() ?? 0,
       deliveryTime: json['deliveryTime'] as String? ?? '',
-      isVeg: json['isVeg'] as bool? ?? false,
+      isVeg: json['isVeg'] == true ||
+          json['isVeg']?.toString().toLowerCase() == 'true' ||
+          (json['foodType']?.toString().toLowerCase() == 'veg'),
       isSpicy: json['isSpicy'] as bool? ?? false,
       isPopular: json['isPopular'] as bool? ?? false,
       isQuickDelivery: json['isQuickDelivery'] as bool? ?? false,

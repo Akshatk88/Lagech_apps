@@ -776,22 +776,24 @@ class _RestaurantScreenState extends ConsumerState<RestaurantScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Pure Veg Indicator matching Screenshot 5
-          Row(
-            children: [
-              Icon(Icons.eco_rounded, color: const Color(0xFF008A45), size: 14.sp),
-              SizedBox(width: 4.w),
-              Text(
-                'Pure Veg',
-                style: TextStyle(
-                  fontSize: 11.5.sp,
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xFF008A45),
+          // Pure Veg Indicator matching Screenshot 5 (only if restaurant is pure veg)
+          if (restaurant.isPureVeg) ...[
+            Row(
+              children: [
+                Icon(Icons.eco_rounded, color: const Color(0xFF008A45), size: 14.sp),
+                SizedBox(width: 4.w),
+                Text(
+                  'Pure Veg',
+                  style: TextStyle(
+                    fontSize: 11.5.sp,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF008A45),
+                  ),
                 ),
-              ),
-            ],
-          ),
-          SizedBox(height: 4.h),
+              ],
+            ),
+            SizedBox(height: 4.h),
+          ],
 
           // Name & Info icon + Rating pill
           Row(

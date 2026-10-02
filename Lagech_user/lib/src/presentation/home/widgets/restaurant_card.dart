@@ -33,12 +33,14 @@ class _SlideItem {
   final String dishName;
   final double price;
   final bool isVeg;
+  final bool isDish;
 
   const _SlideItem({
     required this.imageUrl,
     required this.dishName,
     required this.price,
     this.isVeg = true,
+    this.isDish = true,
   });
 }
 
@@ -148,6 +150,7 @@ class _RestaurantCardState extends ConsumerState<RestaurantCard> {
               ? widget.restaurant.priceForOne
               : 150.0,
           isVeg: widget.restaurant.isPureVeg,
+          isDish: false,
         ));
       }
       for (final img in widget.restaurant.menuImages) {
@@ -162,6 +165,7 @@ class _RestaurantCardState extends ConsumerState<RestaurantCard> {
                 ? widget.restaurant.priceForOne
                 : 150.0,
             isVeg: widget.restaurant.isPureVeg,
+            isDish: false,
           ));
         }
       }
@@ -301,7 +305,7 @@ class _RestaurantCardState extends ConsumerState<RestaurantCard> {
                     ),
 
                     // Top-Left: Translucent Pill with Veg Square + Dish Name + Price
-                    if (currentSlide != null)
+                    if (currentSlide != null && (currentSlide.isDish || widget.restaurant.isPureVeg))
                       Positioned(
                         top: 10.h,
                         left: 10.w,
@@ -515,44 +519,43 @@ class _RestaurantCardState extends ConsumerState<RestaurantCard> {
                       ],
                     ),
 
-                    SizedBox(height: 8.h),
-
-                    // Row 4: 🍃 Pure Veg restaurant tag pill
-                    Container(
-                      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.5.h),
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? const Color(0xFF14532D).withValues(alpha: 0.3)
-                            : const Color(0xFFF0FDF4),
-                        borderRadius: BorderRadius.circular(6.r),
-                        border: Border.all(
-                          color: const Color(0xFF86EFAC).withValues(alpha: 0.6),
-                          width: 0.8,
+                    // Row 4: 🍃 Pure Veg restaurant tag pill (only if restaurant is pure veg)
+                    if (restaurant.isPureVeg) ...[
+                      SizedBox(height: 8.h),
+                      Container(
+                        padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.5.h),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? const Color(0xFF14532D).withValues(alpha: 0.3)
+                              : const Color(0xFFF0FDF4),
+                          borderRadius: BorderRadius.circular(6.r),
+                          border: Border.all(
+                            color: const Color(0xFF86EFAC).withValues(alpha: 0.6),
+                            width: 0.8,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.eco_rounded,
+                              size: 13.sp,
+                              color: const Color(0xFF16A34A),
+                            ),
+                            SizedBox(width: 4.w),
+                            Text(
+                              'Pure Veg restaurant',
+                              style: TextStyle(
+                                fontSize: 11.sp,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF15803D),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.eco_rounded,
-                            size: 13.sp,
-                            color: const Color(0xFF16A34A),
-                          ),
-                          SizedBox(width: 4.w),
-                          Text(
-                            restaurant.isPureVeg
-                                ? 'Pure Veg restaurant'
-                                : (restaurant.tags.isNotEmpty ? '${restaurant.tags.first} Special' : 'Pure Veg restaurant'),
-                            style: TextStyle(
-                              fontSize: 11.sp,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFF15803D),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    ],
                   ],
                 ),
               ),

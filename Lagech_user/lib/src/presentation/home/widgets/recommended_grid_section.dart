@@ -188,6 +188,7 @@ class RecommendedMiniCard extends ConsumerStatefulWidget {
 }
 
 class _RecommendedMiniCardState extends ConsumerState<RecommendedMiniCard> {
+  late final PageController _imagePageController;
   Timer? _slideTimer;
   int _currentImageIndex = 0;
   bool _showNearAndFast = false;
@@ -196,6 +197,7 @@ class _RecommendedMiniCardState extends ConsumerState<RecommendedMiniCard> {
   @override
   void initState() {
     super.initState();
+    _imagePageController = PageController();
     _showNearAndFast = widget.index % 2 == 1;
     _initImages();
     _startSlideTimer();
@@ -209,6 +211,10 @@ class _RecommendedMiniCardState extends ConsumerState<RecommendedMiniCard> {
         oldWidget.categoryDishes != widget.categoryDishes) {
       _initImages();
       _slideTimer?.cancel();
+      _currentImageIndex = 0;
+      if (_imagePageController.hasClients) {
+        _imagePageController.jumpToPage(0);
+      }
       _startSlideTimer();
     }
   }
@@ -314,13 +320,18 @@ class _RecommendedMiniCardState extends ConsumerState<RecommendedMiniCard> {
 
   void _startSlideTimer() {
     if (_images.length <= 1) return;
-    final staggerMs = 2600 + (widget.index % 3) * 600;
+    final staggerMs = 2800 + (widget.index % 3) * 600;
     _slideTimer = Timer.periodic(Duration(milliseconds: staggerMs), (_) {
       if (!mounted) return;
+      if (_images.length > 1 && _imagePageController.hasClients) {
+        _currentImageIndex++;
+        _imagePageController.animateToPage(
+          _currentImageIndex,
+          duration: const Duration(milliseconds: 550),
+          curve: Curves.easeInOutCubic,
+        );
+      }
       setState(() {
-        if (_images.isNotEmpty) {
-          _currentImageIndex = (_currentImageIndex + 1) % _images.length;
-        }
         _showNearAndFast = !_showNearAndFast;
       });
     });
@@ -329,6 +340,7 @@ class _RecommendedMiniCardState extends ConsumerState<RecommendedMiniCard> {
   @override
   void dispose() {
     _slideTimer?.cancel();
+    _imagePageController.dispose();
     super.dispose();
   }
 
@@ -358,17 +370,19 @@ class _RecommendedMiniCardState extends ConsumerState<RecommendedMiniCard> {
       restaurantMenuProvider(widget.restaurant.id),
       (_, next) {
         if (next.hasValue && mounted) {
+          final hadMultiple = _images.length > 1;
           setState(() {
             _initImages();
           });
+          if (!hadMultiple && _images.length > 1) {
+            _slideTimer?.cancel();
+            _startSlideTimer();
+          }
         }
       },
     );
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final rating = widget.restaurant.rating;
-    final currentImg = _images.isNotEmpty
-        ? _images[_currentImageIndex % _images.length]
-        : widget.restaurant.imageUrl;
     final offerText = _resolveOfferBadge();
 
     return GestureDetector(
@@ -381,7 +395,7 @@ class _RecommendedMiniCardState extends ConsumerState<RecommendedMiniCard> {
           Stack(
             clipBehavior: Clip.none,
             children: [
-              // 1. Food Image
+              // 1. Food Image with auto-slide
               AspectRatio(
                 aspectRatio: 1.12,
                 child: ClipRRect(
@@ -389,10 +403,62 @@ class _RecommendedMiniCardState extends ConsumerState<RecommendedMiniCard> {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      if (currentImg.isNotEmpty)
+                      if (_images.length > 1)
+                        IgnorePointer(
+                          child: PageView.builder(
+                            controller: _imagePageController,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemBuilder: (context, index) {
+                              final img = _images[index % _images.length];
+                              return CachedNetworkImage(
+                                imageUrl: img,
+                                fit: BoxFit.cover,
+                                width: double.infinity,
+                                height: double.infinity,
+                                fadeInDuration: const Duration(milliseconds: 150),
+                                fadeOutDuration: const Duration(milliseconds: 100),
+                                placeholder: (context, _) => Container(
+                                  color: isDark ? const Color(0xFF262C36) : const Color(0xFFF3F4F6),
+                                ),
+                                errorWidget: (context, _, error) => Container(
+                                  color: isDark ? const Color(0xFF262C36) : const Color(0xFFF3F4F6),
+                                  child: Center(
+                                    child: Icon(
+                                      Icons.restaurant_rounded,
+                                      color: isDark ? Colors.white24 : Colors.black26,
+                                      size: 24.sp,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        )
+                      else if (_images.isNotEmpty)
                         CachedNetworkImage(
-                          key: ValueKey<String>('${widget.restaurant.id}_$currentImg'),
-                          imageUrl: currentImg,
+                          imageUrl: _images.first,
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                          height: double.infinity,
+                          fadeInDuration: const Duration(milliseconds: 150),
+                          fadeOutDuration: const Duration(milliseconds: 100),
+                          placeholder: (context, _) => Container(
+                            color: isDark ? const Color(0xFF262C36) : const Color(0xFFF3F4F6),
+                          ),
+                          errorWidget: (context, _, error) => Container(
+                            color: isDark ? const Color(0xFF262C36) : const Color(0xFFF3F4F6),
+                            child: Center(
+                              child: Icon(
+                                Icons.restaurant_rounded,
+                                color: isDark ? Colors.white24 : Colors.black26,
+                                size: 24.sp,
+                              ),
+                            ),
+                          ),
+                        )
+                      else if (widget.restaurant.imageUrl.isNotEmpty)
+                        CachedNetworkImage(
+                          imageUrl: widget.restaurant.imageUrl,
                           fit: BoxFit.cover,
                           width: double.infinity,
                           height: double.infinity,
@@ -426,17 +492,19 @@ class _RecommendedMiniCardState extends ConsumerState<RecommendedMiniCard> {
 
                       // Subtle gradient for contrast
                       Positioned.fill(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Colors.black.withValues(alpha: 0.3),
-                                Colors.transparent,
-                                Colors.black.withValues(alpha: 0.2),
-                              ],
-                              stops: const [0.0, 0.45, 1.0],
+                        child: IgnorePointer(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Colors.black.withValues(alpha: 0.3),
+                                  Colors.transparent,
+                                  Colors.black.withValues(alpha: 0.2),
+                                ],
+                                stops: const [0.0, 0.45, 1.0],
+                              ),
                             ),
                           ),
                         ),

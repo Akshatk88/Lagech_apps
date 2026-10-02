@@ -1,55 +1,50 @@
-# Miscellaneous
-*.class
-*.log
-*.pyc
-*.swp
-.DS_Store
-.atom/
-.build/
-.buildlog/
-.history
-.svn/
-.swiftpm/
-migrate_working_dir/
+# Exclude Backend completely (as requested)
+lagech backend/
+lagech backend
 
-# IntelliJ related
+# Backup files
+**/.git_backup/
+**/.git_backup
+
+# Flutter build artifacts & caches
+**/build/
+**/.dart_tool/
+**/.gradle/
+**/android/.gradle/
+**/android/app/build/
+**/android/build/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.pub-cache/
+**/.pub/
+
+# Android generated files & configs
+**/local.properties
+**/android/local.properties
+**/android/app/local.properties
+
+# iOS generated files
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/ephemeral/
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/Runner/GeneratedPluginRegistrant.*
+**/ios/Flutter/.last_build_id
+
+# IDE files
+.idea/
+**/.idea/
+.vscode/
+**/.vscode/
 *.iml
 *.ipr
 *.iws
-.idea/
 
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
-.dart_tool/
-.flutter-plugins
-.flutter-plugins-dependencies
-.pub-cache/
-.pub/
-build/
-/build/
-android/build/
-android/app/build/
-android/.gradle/
-.gradle/
-/coverage/
-
-# Symbolication related
-app.*.symbols
-
-# Obfuscation related
-app.*.map.json
-
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
+# System & OS files
+.DS_Store
+Thumbs.db
 *.log
 *.class
-branch_structure.json
-temp_auto_push.bat
-temp_interactive_push.bat
-.gitignore
+*.pyc
+*.swp
+*.symbols
+*.map.json

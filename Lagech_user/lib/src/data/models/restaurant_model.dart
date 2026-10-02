@@ -372,14 +372,41 @@ class RestaurantModel {
       offers.add(json['discountText'] as String);
     }
 
-    final isPureVeg = json['pureVegRestaurant'] == true ||
-        json['isVeg'] == true ||
-        json['isPureVeg'] == true ||
-        json['pureVeg'] == true ||
-        json['veg'] == true ||
-        json['isVegOnly'] == true ||
-        (json['category']?.toString().toLowerCase().contains('veg') == true) ||
-        (json['foodType']?.toString().toLowerCase() == 'veg');
+    // Determine Pure Veg strictly:
+    // 1. Explicit pureVegRestaurant / isPureVeg / pureVeg / isVegOnly field
+    // 2. foodType or category strictly 'veg' and NOT 'non-veg' or 'both' or 'egg'
+    final isPureVeg = () {
+      final rawPureVeg = json['pureVegRestaurant'] ?? json['isPureVeg'] ?? json['pureVeg'] ?? json['isVegOnly'];
+      if (rawPureVeg != null) {
+        if (rawPureVeg is bool) return rawPureVeg;
+        if (rawPureVeg is num) return rawPureVeg == 1;
+        final s = rawPureVeg.toString().trim().toLowerCase();
+        if (s == 'true' || s == '1' || s == 'yes') return true;
+        if (s == 'false' || s == '0' || s == 'no') return false;
+      }
+
+      final foodType = (json['foodType'] ?? json['food_type'])?.toString().trim().toLowerCase();
+      if (foodType != null && foodType.isNotEmpty) {
+        if (foodType.contains('non') || foodType == 'both' || foodType == 'egg') return false;
+        if (foodType == 'veg' || foodType == 'pure veg' || foodType == 'pure-veg') return true;
+      }
+
+      final cat = (json['category'] ?? json['restaurantCategory'])?.toString().trim().toLowerCase();
+      if (cat != null && cat.isNotEmpty) {
+        if (cat.contains('non') || cat.contains('both') || cat.contains('egg')) return false;
+        if (cat == 'veg' || cat == 'pure veg' || cat == 'pure-veg' || cat == 'vegetarian') return true;
+      }
+
+      final isVegVal = json['isVeg'] ?? json['veg'];
+      if (isVegVal is bool) return isVegVal;
+      if (isVegVal != null) {
+        final s = isVegVal.toString().trim().toLowerCase();
+        if (s == 'true' || s == '1' || s == 'yes') return true;
+        if (s == 'false' || s == '0' || s == 'no') return false;
+      }
+
+      return false;
+    }();
     final isFreeDeliv = json['isFreeDelivery'] == true ||
         json['isFreeDelivery']?.toString().toLowerCase() == 'true' ||
         json['freeDelivery'] == true ||
@@ -528,7 +555,10 @@ class RestaurantModel {
       restaurantTags: parsedRestTags,
       isOpen: _parseIsOpen(json),
       closingTime: json['closingTime'] as String? ?? '',
-      isPureVeg: json['isPureVeg'] as bool? ?? false,
+      isPureVeg: json['isPureVeg'] == true ||
+          json['isPureVeg']?.toString().toLowerCase() == 'true' ||
+          json['pureVegRestaurant'] == true ||
+          json['pureVegRestaurant']?.toString().toLowerCase() == 'true',
       isFreeDelivery: json['isFreeDelivery'] == true ||
           json['isFreeDelivery']?.toString().toLowerCase() == 'true' ||
           json['freeDelivery'] == true ||

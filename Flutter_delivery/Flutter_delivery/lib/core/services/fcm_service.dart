@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:dio/dio.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -25,7 +26,20 @@ const _incomingOrdersChannel = AndroidNotificationChannel(
   description:
       'Full-screen incoming order alerts that require immediate action',
   importance: Importance.max,
+  sound: RawResourceAndroidNotificationSound('tujh_bin'),
   playSound: true,
+  enableVibration: true,
+);
+
+const _incomingOrdersChannelV3 = AndroidNotificationChannel(
+  'incoming_orders_channel_v3',
+  'Incoming Orders v3',
+  description:
+      'Full-screen incoming order alerts fallback',
+  importance: Importance.max,
+  sound: RawResourceAndroidNotificationSound('tujh_bin'),
+  playSound: true,
+  enableVibration: true,
 );
 
 /// Stable notification id for an order's incoming alert.
@@ -67,6 +81,9 @@ Future<void> dismissIncomingOrderAlert(String orderId) async {
 void backgroundNotificationResponseHandler(
   NotificationResponse response,
 ) async {
+  try {
+    DartPluginRegistrant.ensureInitialized();
+  } catch (_) {}
   final payload = response.payload;
   final actionId = response.actionId;
 
@@ -100,6 +117,9 @@ Future<void> _respondToOrderFromBackground({
   required bool accept,
 }) async {
   try {
+    try {
+      DartPluginRegistrant.ensureInitialized();
+    } catch (_) {}
     const storage = FlutterSecureStorage();
     final token = await storage.read(key: 'access_token');
     if (token != null && token.isNotEmpty) {
@@ -202,33 +222,19 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     return;
   }
 
-  // The tray copy FCM posted itself is the fallback for ROMs where this handler
-  // never runs. We take it down once OUR alert is actually on screen — never
-  // before, or a failure to show leaves the rider with nothing at all.
-  final incomingOrderId = _orderIdOf(message.data);
-  Future<void> dropTrayCopy() async {
-    if (incomingOrderId != null) await cancelFcmTrayCopy(incomingOrderId);
-  }
-
-  // Try the overlay bubble first, but never trust it blindly — if the
+  // Try the overlay bubble if permission granted
   // permission check races with it being revoked, the plugin throws, or the
   // OEM ROM silently drops the overlay window, `showForOrder` now reports
   // that honestly instead of us assuming success. Whatever happens here,
   // the full-screen-intent notification below is the guaranteed fallback so
   // a delivered push is never left with nothing shown on screen.
-  var overlayShown = false;
+  // Try the overlay bubble if permission granted
   try {
     if (await OrderOverlayService.hasPermission()) {
-      overlayShown = await OrderOverlayService.showForOrder(message.data);
+      await OrderOverlayService.showForOrder(message.data);
     }
-  } catch (_) {
-    overlayShown = false;
-  }
+  } catch (_) {}
 
-  if (overlayShown) {
-    await dropTrayCopy();
-    return;
-  }
   try {
     // A fresh isolate — the channel/plugin registered by FcmService.initialize()
     // in the main isolate doesn't exist here, so set both up again.
@@ -245,17 +251,22 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
           AndroidFlutterLocalNotificationsPlugin
         >()
         ?.createNotificationChannel(_incomingOrdersChannel);
+    await localNotifications
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.createNotificationChannel(_incomingOrdersChannelV3);
 
-    final pickup = message.data['pickupAddress'] as String? ?? 'Restaurant';
-    final drop = message.data['dropAddress'] as String? ?? 'Customer';
-    final price = message.data['price'] as String? ?? '';
-    final distance = message.data['distance'] as String? ?? '';
+    final pickup = message.data['pickupAddress'] as String? ?? message.data['restaurantName'] as String? ?? 'Restaurant';
+    final drop = message.data['dropAddress'] as String? ?? message.data['customerAddress'] as String? ?? 'Customer';
+    final price = message.data['price'] as String? ?? message.data['earnings'] as String? ?? '';
+    final distance = message.data['distance'] as String? ?? message.data['tripDistanceKm'] as String? ?? '';
     final body =
         'From: $pickup\nTo: $drop\nEarnings: ₹$price | Dist: ${distance}km';
 
     await localNotifications.show(
       incomingOrderNotificationId(_orderIdOf(message.data) ?? ''),
-      message.data['restaurantName'] as String? ?? 'New order',
+      message.data['restaurantName'] as String? ?? 'New order available!',
       body,
       NotificationDetails(
         android: AndroidNotificationDetails(
@@ -268,15 +279,17 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
           fullScreenIntent: true,
           ongoing: true,
           playSound: true,
+          sound: const RawResourceAndroidNotificationSound('tujh_bin'),
+          enableVibration: true,
           styleInformation: BigTextStyleInformation(body),
-          actions: <AndroidNotificationAction>[
-            const AndroidNotificationAction(
+          actions: const <AndroidNotificationAction>[
+            AndroidNotificationAction(
               'accept',
               'Accept',
               showsUserInterface: true,
               cancelNotification: true,
             ),
-            const AndroidNotificationAction(
+            AndroidNotificationAction(
               'reject',
               'Reject',
               showsUserInterface: true,
@@ -287,7 +300,6 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       ),
       payload: jsonEncode(message.data),
     );
-    await dropTrayCopy();
   } catch (_) {
     // Last resort: the full-screen path itself failed (channel creation
     // race, plugin init error, etc.) — still surface a plain heads-up
@@ -329,6 +341,8 @@ const _highImportanceChannel = AndroidNotificationChannel(
   'Order updates',
   description: 'Order status updates and alerts',
   importance: Importance.max,
+  playSound: true,
+  enableVibration: true,
 );
 
 class FcmService {
@@ -354,6 +368,8 @@ class FcmService {
     'Order Updates',
     description: 'New order alerts and delivery status updates',
     importance: Importance.max,
+    playSound: true,
+    enableVibration: true,
   );
 
   Future<void> initialize() async {
@@ -383,6 +399,7 @@ class FcmService {
       await androidPlugin?.createNotificationChannel(_channel);
       await androidPlugin?.createNotificationChannel(_highImportanceChannel);
       await androidPlugin?.createNotificationChannel(_incomingOrdersChannel);
+      await androidPlugin?.createNotificationChannel(_incomingOrdersChannelV3);
     }
 
     await ensureAndroidAlertPermissions();
@@ -593,12 +610,50 @@ class FcmService {
       return;
     }
 
-    // 'new_order' pushes are already handled by the full-screen incoming-
-    // order overlay (driven by the line above) — showing the plain tray
-    // notification too would duplicate/compete with it.
-    if (message.data['type'] == 'new_order') return;
+    if (message.data['type'] == 'new_order') {
+      final pickup = message.data['pickupAddress'] as String? ?? message.data['restaurantName'] as String? ?? 'Restaurant';
+      final drop = message.data['dropAddress'] as String? ?? message.data['customerAddress'] as String? ?? 'Customer';
+      final price = message.data['price'] as String? ?? message.data['earnings'] as String? ?? '';
+      final distance = message.data['distance'] as String? ?? message.data['tripDistanceKm'] as String? ?? '';
+      final body = 'From: $pickup\nTo: $drop\nEarnings: ₹$price | Dist: ${distance}km';
+      final orderId = _orderIdOf(message.data) ?? '';
+
+      _localNotifications.show(
+        incomingOrderNotificationId(orderId),
+        message.data['restaurantName'] as String? ?? 'New order available!',
+        body,
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            _incomingOrdersChannel.id,
+            _incomingOrdersChannel.name,
+            channelDescription: _incomingOrdersChannel.description,
+            importance: Importance.max,
+            priority: Priority.high,
+            category: AndroidNotificationCategory.call,
+            fullScreenIntent: true,
+            ongoing: true,
+            playSound: true,
+            sound: const RawResourceAndroidNotificationSound('tujh_bin'),
+            enableVibration: true,
+            styleInformation: BigTextStyleInformation(body),
+            actions: const <AndroidNotificationAction>[
+              AndroidNotificationAction('accept', 'Accept', showsUserInterface: true, cancelNotification: true),
+              AndroidNotificationAction('reject', 'Reject', showsUserInterface: true, cancelNotification: true),
+            ],
+          ),
+          iOS: const DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
+        ),
+        payload: jsonEncode(message.data),
+      );
+      return;
+    }
+
     final notification = message.notification;
-    final title = notification?.title ?? message.data['title']?.toString() ?? 'Fudron Delivery Update';
+    final title = notification?.title ?? message.data['title']?.toString() ?? 'Lagech Delivery Update';
     final body = notification?.body ?? message.data['body']?.toString() ?? 'New update received';
     final notificationId = ((message.messageId?.hashCode ?? message.hashCode)) & 0x7fffffff;
 
@@ -614,8 +669,14 @@ class FcmService {
           importance: Importance.max,
           priority: Priority.high,
           icon: '@mipmap/launcher_icon',
+          playSound: true,
+          enableVibration: true,
         ),
-        iOS: const DarwinNotificationDetails(),
+        iOS: const DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
       ),
       payload: (message.data['orderId'] ?? message.data['orderMongoId'])?.toString(),
     );

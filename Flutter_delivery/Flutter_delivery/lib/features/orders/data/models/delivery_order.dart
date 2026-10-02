@@ -335,9 +335,12 @@ class DeliveryOrder {
       return List.generate(count, (i) => const OrderItem(name: 'Item', price: 0, quantity: 1));
     }
 
+    final resolvedId = (data['orderMongoId'] ?? data['id'] ?? data['_id'] ?? data['orderId'] ?? '').toString();
+    final resolvedOrderCode = (data['orderDisplayId'] ?? data['orderId'] ?? data['orderCode'] ?? resolvedId).toString();
+
     return DeliveryOrder(
-      id: (data['orderMongoId'] ?? data['_id'] ?? '').toString(),
-      orderCode: data['orderId'] as String? ?? '',
+      id: resolvedId,
+      orderCode: resolvedOrderCode,
       orderStatus: data['orderStatus'] as String? ?? '',
       currentPhase: data['currentPhase'] as String? ?? 'en_route_to_pickup',
       restaurant: RestaurantInfo(
