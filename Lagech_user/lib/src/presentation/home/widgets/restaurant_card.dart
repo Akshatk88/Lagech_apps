@@ -304,8 +304,86 @@ class _RestaurantCardState extends ConsumerState<RestaurantCard> {
                       ),
                     ),
 
-                    // Top-Left: Translucent Pill with Veg Square + Dish Name + Price
-                    if (currentSlide != null && (currentSlide.isDish || widget.restaurant.isPureVeg))
+                    // Closed Overlay across the entire image
+                    if (!restaurant.isOpen)
+                      Positioned.fill(
+                        child: Container(
+                          color: Colors.black.withValues(alpha: 0.52),
+                          child: Center(
+                            child: Container(
+                              padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 7.h),
+                              decoration: BoxDecoration(
+                                color: const Color(0xEFDC2626),
+                                borderRadius: BorderRadius.circular(8.r),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.45),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.lock_clock_rounded,
+                                    size: 15.sp,
+                                    color: Colors.white,
+                                  ),
+                                  SizedBox(width: 6.w),
+                                  Text(
+                                    'CURRENTLY CLOSED',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12.sp,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: 0.8,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+
+                    // Top-Left: Translucent Pill with Veg Square + Dish Name + Price OR Closed Badge
+                    if (!restaurant.isOpen)
+                      Positioned(
+                        top: 10.h,
+                        left: 10.w,
+                        child: Container(
+                          padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFDC2626),
+                            borderRadius: BorderRadius.circular(6.r),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.35),
+                                blurRadius: 4,
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.lock_clock_rounded, size: 12.sp, color: Colors.white),
+                              SizedBox(width: 4.w),
+                              Text(
+                                'CLOSED',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11.sp,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    else if (currentSlide != null && (currentSlide.isDish || widget.restaurant.isPureVeg))
                       Positioned(
                         top: 10.h,
                         left: 10.w,
@@ -470,26 +548,58 @@ class _RestaurantCardState extends ConsumerState<RestaurantCard> {
 
                     SizedBox(height: 5.h),
 
-                    // Row 2: ⚡ Near & Fast
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.bolt_rounded,
-                          size: 15.sp,
-                          color: const Color(0xFF0F8A43),
-                        ),
-                        SizedBox(width: 3.w),
-                        Text(
-                          'Near & Fast',
-                          style: TextStyle(
-                            fontSize: 12.sp,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF0F8A43),
+                    // Row 2: Closed notice or Near & Fast
+                    if (!restaurant.isOpen)
+                      Container(
+                        padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.5.h),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFDC2626).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6.r),
+                          border: Border.all(
+                            color: const Color(0xFFDC2626).withValues(alpha: 0.3),
+                            width: 0.8,
                           ),
                         ),
-                      ],
-                    ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.cancel_outlined,
+                              size: 13.sp,
+                              color: const Color(0xFFDC2626),
+                            ),
+                            SizedBox(width: 4.w),
+                            Text(
+                              'Closed • Not accepting orders right now',
+                              style: TextStyle(
+                                fontSize: 11.5.sp,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFFDC2626),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.bolt_rounded,
+                            size: 15.sp,
+                            color: const Color(0xFF0F8A43),
+                          ),
+                          SizedBox(width: 3.w),
+                          Text(
+                            'Near & Fast',
+                            style: TextStyle(
+                              fontSize: 12.sp,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF0F8A43),
+                            ),
+                          ),
+                        ],
+                      ),
 
                     SizedBox(height: 5.h),
 

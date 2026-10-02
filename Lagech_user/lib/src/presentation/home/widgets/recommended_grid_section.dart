@@ -507,15 +507,58 @@ class _RecommendedMiniCardState extends ConsumerState<RecommendedMiniCard> {
                               ),
                             ),
                           ),
+                      // Closed Overlay
+                      if (!widget.restaurant.isOpen)
+                        Positioned.fill(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.52),
+                              borderRadius: BorderRadius.circular(10.r),
+                            ),
+                            child: Center(
+                              child: Container(
+                                padding: EdgeInsets.symmetric(horizontal: 7.w, vertical: 3.5.h),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xEFDC2626),
+                                  borderRadius: BorderRadius.circular(5.r),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.3),
+                                      blurRadius: 4,
+                                    ),
+                                  ],
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.lock_clock_rounded,
+                                      size: 10.sp,
+                                      color: Colors.white,
+                                    ),
+                                    SizedBox(width: 3.w),
+                                    Text(
+                                      'CLOSED',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 9.sp,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ),
               ),
 
               // 2. Top-left offer badge: only for a real offer.
-              if (offerText.isNotEmpty)
+              if (offerText.isNotEmpty && widget.restaurant.isOpen)
               Positioned(
                 top: 4.h,
                 left: 4.w,
@@ -597,10 +640,34 @@ class _RecommendedMiniCardState extends ConsumerState<RecommendedMiniCard> {
 
           SizedBox(height: 2.h),
 
-          // Delivery info: Smoothly changes between 🕒 15-30 min and ⚡ Near & Fast
-          SizedBox(
-            height: 18.5.h,
-            child: AnimatedSwitcher(
+          // Delivery info or Closed:
+          if (!widget.restaurant.isOpen)
+            SizedBox(
+              height: 18.5.h,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.cancel_outlined,
+                    size: 12.sp,
+                    color: const Color(0xFFDC2626),
+                  ),
+                  SizedBox(width: 3.w),
+                  Text(
+                    'Closed',
+                    style: TextStyle(
+                      fontSize: 11.sp,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFFDC2626),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            SizedBox(
+              height: 18.5.h,
+              child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 350),
               transitionBuilder: (child, animation) {
                 return FadeTransition(

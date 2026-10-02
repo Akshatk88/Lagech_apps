@@ -136,7 +136,44 @@ class _SpotlightCarouselState extends State<SpotlightCarousel> {
                               ),
                             ),
                           ),
-                        ),
+                        // Closed Overlay
+                        if (!restaurant.isOpen)
+                          Positioned.fill(
+                            child: Container(
+                              color: Colors.black.withValues(alpha: 0.52),
+                              child: Center(
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xEFDC2626),
+                                    borderRadius: BorderRadius.circular(8.r),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(alpha: 0.4),
+                                        blurRadius: 8,
+                                      ),
+                                    ],
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.lock_clock_rounded, size: 14.sp, color: Colors.white),
+                                      SizedBox(width: 5.w),
+                                      Text(
+                                        'CURRENTLY CLOSED',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 11.5.sp,
+                                          fontWeight: FontWeight.w900,
+                                          letterSpacing: 0.8,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
 
                         // Top Row: Crown badge + Bookmark icon
                         Positioned(

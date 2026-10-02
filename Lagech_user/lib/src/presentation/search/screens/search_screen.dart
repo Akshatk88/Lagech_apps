@@ -1350,6 +1350,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     SearchResult item,
   ) {
     final isRestaurant = item.type == SearchResultType.restaurant;
+    final isClosedRest = isRestaurant &&
+        item.rawItem is RestaurantModel &&
+        !(item.rawItem as RestaurantModel).isOpen;
     final textColor = isDark
         ? AppColors.textPrimaryDark
         : AppColors.textPrimaryLight;
@@ -1387,12 +1390,39 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               child: SizedBox(
                 width: isRestaurant ? 76.r : 80.r,
                 height: isRestaurant ? 76.r : 80.r,
-                child: SmartImage(
-                  url: item.imageUrl,
-                  category: isRestaurant
-                      ? ImageCategory.restaurant
-                      : ImageCategory.food,
-                  fit: BoxFit.cover,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    SmartImage(
+                      url: item.imageUrl,
+                      category: isRestaurant
+                          ? ImageCategory.restaurant
+                          : ImageCategory.food,
+                      fit: BoxFit.cover,
+                    ),
+                    if (isClosedRest)
+                      Container(
+                        color: Colors.black.withValues(alpha: 0.52),
+                        child: Center(
+                          child: Container(
+                            padding: EdgeInsets.symmetric(horizontal: 5.w, vertical: 2.h),
+                            decoration: BoxDecoration(
+                              color: const Color(0xEFDC2626),
+                              borderRadius: BorderRadius.circular(4.r),
+                            ),
+                            child: Text(
+                              'CLOSED',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 8.5.sp,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
@@ -1424,6 +1454,31 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                           ),
                         ),
                       ),
+                      if (isClosedRest) ...[
+                        SizedBox(width: 5.w),
+                        Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 6.w,
+                            vertical: 2.h,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFDC2626).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6.r),
+                            border: Border.all(
+                              color: const Color(0xFFDC2626).withValues(alpha: 0.4),
+                              width: 0.8,
+                            ),
+                          ),
+                          child: Text(
+                            'Closed',
+                            style: TextStyle(
+                              fontSize: 9.5.sp,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFFDC2626),
+                            ),
+                          ),
+                        ),
+                      ],
                       SizedBox(width: 6.w),
                       Icon(
                         Icons.star_rounded,

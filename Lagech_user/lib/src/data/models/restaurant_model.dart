@@ -138,6 +138,64 @@ class RestaurantModel {
       }
     }
 
+    // 4b. Nested availability / availabilityStatus / operationalStatus from backend
+    final avail = json['availability'] ?? json['availabilityStatus'] ?? json['operationalStatus'];
+    if (avail is Map) {
+      if (avail['isOpen'] == false || avail['isOpen']?.toString().trim().toLowerCase() == 'false') {
+        return false;
+      }
+      if (avail['isEffectivelyOnline'] == false || avail['isEffectivelyOnline']?.toString().trim().toLowerCase() == 'false') {
+        return false;
+      }
+      if (avail['isAcceptingOrders'] == false || avail['isAcceptingOrders']?.toString().trim().toLowerCase() == 'false') {
+        return false;
+      }
+      if (avail['isWithinTimings'] == false || avail['isWithinTimings']?.toString().trim().toLowerCase() == 'false') {
+        return false;
+      }
+    }
+
+    // 4c. isEffectivelyOnline flag
+    if (json.containsKey('isEffectivelyOnline')) {
+      final eff = json['isEffectivelyOnline'];
+      if (eff == false || eff?.toString().trim().toLowerCase() == 'false') {
+        return false;
+      }
+    }
+
+    // 4d. Outlet timings evaluation if present
+    if (json['outletTimings'] is Map) {
+      final timings = json['outletTimings'] as Map;
+      final now = DateTime.now();
+      const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+      final todayName = days[now.weekday - 1];
+      final todayTiming = timings[todayName] ?? timings[todayName.toLowerCase()];
+      if (todayTiming is Map) {
+        if (todayTiming['isOpen'] == false || todayTiming['isOpen']?.toString().trim().toLowerCase() == 'false') {
+          return false;
+        }
+        final openTimeStr = todayTiming['openingTime']?.toString();
+        final closeTimeStr = todayTiming['closingTime']?.toString();
+        if (openTimeStr != null && openTimeStr.isNotEmpty && closeTimeStr != null && closeTimeStr.isNotEmpty) {
+          try {
+            final openParts = openTimeStr.split(':');
+            final closeParts = closeTimeStr.split(':');
+            if (openParts.length >= 2 && closeParts.length >= 2) {
+              final openMin = int.parse(openParts[0].trim()) * 60 + int.parse(openParts[1].trim());
+              final closeMin = int.parse(closeParts[0].trim()) * 60 + int.parse(closeParts[1].trim());
+              final nowMin = now.hour * 60 + now.minute;
+              if (closeMin > openMin) {
+                if (nowMin < openMin || nowMin >= closeMin) return false;
+              } else if (closeMin < openMin) {
+                // Crosses midnight (e.g. 18:00 to 02:00)
+                if (nowMin < openMin && nowMin >= closeMin) return false;
+              }
+            }
+          } catch (_) {}
+        }
+      }
+    }
+
     // 5. isOpen / isRestaurantOpen / open flags
     final openVal = json['isOpen'] ?? json['isRestaurantOpen'] ?? json['open'];
     if (openVal != null) {
