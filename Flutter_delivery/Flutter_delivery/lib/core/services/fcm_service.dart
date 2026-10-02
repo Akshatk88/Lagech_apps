@@ -176,6 +176,10 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   }
 
   if (message.data['type'] != 'new_order') {
+    // A message with a notification block is put in the tray by Android itself
+    // while the app is in the background or closed. Showing it again here made
+    // every push appear twice; only data-only messages need us to show them.
+    if (message.notification != null) return;
     try {
       final localNotifications = FlutterLocalNotificationsPlugin();
       await localNotifications.initialize(
