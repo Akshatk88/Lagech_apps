@@ -505,9 +505,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      restaurant != null && restaurant.deliveryTime.isNotEmpty
-                          ? '${restaurant.deliveryTime} to $addressDisplay'
-                          : 'Deliver to $addressDisplay',
+                      _deliveryLine(restaurant?.deliveryTime ?? '', addressDisplay),
                       style: TextStyle(
                         color: isDark
                             ? AppColors.textSecondaryDark
@@ -536,6 +534,17 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         ),
       ),
     );
+  }
+
+  /// "30 mins to Home, Indore" — or just the prompt while no address is chosen.
+  /// Delivery times are stored as "30" as well as "25-30 mins", so a bare
+  /// number gets its unit here.
+  String _deliveryLine(String deliveryTime, String addressDisplay) {
+    final noAddress = addressDisplay == 'Select delivery address';
+    final raw = deliveryTime.trim();
+    final time = RegExp(r'^[0-9]+([-–][0-9]+)?$').hasMatch(raw) ? '$raw mins' : raw;
+    if (noAddress) return time.isEmpty ? addressDisplay : '$time · $addressDisplay';
+    return time.isEmpty ? 'Deliver to $addressDisplay' : '$time to $addressDisplay';
   }
 
   /// Savings banner below app bar (Screenshot 1)
