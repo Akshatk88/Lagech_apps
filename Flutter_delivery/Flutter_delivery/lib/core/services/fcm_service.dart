@@ -450,15 +450,24 @@ class FcmService {
   Future<void> ensureAndroidAlertPermissions() async {
     if (!Platform.isAndroid) return;
 
+    // Full-screen intent — only open Settings if not already granted.
     final androidPlugin = _localNotifications
         .resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin
         >();
-    await androidPlugin?.requestFullScreenIntentPermission();
+    final hasFullScreen =
+        await androidPlugin?.canUseFullScreenIntent() ?? true;
+    if (!hasFullScreen) {
+      await androidPlugin?.requestFullScreenIntentPermission();
+    }
 
-    // Overlay permission ("display over other apps") — powers the
-    // native WindowManager overlay for incoming orders that arrive while backgrounded.
-    await NewOrderOverlayBridge.requestOverlayPermission();
+    // Overlay permission — only open Settings if not already granted.
+    // Without this guard the Settings page pops up on EVERY app resume,
+    // even when the rider already allowed "Display over other apps".
+    final hasOverlay = await NewOrderOverlayBridge.hasOverlayPermission();
+    if (!hasOverlay) {
+      await NewOrderOverlayBridge.requestOverlayPermission();
+    }
   }
 
   /// Routes a notification interaction: an Accept/Reject action button, or a
