@@ -59,11 +59,11 @@ class MainAppShell extends ConsumerWidget {
       builder: (context, child) {
         final currentPath = router.routerDelegate.currentConfiguration.uri.path;
         final isCartBarVisible = hasCartItems && screensWithCartBar.contains(currentPath);
-        final double bottomOffset = (currentPath == RouteNames.foodDetail) ? 120.0 : 24.0;
+        final double bottomOffset = (currentPath == RouteNames.foodDetail) ? 120.0 : 16.0;
         
         final isHome = currentPath == RouteNames.home;
         final double targetBottom = isHome
-            ? (isCartBarVisible ? (bottomOffset + 56.0 + 16.0) : 12.0)
+            ? (isCartBarVisible ? (bottomOffset + 66.0 + 12.0) : 12.0)
             : -120.0;
 
         final isCart = currentPath == RouteNames.cart ||
@@ -83,7 +83,7 @@ class MainAppShell extends ConsumerWidget {
             }
           },
           child: Scaffold(
-          extendBody: !isCart,
+          extendBody: false,
           backgroundColor: Theme.of(context).scaffoldBackgroundColor,
           body: Stack(
             children: [

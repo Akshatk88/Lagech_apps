@@ -10,7 +10,7 @@ class FloatingViewCartBar extends ConsumerStatefulWidget {
   const FloatingViewCartBar({
     super.key,
     required this.onTap,
-    this.bottomOffset = 24.0,
+    this.bottomOffset = 16.0,
   });
 
   @override
@@ -66,6 +66,9 @@ class FloatingViewCartBarState extends ConsumerState<FloatingViewCartBar>
     final restaurantImage = firstItem?.food.imageUrl ?? '';
     final itemCount = items.fold<int>(0, (sum, i) => sum + i.quantity);
 
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final effectiveBottom = widget.bottomOffset + bottomInset;
+
     return Positioned.fill(
       child: Stack(
         clipBehavior: Clip.none,
@@ -74,7 +77,7 @@ class FloatingViewCartBarState extends ConsumerState<FloatingViewCartBar>
           Positioned(
             left: 16,
             right: 16,
-            bottom: widget.bottomOffset,
+            bottom: effectiveBottom,
             height: 64,
             child: IgnorePointer(
               child: SizedBox.expand(key: _flightAnchorKey),
@@ -84,7 +87,7 @@ class FloatingViewCartBarState extends ConsumerState<FloatingViewCartBar>
           AnimatedPositioned(
             duration: const Duration(milliseconds: 420),
             curve: Curves.easeOutCubic,
-            bottom: shouldShow ? widget.bottomOffset : widget.bottomOffset - 120.0,
+            bottom: shouldShow ? effectiveBottom : -120.0,
             left: 16,
             right: 16,
             child: IgnorePointer(
