@@ -19,6 +19,15 @@ import 'package:food_user_application/features/notifications/presentation/contro
 import 'package:food_user_application/features/orders/presentation/controllers/live_orders_controller.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+const _kNewOrderEventTypes = {
+  'new_order',
+  'order_created',
+  'order_placed',
+  'order_received',
+  'neworder',
+  'new_order_available',
+};
+
 const _kOrderNotificationTypes = {
   'new_order',
   'order_status_update',
@@ -171,18 +180,7 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
   final rawType = (message.data['type'] ?? message.data['eventType'] ?? message.data['event'])?.toString().toLowerCase().trim();
   final orderId = _orderIdFromData(message.data);
-  final notifTitle = (message.notification?.title ?? message.data['title']?.toString() ?? '').toLowerCase();
-  final notifBody = (message.notification?.body ?? message.data['body']?.toString() ?? '').toLowerCase();
-  final hasOrderInText = notifTitle.contains('order') || notifBody.contains('order');
-
-  final isNewOrder = rawType == 'new_order' ||
-      rawType == 'order_created' ||
-      rawType == 'order_placed' ||
-      rawType == 'order_received' ||
-      rawType == 'neworder' ||
-      rawType == 'order' ||
-      (orderId != null && hasOrderInText) ||
-      (orderId != null && (rawType == null || rawType.isEmpty));
+  final isNewOrder = _kNewOrderEventTypes.contains(rawType);
 
   if (!isNewOrder) {
     if (kDebugMode) {
@@ -386,18 +384,7 @@ class FcmService {
       final notification = message.notification;
       final type = (message.data['type'] ?? message.data['eventType'] ?? message.data['event'])?.toString().toLowerCase().trim();
       final orderId = _orderIdFromData(message.data);
-      final notifTitle = (notification?.title ?? message.data['title']?.toString() ?? '').toLowerCase();
-      final notifBody = (notification?.body ?? message.data['body']?.toString() ?? '').toLowerCase();
-      final hasOrderInText = notifTitle.contains('order') || notifBody.contains('order');
-
-      final isNewOrder = type == 'new_order' ||
-          type == 'order_created' ||
-          type == 'order_placed' ||
-          type == 'order_received' ||
-          type == 'neworder' ||
-          type == 'order' ||
-          (orderId != null && hasOrderInText) ||
-          (orderId != null && (type == null || type.isEmpty));
+      final isNewOrder = _kNewOrderEventTypes.contains(type);
 
       if (kDebugMode) {
         debugPrint('[FCM onMessage] received: data=${message.data}, notification=${notification?.title}, isNewOrder=$isNewOrder');

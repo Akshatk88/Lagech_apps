@@ -37,22 +37,8 @@ class NewOrderMessagingService : FlutterFirebaseMessagingService() {
 
         Log.i(TAG, "FCM received: rawType=$rawType id=$orderId notifTitle=$notifTitle")
 
-        val isNewOrder = rawType in NEW_ORDER_TYPES ||
-            (rawType?.contains("order") == true &&
-                !rawType.contains("cancel") &&
-                !rawType.contains("reject") &&
-                !rawType.contains("deliver") &&
-                !rawType.contains("taken")) ||
-            notifTitle.contains("new order") ||
-            notifTitle.contains("order created") ||
-            notifTitle.contains("order placed") ||
-            notifTitle.contains("order received") ||
-            notifTitle.contains("naya order") ||
-            (orderId != null && rawType == null)
-
-        val isCloseOrder = rawType in CLOSE_TYPES ||
-            rawType?.contains("cancel") == true ||
-            rawType?.contains("reject") == true
+        val isNewOrder = rawType in NEW_ORDER_TYPES
+        val isCloseOrder = rawType in CLOSE_TYPES
 
         if (isNewOrder || isCloseOrder) {
             try {
