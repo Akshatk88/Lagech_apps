@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:food_user_application/config/theme/app_colors.dart';
 import 'package:food_user_application/core/widgets/brand_icon_badge.dart';
 import 'package:food_user_application/core/network/api_exception.dart';
+import 'package:food_user_application/features/business_settings/data/business_settings_repository.dart';
 import 'package:food_user_application/features/finance/domain/finance_model.dart';
 import 'package:food_user_application/features/finance/domain/subscription_invoice_model.dart';
 import 'package:food_user_application/features/finance/domain/withdrawal_model.dart';
@@ -400,9 +401,12 @@ class _PayoutsScreenState extends ConsumerState<PayoutsScreen> {
 
             _buildOrderInvoiceCard(context, finance),
 
-            const SizedBox(height: 4),
+            // Hidden while Business Settings have the subscription model off.
+            if (_subscriptionModel) ...[
+              const SizedBox(height: 4),
 
-            _buildSubscriptionInvoicesSection(context),
+              _buildSubscriptionInvoicesSection(context),
+            ],
           ],
         ),
       ),
@@ -1103,9 +1107,12 @@ class _PayoutsScreenState extends ConsumerState<PayoutsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSubscriptionModelCard(context),
+        // Hidden while Business Settings have the subscription model off.
+        if (_subscriptionModel) ...[
+          _buildSubscriptionModelCard(context),
 
-        const SizedBox(height: 24),
+          const SizedBox(height: 24),
+        ],
 
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1187,6 +1194,12 @@ class _PayoutsScreenState extends ConsumerState<PayoutsScreen> {
       ],
     );
   }
+
+  /// `business.subscriptionModel` from the public Business Settings. Shown as
+  /// before until the settings load or when they cannot be fetched.
+  bool get _subscriptionModel =>
+      ref.watch(restaurantBusinessSettingsProvider).value?.subscriptionModel ??
+      true;
 
   // ===========================================================================
   // SUBSCRIPTION MODEL CARD

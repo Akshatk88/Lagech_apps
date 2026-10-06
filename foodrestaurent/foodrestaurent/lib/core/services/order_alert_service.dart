@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:food_user_application/config/router/app_router.dart';
 import 'package:food_user_application/core/services/local_notification_service.dart';
 import 'package:food_user_application/core/services/new_order_action_channel.dart';
+import 'package:food_user_application/features/business_settings/data/business_settings_repository.dart';
 import 'package:food_user_application/features/orders/presentation/controllers/live_orders_controller.dart';
 import 'package:food_user_application/features/orders/presentation/views/incoming_order_dialog.dart';
 
@@ -95,6 +96,11 @@ class OrderAlertService {
     stringData['orderId'] = orderId;
     stringData['type'] = 'new_order';
 
+    // "Confirmed by deliveryman": a delivery order arrives already confirmed,
+    // so there is nothing to accept or reject — a plain alert, and the in-app
+    // dialog offers "Start preparing" instead.
+    final arrivesConfirmed = _arrivesConfirmed(rawData);
+
     final title = stringData['title']?.isNotEmpty == true
         ? stringData['title']!
         : 'New Order Received!';
@@ -105,14 +111,23 @@ class OrderAlertService {
         : [
             if (customerName != null && customerName.isNotEmpty) 'Customer: $customerName',
             if (total != null && total.isNotEmpty) 'Total: Rs.$total',
-            'Tap or choose Accept/Reject',
+            arrivesConfirmed
+                ? 'Confirmed — tap to start preparing'
+                : 'Tap or choose Accept/Reject',
           ].join(' · ');
 
     stringData['title'] = title;
     stringData['body'] = body;
 
     // 1. Show real system notification outside app and start alarm sound
-    if (Platform.isAndroid) {
+    if (arrivesConfirmed) {
+      // No Accept/Reject actions and no alarm that only an answer stops.
+      await LocalNotificationService.instance.show(
+        title: title,
+        body: body,
+        payload: '{"type":"new_order","orderId":"$orderId"}',
+      );
+    } else if (Platform.isAndroid) {
       try {
         await NewOrderActionChannel.showAlert(stringData);
       } catch (_) {
@@ -155,6 +170,36 @@ class OrderAlertService {
     if (orderId != null && orderId.isNotEmpty) {
       await NewOrderActionChannel.dismiss(orderId);
     }
+  }
+
+  /// True when Business Settings have delivery orders confirmed by the
+  /// deliveryman and this is a delivery order (takeaway orders still wait for
+  /// the restaurant). Reads `orderStatus` when the payload carries it (the
+  /// socket event sends the whole order), otherwise `orderType` (the push).
+  bool _arrivesConfirmed(Map<String, dynamic> data) {
+    final settings = _ref.read(restaurantBusinessSettingsProvider).value;
+    if (settings == null || !settings.confirmedByDeliveryman) return false;
+    Map<String, dynamic>? asMap(dynamic val) {
+      if (val is Map) return Map<String, dynamic>.from(val);
+      if (val is String && val.trim().startsWith('{')) {
+        try {
+          final decoded = jsonDecode(val);
+          if (decoded is Map) return Map<String, dynamic>.from(decoded);
+        } catch (_) {}
+      }
+      return null;
+    }
+
+    String? status;
+    String? type;
+    for (final map in [data, asMap(data['order']), asMap(data['data'])]) {
+      final s = map?['orderStatus']?.toString().trim().toLowerCase();
+      final t = map?['orderType']?.toString().trim().toLowerCase();
+      if (status == null && s != null && s.isNotEmpty) status = s;
+      if (type == null && t != null && t.isNotEmpty) type = t;
+    }
+    if (type == 'takeaway') return false;
+    return status == null || status == 'confirmed';
   }
 
   /// True when the payload (or its nested `order`/`data` map) carries a

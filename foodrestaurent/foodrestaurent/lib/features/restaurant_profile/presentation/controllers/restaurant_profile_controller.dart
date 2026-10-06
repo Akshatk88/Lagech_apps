@@ -43,6 +43,21 @@ class RestaurantProfileController extends AsyncNotifier<RestaurantModel> {
     state = AsyncValue.data(updated);
   }
 
+  Future<void> updatePackagingSettings({
+    bool? enabled,
+    double? amount,
+    bool? required,
+  }) async {
+    final updated = await ref
+        .read(restaurantRepositoryProvider)
+        .updatePackagingSettings(
+          enabled: enabled,
+          amount: amount,
+          required: required,
+        );
+    state = AsyncValue.data(updated);
+  }
+
   /// Resets approval status to `pending` server-side — caller must warn the
   /// owner before invoking this on an already-approved restaurant.
   Future<void> uploadProfileImage(XFile file) async {

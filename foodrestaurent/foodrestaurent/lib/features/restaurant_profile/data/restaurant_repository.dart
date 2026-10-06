@@ -51,6 +51,27 @@ class RestaurantRepository {
     );
   }
 
+  /// `PATCH /food/restaurant/packaging-settings` — fields left null keep
+  /// their value.
+  Future<RestaurantModel> updatePackagingSettings({
+    bool? enabled,
+    double? amount,
+    bool? required,
+  }) async {
+    final response = await _dio.patch(
+      '/food/restaurant/packaging-settings',
+      data: {
+        'enabled': ?enabled,
+        'amount': ?amount,
+        'required': ?required,
+      },
+    );
+    final data = Map<String, dynamic>.from(response.data as Map);
+    return RestaurantModel.fromJson(
+      Map<String, dynamic>.from(data['restaurant'] as Map),
+    );
+  }
+
   /// `{ "Monday": { "isOpen": true, "openingTime": "09:00", "closingTime": "22:00" }, ... }`
   Future<Map<String, dynamic>> getOutletTimings() async {
     final response = await _dio.get('/food/restaurant/outlet-timings');

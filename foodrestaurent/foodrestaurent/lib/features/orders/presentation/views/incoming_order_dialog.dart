@@ -10,6 +10,8 @@ import 'package:food_user_application/core/network/api_exception.dart';
 import 'package:food_user_application/core/services/new_order_action_channel.dart';
 import 'package:food_user_application/core/services/order_resolution_tracker.dart';
 import 'package:food_user_application/core/services/fcm_service.dart';
+import 'package:food_user_application/features/business_settings/data/business_settings_repository.dart';
+import 'package:food_user_application/features/business_settings/domain/restaurant_business_settings.dart';
 import 'package:food_user_application/features/orders/data/order_repository.dart';
 import 'package:food_user_application/features/orders/domain/order_model.dart';
 import 'package:food_user_application/features/orders/presentation/controllers/live_orders_controller.dart';
@@ -74,6 +76,24 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
     Navigator.of(context).pop();
   }
 
+  RestaurantBusinessSettings get _settings =>
+      ref.read(restaurantBusinessSettingsProvider).value ??
+      RestaurantBusinessSettings.fallback;
+
+  /// With Business Settings' "confirmed by deliveryman", a delivery order
+  /// arrives already `confirmed`: there is nothing to accept, only "Start
+  /// preparing" (and a reject only if the restaurant may cancel accepted
+  /// orders). Takeaway orders are still accepted as usual.
+  bool _isPreConfirmed(OrderModel order) =>
+      _settings.confirmedByDeliveryman &&
+      !order.isTakeaway &&
+      order.orderStatus == 'confirmed';
+
+  /// The status this dialog is waiting on the restaurant to move the order
+  /// out of.
+  String get _awaitedStatus =>
+      _order != null && _isPreConfirmed(_order!) ? 'confirmed' : 'created';
+
   @override
   void initState() {
     super.initState();
@@ -119,7 +139,8 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
     // notification re-opened this dialog, and its Accept then failed.
     final isNewOrPending = order != null &&
         !order.isCancelled &&
-        const {'created', 'placed', 'pending'}.contains(order.orderStatus);
+        (const {'created', 'placed', 'pending'}.contains(order.orderStatus) ||
+            _isPreConfirmed(order));
 
     // A scheduled order before its release time must not ring; it is not
     // resolved either, so it is offered normally once released.
@@ -205,7 +226,7 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
       try {
         final latest =
             await ref.read(orderRepositoryProvider).getById(widget.orderId);
-        if (latest.orderStatus != 'created' && mounted && !_closed) {
+        if (latest.orderStatus != _awaitedStatus && mounted && !_closed) {
           OrderResolutionTracker.markResolved(widget.orderId);
           await NewOrderActionChannel.dismiss(widget.orderId);
           if (!mounted) return;
@@ -214,6 +235,8 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
               content: Text(
                 latest.isCancelled
                     ? 'This order was cancelled.'
+                    : _awaitedStatus == 'confirmed'
+                    ? 'This order was already updated.'
                     : 'This order was already accepted.',
               ),
             ),
@@ -316,7 +339,11 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
     BuildContext context, {
     required String detailsOrderId,
     required DateTime? deadline,
+    bool preConfirmed = false,
   }) {
+    // A pre-confirmed order can only be rejected as a cancellation of an
+    // accepted order, which needs "restaurant can cancel order".
+    final showReject = !preConfirmed || _settings.canCancelOrder;
     return Column(
       children: [
         if (_error != null) ...[
@@ -350,6 +377,7 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (showReject) ...[
             Expanded(
               child: OutlinedButton(
                 onPressed: _acting
@@ -380,6 +408,7 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
               ),
             ),
             const SizedBox(width: 12),
+            ],
             Expanded(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -387,7 +416,11 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: _acting ? null : () => _respond('confirmed'),
+                      onPressed: _acting
+                          ? null
+                          : () => _respond(
+                              preConfirmed ? 'preparing' : 'confirmed',
+                            ),
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         backgroundColor: AppColors.primaryButton,
@@ -406,16 +439,24 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
                                 color: Colors.white,
                               ),
                             )
-                          : const Row(
+                          : Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.check_circle, size: 20),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Accept',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
+                                Icon(
+                                  preConfirmed
+                                      ? Icons.soup_kitchen
+                                      : Icons.check_circle,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    preConfirmed ? 'Start preparing' : 'Accept',
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -947,7 +988,9 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
         _buildActionButtons(
           context,
           detailsOrderId: order.id,
-          deadline: order.acceptanceDeadlineAt,
+          // No acceptance timer runs for an order that arrived confirmed.
+          deadline: _isPreConfirmed(order) ? null : order.acceptanceDeadlineAt,
+          preConfirmed: _isPreConfirmed(order),
         ),
       ],
     );

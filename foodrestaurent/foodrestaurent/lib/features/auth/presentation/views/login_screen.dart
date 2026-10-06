@@ -8,6 +8,7 @@ import 'package:food_user_application/config/theme/app_colors.dart';
 import 'package:food_user_application/core/network/api_exception.dart';
 import 'package:food_user_application/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:food_user_application/features/auth/presentation/controllers/auth_state.dart';
+import 'package:food_user_application/features/business_settings/data/business_settings_repository.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -132,7 +133,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           .read(authControllerProvider.notifier)
           .verifyOtp(phone: _phone, otp: _otpController.text);
       if (!mounted) return;
-      _routeAfterAuth();
+      await _routeAfterAuth();
     } catch (e) {
       setState(() => _errorText = _messageFor(e));
     } finally {
@@ -140,12 +141,41 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
-  void _routeAfterAuth() {
+  /// The server's text for a refused sign-up (`POST /food/restaurant/register`
+  /// answers 403 with it while self registration is off).
+  static const _signUpClosedMessage =
+      'Restaurant sign-up is closed right now. Please contact Lagech to list '
+      'your restaurant.';
+
+  /// `restaurant.selfRegistration` from the public Business Settings; true
+  /// (today's behaviour) until they load or when they cannot be fetched.
+  bool get _selfRegistration =>
+      ref.watch(restaurantBusinessSettingsProvider).value?.selfRegistration ??
+      true;
+
+  Future<bool> _selfRegistrationOpen() async {
+    try {
+      final settings = await ref
+          .read(restaurantBusinessSettingsProvider.future)
+          .timeout(const Duration(seconds: 5));
+      return settings.selfRegistration;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  Future<void> _routeAfterAuth() async {
     final state = ref.read(authControllerProvider);
     switch (state) {
       case AuthAuthenticated():
         context.go('/orders');
       case AuthNeedsRegistration(:final phone):
+        // No sign-up form while restaurant self registration is off.
+        if (!await _selfRegistrationOpen()) {
+          if (mounted) setState(() => _errorText = _signUpClosedMessage);
+          return;
+        }
+        if (!mounted) return;
         context.go('/register', extra: phone);
       case AuthPendingApproval(:final message):
         context.go(
@@ -359,6 +389,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
           ),
         ),
+        // The sign-up hint, only while restaurants may sign up themselves.
+        if (_selfRegistration) ...[
         const SizedBox(height: 32),
         Container(
           padding: const EdgeInsets.all(16),
@@ -388,6 +420,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ],
           ),
         ),
+        ],
         const SizedBox(height: 24),
       ],
     );

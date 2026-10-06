@@ -13,6 +13,42 @@ double? _latLngFrom(Map<String, dynamic> loc, {required bool isLat}) {
   return null;
 }
 
+/// The restaurant's extra packaging charge, from the profile's
+/// `extraPackaging: { enabled, amount, required }`. Paid to the restaurant
+/// with no commission on it.
+class ExtraPackagingSettings {
+  const ExtraPackagingSettings({
+    required this.enabled,
+    required this.amount,
+    required this.required,
+  });
+
+  static const off = ExtraPackagingSettings(
+    enabled: false,
+    amount: 0,
+    required: false,
+  );
+
+  factory ExtraPackagingSettings.fromJson(Map<String, dynamic> json) {
+    final amount = json['amount'];
+    return ExtraPackagingSettings(
+      enabled: json['enabled'] == true,
+      amount: amount is num
+          ? amount.toDouble()
+          : double.tryParse('${amount ?? ''}') ?? 0,
+      required: json['required'] == true,
+    );
+  }
+
+  final bool enabled;
+
+  /// Rupees, 0–500.
+  final double amount;
+
+  /// Charged on every order; otherwise only when the customer asks for it.
+  final bool required;
+}
+
 /// The restaurant partner document, as returned by `GET /food/restaurant/current`
 /// and (in a lighter shape) inside the OTP verify response's `user` field.
 ///
@@ -73,6 +109,7 @@ class RestaurantModel {
     required this.totalRatings,
     required this.restaurantId,
     this.takeawayEnabled = false,
+    this.extraPackaging = ExtraPackagingSettings.off,
   });
 
   factory RestaurantModel.fromJson(Map<String, dynamic> json) {
@@ -160,6 +197,11 @@ class RestaurantModel {
           ? (json['totalRatings'] as num).toInt()
           : 0,
       takeawayEnabled: json['takeawayEnabled'] == true,
+      extraPackaging: json['extraPackaging'] is Map
+          ? ExtraPackagingSettings.fromJson(
+              Map<String, dynamic>.from(json['extraPackaging'] as Map),
+            )
+          : ExtraPackagingSettings.off,
     );
   }
 
@@ -223,6 +265,9 @@ class RestaurantModel {
 
   /// This outlet accepts takeaway orders (customer collects at the counter).
   final bool takeawayEnabled;
+
+  /// The outlet's own extra packaging charge (`extraPackaging`).
+  final ExtraPackagingSettings extraPackaging;
 
   bool get isApproved => status == 'approved';
   bool get isPending => status == 'pending';
