@@ -732,6 +732,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   List<RestaurantModel> _reorderRecommendedList(List<RestaurantModel> restaurants) {
     if (restaurants.isEmpty) return restaurants;
 
+    // Restaurants the admin gave a position (Restaurants list -> "Position in
+    // app") come first, 1, 2, 3...; everything else keeps the order below.
+    if (restaurants.any((r) => r.displayPosition != null)) {
+      final placed = restaurants.where((r) => r.displayPosition != null).toList()
+        ..sort((a, b) => a.displayPosition!.compareTo(b.displayPosition!));
+      final rest = restaurants.where((r) => r.displayPosition == null).toList();
+      return [...placed, ..._reorderRecommendedList(rest)];
+    }
+
     // 1. Explicitly identify restaurants to push to the back ("hotel galaxy", "nandish bakers")
     final pushToBack = <RestaurantModel>[];
     // 2. Identify priority front restaurants ("phaltan delivery" or restaurants starting with / containing "phaltan" in NAME)

@@ -37,6 +37,9 @@ class RestaurantModel {
   /// Admin ordering within the recommended row, lowest first.
   final int recommendedSortOrder;
 
+  /// Admin-set place in the restaurant lists (1 = first). Null = no fixed place.
+  final int? displayPosition;
+
   const RestaurantModel({
     required this.id,
     required this.name,
@@ -64,6 +67,7 @@ class RestaurantModel {
     this.longitude,
     this.isRecommended = false,
     this.recommendedSortOrder = 0,
+    this.displayPosition,
   });
 
   /// Pulls lat/lng out of whichever shape the backend used: a `location` map
@@ -600,6 +604,7 @@ class RestaurantModel {
       isRecommended: json['isRecommended'] == true ||
           json['isRecommended']?.toString().toLowerCase() == 'true',
       recommendedSortOrder: parseInt(json['recommendedSortOrder']),
+      displayPosition: _parsePosition(json['displayPosition']),
     );
   }
 
@@ -672,6 +677,7 @@ class RestaurantModel {
       area: areaVal,
       isRecommended: json['isRecommended'] == true,
       recommendedSortOrder: (json['recommendedSortOrder'] as num?)?.toInt() ?? 0,
+      displayPosition: _parsePosition(json['displayPosition']),
     );
   }
 
@@ -702,6 +708,7 @@ class RestaurantModel {
     double? longitude,
     bool? isRecommended,
     int? recommendedSortOrder,
+    int? displayPosition,
   }) {
     return RestaurantModel(
       id: id ?? this.id,
@@ -730,6 +737,7 @@ class RestaurantModel {
       longitude: longitude ?? this.longitude,
       isRecommended: isRecommended ?? this.isRecommended,
       recommendedSortOrder: recommendedSortOrder ?? this.recommendedSortOrder,
+      displayPosition: displayPosition ?? this.displayPosition,
     );
   }
 
@@ -761,6 +769,12 @@ class RestaurantModel {
       'area': area,
       'isRecommended': isRecommended,
       'recommendedSortOrder': recommendedSortOrder,
+      'displayPosition': displayPosition,
     };
+  }
+
+  static int? _parsePosition(dynamic value) {
+    final n = value is num ? value.toInt() : int.tryParse(value?.toString() ?? '');
+    return (n != null && n > 0) ? n : null;
   }
 }

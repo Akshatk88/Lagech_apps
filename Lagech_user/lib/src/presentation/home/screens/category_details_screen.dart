@@ -431,6 +431,15 @@ class _CategoryDetailsScreenState extends ConsumerState<CategoryDetailsScreen> {
   List<RestaurantModel> _buildCategoryRecommendedList(List<RestaurantModel> apiRestaurants) {
     if (apiRestaurants.isEmpty) return apiRestaurants;
 
+    // Restaurants the admin gave a position (Restaurants list -> "Position in
+    // app") come first, 1, 2, 3...; everything else keeps the order below.
+    if (apiRestaurants.any((r) => r.displayPosition != null)) {
+      final placed = apiRestaurants.where((r) => r.displayPosition != null).toList()
+        ..sort((a, b) => a.displayPosition!.compareTo(b.displayPosition!));
+      final rest = apiRestaurants.where((r) => r.displayPosition == null).toList();
+      return [...placed, ..._buildCategoryRecommendedList(rest)];
+    }
+
     // 1. Explicitly identify restaurants to push to the back ("hotel galaxy", "nandish bakers")
     final pushToBack = <RestaurantModel>[];
     // 2. Identify priority front restaurants ("phaltan delivery" or restaurants starting with / containing "phaltan" in NAME)
