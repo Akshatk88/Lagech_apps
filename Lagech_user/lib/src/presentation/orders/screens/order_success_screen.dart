@@ -576,13 +576,16 @@ class _ItemsCard extends StatelessWidget {
           if (order.addonTotal > 0)
             _billRow('Add-ons', _fmt(order.addonTotal), textColor, secondary),
           if (order.packingCharge > 0)
-            _billRow('Packing Charges', _fmt(order.packingCharge), textColor, secondary),
+            _billRow('Extra packaging', _fmt(order.packingCharge), textColor, secondary),
           if (order.deliveryCharge > 0)
             _billRow('Delivery Fee', _fmt(order.deliveryCharge), textColor, secondary)
           else if (order.totalDeliveryWaived > 0)
             _billRow('Delivery Fee', 'FREE', AppColors.success, secondary),
-          if (order.platformFee > 0)
-            _billRow('Platform Fee', _fmt(order.platformFee), textColor, secondary),
+          // The additional charge is inside platformFee; it has its own line.
+          if (order.platformFeeOnly > 0)
+            _billRow('Platform Fee', _fmt(order.platformFeeOnly), textColor, secondary),
+          if (order.additionalCharge > 0)
+            _billRow(order.additionalChargeLabel, _fmt(order.additionalCharge), textColor, secondary),
           if (order.itemTax > 0)
             _billRow(
               'GST (${(order.gstRate % 1 == 0 ? order.gstRate.toInt() : order.gstRate)}%)',

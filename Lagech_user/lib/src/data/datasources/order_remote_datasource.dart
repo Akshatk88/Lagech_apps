@@ -78,18 +78,21 @@ class OrderRemoteDataSource {
     };
   }
 
-  /// `orderType` / `riderTip` for `/calculate` and `POST /orders`. Only sent
-  /// when they differ from the server's defaults (delivery, no tip), so a
-  /// plain delivery order sends exactly what it always did.
+  /// `orderType` / `riderTip` / `extraPackaging` for `/calculate` and
+  /// `POST /orders`. Only sent when they differ from the server's defaults
+  /// (delivery, no tip, no extra packaging), so a plain delivery order sends
+  /// exactly what it always did.
   static Map<String, dynamic> _orderOptionsPayload({
     required String orderType,
     required double riderTip,
+    bool extraPackaging = false,
   }) {
     final takeaway = orderType == 'takeaway';
     return {
       if (takeaway) 'orderType': 'takeaway',
       // The server refuses a tip on takeaway.
       if (!takeaway && riderTip > 0) 'riderTip': riderTip,
+      if (extraPackaging) 'extraPackaging': true,
     };
   }
 
@@ -104,6 +107,7 @@ class OrderRemoteDataSource {
     DateTime? scheduledAt,
     String orderType = 'delivery',
     double riderTip = 0,
+    bool extraPackaging = false,
   }) async {
     final payload = {
       'items': items.map(itemPayload).toList(),
@@ -113,7 +117,11 @@ class OrderRemoteDataSource {
       'couponCode': ?couponCode,
       'deliveryMode': deliveryMode,
       'scheduledAt': ?scheduledAt?.toUtc().toIso8601String(),
-      ..._orderOptionsPayload(orderType: orderType, riderTip: riderTip),
+      ..._orderOptionsPayload(
+        orderType: orderType,
+        riderTip: riderTip,
+        extraPackaging: extraPackaging,
+      ),
     };
 
     // Print Calculate API Request Payload
@@ -164,12 +172,17 @@ class OrderRemoteDataSource {
     String orderType = 'delivery',
     DateTime? scheduledAt,
     double riderTip = 0,
+    bool extraPackaging = false,
   }) async {
     final payload = {
       'items': items.map(itemPayload).toList(),
       // Optional for takeaway only.
       'address': ?address,
-      ..._orderOptionsPayload(orderType: orderType, riderTip: riderTip),
+      ..._orderOptionsPayload(
+        orderType: orderType,
+        riderTip: riderTip,
+        extraPackaging: extraPackaging,
+      ),
       // The slot the customer picked; absent means "as soon as possible".
       'scheduledAt': ?scheduledAt?.toUtc().toIso8601String(),
       'restaurantId': restaurantId,

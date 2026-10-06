@@ -2,7 +2,8 @@ import 'business_settings_model.dart';
 
 /// What checkout may offer for one restaurant, from
 /// `GET /food/public/restaurants/:restaurantId/order-options`: delivery and/or
-/// takeaway, scheduled-order slots and rider tips.
+/// takeaway, scheduled-order slots, rider tips and the restaurant's extra
+/// packaging.
 ///
 /// [RestaurantOrderOptions.deliveryOnly] is the app's behaviour from before
 /// these options existed — used whenever the call fails.
@@ -13,6 +14,7 @@ class RestaurantOrderOptions {
     this.takeaway = false,
     this.schedule = ScheduleOptions.off,
     this.tips = TipSettings.off,
+    this.extraPackaging,
   });
 
   static const deliveryOnly = RestaurantOrderOptions();
@@ -26,6 +28,13 @@ class RestaurantOrderOptions {
   final ScheduleOptions schedule;
   final TipSettings tips;
 
+  /// The restaurant's extra packaging charge; null when not offered.
+  final ExtraPackagingOption? extraPackaging;
+
+  /// Extra packaging the customer may tick at checkout (not always charged).
+  bool get offersOptionalPackaging =>
+      extraPackaging != null && !extraPackaging!.required;
+
   /// Both order types are open, so the customer gets a choice.
   bool get offersChoice => delivery && takeaway;
 
@@ -36,6 +45,7 @@ class RestaurantOrderOptions {
     final types = (json['orderTypes'] as Map?)?.cast<String, dynamic>() ?? const {};
     final schedule = json['schedule'];
     final tips = json['tips'];
+    final packaging = json['extraPackaging'];
     return RestaurantOrderOptions(
       restaurantId: (json['restaurantId'] ?? '').toString(),
       delivery: types['delivery'] is bool ? types['delivery'] as bool : true,
@@ -46,6 +56,30 @@ class RestaurantOrderOptions {
       tips: tips is Map
           ? TipSettings.fromApi(tips.cast<String, dynamic>())
           : TipSettings.off,
+      extraPackaging: packaging is Map
+          ? ExtraPackagingOption.fromApi(packaging.cast<String, dynamic>())
+          : null,
+    );
+  }
+}
+
+/// `extraPackaging: { amount, required }` from the order options.
+class ExtraPackagingOption {
+  const ExtraPackagingOption({required this.amount, required this.required});
+
+  /// Rupees.
+  final double amount;
+
+  /// Charged on every order; otherwise only when the customer asks for it.
+  final bool required;
+
+  /// Null when there is no amount to charge.
+  static ExtraPackagingOption? fromApi(Map<String, dynamic> json) {
+    final amount = (json['amount'] as num?)?.toDouble() ?? 0;
+    if (amount <= 0) return null;
+    return ExtraPackagingOption(
+      amount: amount,
+      required: json['required'] == true,
     );
   }
 }

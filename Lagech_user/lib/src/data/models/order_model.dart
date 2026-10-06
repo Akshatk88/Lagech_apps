@@ -255,6 +255,27 @@ class OrderModel {
   final double addonTotal;
   final double packingCharge;
   final double platformFee;
+
+  /// The admin's flat charge on every order (e.g. "Service charge"), already
+  /// included in [platformFee]; 0 when off.
+  final double additionalCharge;
+
+  /// What to call [additionalCharge] on the bill.
+  final String additionalChargeName;
+
+  /// The Quick Mode surcharge, also already included in [platformFee].
+  final double quickDeliveryFee;
+
+  /// [platformFee] without the parts shown as their own lines (the
+  /// additional charge), so nothing is counted twice. The Quick Mode
+  /// surcharge has no line of its own in this app, so it stays in here.
+  double get platformFeeOnly =>
+      (platformFee - additionalCharge).clamp(0, double.infinity).toDouble();
+
+  /// The bill line label for [additionalCharge].
+  String get additionalChargeLabel =>
+      additionalChargeName.isNotEmpty ? additionalChargeName : 'Additional charge';
+
   final double deliveryCharge;
   final double taxes;
   final double itemTax;
@@ -376,6 +397,9 @@ class OrderModel {
     this.addonTotal = 0,
     this.packingCharge = 0,
     this.platformFee = 0,
+    this.additionalCharge = 0,
+    this.additionalChargeName = '',
+    this.quickDeliveryFee = 0,
     this.deliveryCharge = 0,
     this.taxes = 0,
     this.itemTax = 0,
@@ -849,6 +873,10 @@ class OrderModel {
       addonTotal: _money(pricing['addonTotal']),
       packingCharge: _money(pricing['packagingFee'] ?? pricing['packingCharge']),
       platformFee: _money(pricing['platformFee']),
+      additionalCharge: _money(pricing['additionalCharge']),
+      additionalChargeName:
+          (pricing['additionalChargeName'] ?? '').toString().trim(),
+      quickDeliveryFee: _money(pricing['quickDeliveryFee']),
       deliveryCharge: _money(pricing['deliveryFee'] ?? pricing['deliveryCharge']),
       taxes: _money(pricing['tax']) +
           _money(pricing['deliveryFeeGst']) +

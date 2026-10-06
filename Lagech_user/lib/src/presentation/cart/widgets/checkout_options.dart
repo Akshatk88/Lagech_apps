@@ -560,3 +560,61 @@ class TipSelectorCard extends StatelessWidget {
     );
   }
 }
+
+/// "Add extra packaging (₹X)" — the restaurant's optional packaging charge.
+/// Only built when the order options offer it and it is not required.
+class ExtraPackagingCard extends StatelessWidget {
+  const ExtraPackagingCard({
+    super.key,
+    required this.packaging,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final ExtraPackagingOption packaging;
+  final bool selected;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : const Color(0xFF1E1E1E);
+    return Material(
+      color: isDark ? AppColors.cardDark : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: _border(isDark)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () {
+          Haptics.light();
+          onChanged(!selected);
+        },
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 6, 8, 6),
+          child: Row(
+            children: [
+              Icon(Icons.inventory_2_outlined, size: 20, color: AppColors.primary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Add extra packaging (₹${_rupees(packaging.amount)})',
+                  style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: textColor),
+                ),
+              ),
+              Checkbox(
+                value: selected,
+                activeColor: AppColors.primary,
+                onChanged: (v) {
+                  Haptics.light();
+                  onChanged(v ?? false);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

@@ -42,6 +42,10 @@ class CheckoutState {
   /// Tip for the delivery partner in rupees; 0 for none. Delivery only.
   final double riderTip;
 
+  /// The customer ticked "Add extra packaging" (optional packaging only; a
+  /// required one is charged by the server without asking).
+  final bool extraPackaging;
+
   const CheckoutState({
     this.calculation,
     this.isCalculating = false,
@@ -53,6 +57,7 @@ class CheckoutState {
     this.orderType = 'delivery',
     this.scheduledSlot,
     this.riderTip = 0,
+    this.extraPackaging = false,
   });
 
   OrderPricing? get pricing => calculation?.pricing;
@@ -77,6 +82,7 @@ class CheckoutState {
     String? orderType,
     ScheduleSlot? scheduledSlot,
     double? riderTip,
+    bool? extraPackaging,
     bool clearError = false,
     bool clearCoupon = false,
     bool clearSchedule = false,
@@ -93,6 +99,7 @@ class CheckoutState {
       scheduledSlot:
           clearSchedule ? null : (scheduledSlot ?? this.scheduledSlot),
       riderTip: riderTip ?? this.riderTip,
+      extraPackaging: extraPackaging ?? this.extraPackaging,
     );
   }
 }
@@ -162,6 +169,13 @@ class CheckoutViewModel extends Notifier<CheckoutState> {
     await recalculate();
   }
 
+  /// Ticks or unticks the optional extra packaging.
+  Future<void> setExtraPackaging(bool value) async {
+    if (value == state.extraPackaging) return;
+    state = state.copyWith(extraPackaging: value);
+    await recalculate();
+  }
+
   /// Keeps the order type, slot and tip within what the restaurant's order
   /// options allow: takeaway is preselected when it is the only type, and a
   /// choice that is no longer offered falls back to the default.
@@ -182,14 +196,18 @@ class CheckoutViewModel extends Notifier<CheckoutState> {
     } else if (tip > options.tips.max) {
       tip = options.tips.max;
     }
+    // The opt-in only stands while the restaurant offers optional packaging.
+    final packaging = state.extraPackaging && options.offersOptionalPackaging;
     if (type == state.orderType &&
         (keepSlot || slot == null) &&
-        tip == state.riderTip) {
+        tip == state.riderTip &&
+        packaging == state.extraPackaging) {
       return;
     }
     state = state.copyWith(
       orderType: type,
       riderTip: tip,
+      extraPackaging: packaging,
       clearSchedule: !keepSlot,
     );
     await recalculate();
@@ -225,6 +243,7 @@ class CheckoutViewModel extends Notifier<CheckoutState> {
         clearError: true,
         orderType: 'delivery',
         riderTip: 0,
+        extraPackaging: false,
         clearSchedule: true,
       );
       return;
@@ -252,6 +271,7 @@ class CheckoutViewModel extends Notifier<CheckoutState> {
             scheduledAt: state.scheduledSlot?.scheduledAt,
             orderType: state.orderType,
             riderTip: state.isTakeaway ? 0 : state.riderTip,
+            extraPackaging: state.extraPackaging,
           );
       var priced = calculation;
       // An older backend does not send paymentOptions with the quote; ask the
@@ -345,6 +365,7 @@ class CheckoutViewModel extends Notifier<CheckoutState> {
             orderType: state.orderType,
             scheduledAt: state.scheduledSlot?.scheduledAt,
             riderTip: state.isTakeaway ? 0 : state.riderTip,
+            extraPackaging: state.extraPackaging,
           );
       return (result: result, error: null);
     } on Failure catch (f) {

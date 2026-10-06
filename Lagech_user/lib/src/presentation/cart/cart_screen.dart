@@ -671,7 +671,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     );
     _partialWallet = partialWallet;
     final totalDeliveryFee = pricing?.deliveryFee ?? 0.0;
-    final platformFee = pricing?.platformFee ?? 0.0;
+    // The additional charge is inside platformFee; it gets its own line.
+    final platformFee = pricing?.platformFeeOnly ?? 0.0;
     final itemTotal = pricing?.subtotal ?? cartState.subtotal;
     // Only a real discount (coupon or offer) from the server is a discount.
     // The gap between a dish's price and its "price on other apps" is not: it
@@ -820,6 +821,19 @@ class _CartScreenState extends ConsumerState<CartScreen> {
               tip: checkoutState.riderTip,
               onChanged: (tip) => unawaited(
                 ref.read(checkoutViewModelProvider.notifier).setRiderTip(tip),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          // Extra packaging the customer may ask for. A required one is just
+          // a bill line.
+          if (orderOptions.offersOptionalPackaging) ...[
+            ExtraPackagingCard(
+              packaging: orderOptions.extraPackaging!,
+              selected: checkoutState.extraPackaging,
+              onChanged: (v) => unawaited(
+                ref.read(checkoutViewModelProvider.notifier).setExtraPackaging(v),
               ),
             ),
             const SizedBox(height: 12),
@@ -1855,6 +1869,10 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                       textColor,
                     ),
                   ],
+                  // Shown as before; only hidden when the additional charge
+                  // was all of it.
+                  if (platformFee > 0 ||
+                      (pricing?.additionalCharge ?? 0) <= 0) ...[
                   const SizedBox(height: 10),
                   _buildBillRow(
                     AppLocalizations.of(context)!.platformFee,
@@ -1862,11 +1880,21 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                     secondaryColor,
                     textColor,
                   ),
+                  ],
+                  if ((pricing?.additionalCharge ?? 0) > 0) ...[
+                    const SizedBox(height: 10),
+                    _buildBillRow(
+                      pricing!.additionalChargeLabel,
+                      '₹${pricing.additionalCharge.toStringAsFixed(pricing.additionalCharge % 1 == 0 ? 0 : 2)}',
+                      secondaryColor,
+                      textColor,
+                    ),
+                  ],
                   if (packingCharges > 0) ...[
                     const SizedBox(height: 10),
                     _buildBillRow(
-                      AppLocalizations.of(context)!.packingCharges,
-                      '₹${packingCharges.toStringAsFixed(0)}',
+                      'Extra packaging',
+                      '₹${packingCharges.toStringAsFixed(packingCharges % 1 == 0 ? 0 : 2)}',
                       secondaryColor,
                       textColor,
                     ),

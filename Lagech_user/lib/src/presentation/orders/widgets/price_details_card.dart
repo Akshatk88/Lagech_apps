@@ -141,18 +141,17 @@ class PriceDetailsCard extends StatelessWidget {
               // Item Total
               _buildBillRow('Item Total', '₹${computedItemTotal.toStringAsFixed(0)}', primaryTextColor, secondaryTextColor),
 
-              // Restaurant Packaging
+              // Extra packaging — the restaurant's packaging charge, when charged.
               if (order.packingCharge > 0)
-                _buildBillRow('Restaurant Packaging', '₹${order.packingCharge.toStringAsFixed(0)}', primaryTextColor, secondaryTextColor)
-              else
-                // No fabricated strike-through. The order records what WAS charged,
-                // never what it would otherwise have been, so a struck-out "10"
-                // claimed a saving of a number that exists nowhere in the order.
-                _buildBillRowWithBadge('Restaurant Packaging', '', 'FREE', secondaryTextColor, greenColor),
+                _buildBillRow('Extra packaging', '₹${order.packingCharge.toStringAsFixed(order.packingCharge % 1 == 0 ? 0 : 2)}', primaryTextColor, secondaryTextColor),
 
-              // Platform fee
-              if (order.platformFee > 0)
-                _buildBillRow('Platform fee with GST', '₹${order.platformFee.toStringAsFixed(2)}', primaryTextColor, secondaryTextColor),
+              // Platform fee — without the additional charge, which has its
+              // own line below.
+              if (order.platformFeeOnly > 0)
+                _buildBillRow('Platform fee with GST', '₹${order.platformFeeOnly.toStringAsFixed(2)}', primaryTextColor, secondaryTextColor),
+
+              if (order.additionalCharge > 0)
+                _buildBillRow(order.additionalChargeLabel, '₹${order.additionalCharge.toStringAsFixed(order.additionalCharge % 1 == 0 ? 0 : 2)}', primaryTextColor, secondaryTextColor),
 
               // Discount Applied
               if (totalDiscounts > 0)

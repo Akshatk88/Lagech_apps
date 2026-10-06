@@ -57,6 +57,13 @@ class OrderPricing {
   /// `delivery` or `takeaway`, as the server priced it.
   final String orderType;
 
+  /// The admin's flat charge on every order (e.g. "Service charge"). Already
+  /// included in [platformFee] and [total]; 0 when off.
+  final double additionalCharge;
+
+  /// What to call [additionalCharge] on the bill.
+  final String additionalChargeName;
+
   /// Verbatim server payload, echoed into order creation unchanged.
   final Map<String, dynamic> raw;
 
@@ -86,8 +93,20 @@ class OrderPricing {
     this.couponError,
     this.riderTip = 0,
     this.orderType = 'delivery',
+    this.additionalCharge = 0,
+    this.additionalChargeName = '',
     this.raw = const {},
   });
+
+  /// [platformFee] without the additional charge, which gets its own line, so
+  /// nothing is counted twice. The Quick Mode surcharge ([quickDeliveryFee])
+  /// has no line of its own in this app, so it stays in here as before.
+  double get platformFeeOnly =>
+      (platformFee - additionalCharge).clamp(0, double.infinity).toDouble();
+
+  /// The bill line label for [additionalCharge].
+  String get additionalChargeLabel =>
+      additionalChargeName.isNotEmpty ? additionalChargeName : 'Additional charge';
 
   /// Any delivery fee taken off, by a coupon or by "free delivery over".
   bool get deliveryWaived => deliveryFeeWaived > 0 || freeDeliveryWaived > 0;
@@ -155,6 +174,9 @@ class OrderPricing {
           : null,
       riderTip: _d(json['riderTip']),
       orderType: (json['orderType'] ?? 'delivery').toString(),
+      additionalCharge: _d(json['additionalCharge']),
+      additionalChargeName:
+          (json['additionalChargeName'] ?? '').toString().trim(),
       raw: json,
     );
   }
