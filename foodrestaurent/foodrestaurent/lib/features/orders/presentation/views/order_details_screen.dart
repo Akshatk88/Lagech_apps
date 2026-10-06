@@ -11,6 +11,8 @@ import 'package:food_user_application/core/services/fcm_service.dart';
 import 'package:food_user_application/features/orders/data/order_repository.dart';
 import 'package:food_user_application/features/orders/domain/order_model.dart';
 import 'package:food_user_application/features/orders/presentation/controllers/live_orders_controller.dart';
+import 'package:food_user_application/features/orders/presentation/widgets/cancel_accepted_order_button.dart';
+import 'package:food_user_application/features/business_settings/data/business_settings_repository.dart';
 import 'package:food_user_application/core/widgets/app_refresh_indicator.dart';
 
 /// Destination for FCM/local-notification taps (`new_order`,
@@ -185,7 +187,10 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
           : _order == null
           ? const Center(child: Text('Order not found.'))
           : AppRefreshIndicator(
-              onRefresh: _load,
+              onRefresh: () {
+                ref.invalidate(restaurantBusinessSettingsProvider);
+                return _load();
+              },
               child: _buildContent(context, _order!),
             ),
     );
@@ -269,6 +274,19 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
   }
 
   Widget _buildActions(BuildContext context, OrderModel order) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildStatusActions(context, order),
+        CancelAcceptedOrderButton(
+          order: order,
+          onCancel: () => _updateStatus('cancelled_by_restaurant'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatusActions(BuildContext context, OrderModel order) {
     switch (order.orderStatus) {
       case 'created':
         return Row(

@@ -126,8 +126,9 @@ class _FoodItemFormSheetState extends ConsumerState<FoodItemFormSheet> {
       final foodType = _isVeg ? 'Veg' : 'Non-Veg';
       final otherPrice = double.tryParse(_otherPrice.text.trim()) ?? 0;
 
+      final FoodItemModel saved;
       if (_isEditing) {
-        await ref
+        saved = await ref
             .read(menuControllerProvider.notifier)
             .updateFood(
               widget.existing!.id,
@@ -143,7 +144,7 @@ class _FoodItemFormSheetState extends ConsumerState<FoodItemFormSheet> {
               preparationTime: _preparationTime.text.trim(),
             );
       } else {
-        await ref
+        saved = await ref
             .read(menuControllerProvider.notifier)
             .createFood(
               name: name,
@@ -159,13 +160,20 @@ class _FoodItemFormSheetState extends ConsumerState<FoodItemFormSheet> {
             );
       }
       if (mounted) {
+        // The saved dish's own approvalStatus is the truth: the server sets it
+        // from Business Settings → Vendor → "dish approval" (published as
+        // restaurant.dishApprovalRequired), and only resubmits an edit when
+        // a customer-facing field changed.
+        final awaitingApproval = saved.isPending;
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              _isEditing
-                  ? 'Item updated — pending re-approval.'
-                  : 'Item submitted for approval.',
+              awaitingApproval
+                  ? (_isEditing
+                        ? 'Item updated — pending re-approval.'
+                        : 'Item submitted for approval.')
+                  : (_isEditing ? 'Item updated.' : 'Item saved.'),
             ),
           ),
         );

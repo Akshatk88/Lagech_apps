@@ -16,7 +16,9 @@ class MenuController extends AsyncNotifier<List<MenuSectionModel>> {
     );
   }
 
-  Future<void> createFood({
+  /// Returns the saved dish as the server sent it back — its
+  /// `approvalStatus` says whether it is live or waiting for admin approval.
+  Future<FoodItemModel> createFood({
     required String name,
     required String foodType,
     String description = '',
@@ -28,7 +30,7 @@ class MenuController extends AsyncNotifier<List<MenuSectionModel>> {
     bool isRecommended = false,
     String preparationTime = '',
   }) async {
-    await ref
+    final saved = await ref
         .read(menuRepositoryProvider)
         .createFood(
           name: name,
@@ -43,9 +45,11 @@ class MenuController extends AsyncNotifier<List<MenuSectionModel>> {
           preparationTime: preparationTime,
         );
     await refresh();
+    return saved;
   }
 
-  Future<void> updateFood(
+  /// Returns the saved dish as the server sent it back (see [createFood]).
+  Future<FoodItemModel> updateFood(
     String id, {
     String? name,
     String? foodType,
@@ -58,7 +62,7 @@ class MenuController extends AsyncNotifier<List<MenuSectionModel>> {
     bool? isRecommended,
     String? preparationTime,
   }) async {
-    await ref
+    final saved = await ref
         .read(menuRepositoryProvider)
         .updateFood(
           id,
@@ -74,6 +78,7 @@ class MenuController extends AsyncNotifier<List<MenuSectionModel>> {
           preparationTime: preparationTime,
         );
     await refresh();
+    return saved;
   }
 
   /// Optimistic toggle so the switch flips instantly instead of waiting on

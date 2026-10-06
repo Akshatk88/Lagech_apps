@@ -13,6 +13,8 @@ import 'package:food_user_application/features/orders/domain/order_model.dart';
 import 'package:food_user_application/features/orders/presentation/controllers/live_orders_controller.dart';
 import 'package:food_user_application/features/orders/presentation/widgets/live_order_card.dart'; // NEW
 import 'package:food_user_application/features/orders/presentation/widgets/resend_rider_button.dart';
+import 'package:food_user_application/features/business_settings/data/business_settings_repository.dart';
+import 'package:food_user_application/features/orders/presentation/widgets/cancel_accepted_order_button.dart';
 import 'package:food_user_application/features/restaurant_profile/presentation/controllers/restaurant_profile_controller.dart';
 import 'package:food_user_application/core/widgets/app_refresh_indicator.dart';
 import 'package:food_user_application/core/widgets/app_drawer.dart';
@@ -143,8 +145,10 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
     IconData? emptyIcon,
   }) {
     return AppRefreshIndicator(
-      onRefresh: () =>
-          ref.read(liveOrdersControllerProvider.notifier).refresh(),
+      onRefresh: () {
+        ref.invalidate(restaurantBusinessSettingsProvider);
+        return ref.read(liveOrdersControllerProvider.notifier).refresh();
+      },
       child: orders.isEmpty
           ? ListView(
               children: [
@@ -200,8 +204,10 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
     IconData? emptyIcon,
   }) {
     return AppRefreshIndicator(
-      onRefresh: () =>
-          ref.read(liveOrdersControllerProvider.notifier).refresh(),
+      onRefresh: () {
+        ref.invalidate(restaurantBusinessSettingsProvider);
+        return ref.read(liveOrdersControllerProvider.notifier).refresh();
+      },
       child: orders.isEmpty
           ? ListView(
               children: [
@@ -778,6 +784,23 @@ class _OrderCard extends ConsumerWidget {
       }
     }
 
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildStatusActions(context, order, updateStatus),
+        CancelAcceptedOrderButton(
+          order: order,
+          onCancel: () => updateStatus('cancelled_by_restaurant'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatusActions(
+    BuildContext context,
+    OrderModel order,
+    Future<void> Function(String newStatus) updateStatus,
+  ) {
     switch (order.orderStatus) {
       case 'created':
         return Row(
