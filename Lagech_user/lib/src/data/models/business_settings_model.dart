@@ -13,6 +13,8 @@ class BusinessSettings {
     this.digitalEnabled = true,
     this.offlineEnabled = false,
     this.walletPaymentEnabled = true,
+    this.partialPaymentEnabled = false,
+    this.partialPaymentMethod = 'both',
     this.scheduledOrder = true,
     this.freeDeliveryOver,
     this.addFund = true,
@@ -38,6 +40,22 @@ class BusinessSettings {
 
   /// `payment.wallet` — paying for an order from the wallet.
   final bool walletPaymentEnabled;
+
+  /// `payment.partialPayment` — paying part of an order from the wallet and
+  /// the rest online or in cash. Off unless the server says so.
+  final bool partialPaymentEnabled;
+
+  /// `payment.partialPaymentMethod` — what may pay the rest of a partial
+  /// payment: `both`, `cod` (cash only) or `digital` (online only).
+  final String partialPaymentMethod;
+
+  /// Whether [method] (`razorpay` or `cash`) may pay the rest of a partial
+  /// payment, by this setting alone (the method's own switches still apply).
+  bool partialRestAllows(String method) => switch (method) {
+        'razorpay' => partialPaymentMethod != 'cod',
+        'cash' => partialPaymentMethod != 'digital',
+        _ => false,
+      };
 
   /// `order.scheduledOrder` — off means "order for now" only.
   final bool scheduledOrder;
@@ -77,6 +95,12 @@ class BusinessSettings {
       digitalEnabled: _bool(payment['digital'], true),
       offlineEnabled: _bool(payment['offline'], false),
       walletPaymentEnabled: _bool(payment['wallet'], true),
+      partialPaymentEnabled: _bool(payment['partialPayment'], false),
+      partialPaymentMethod: switch (payment['partialPaymentMethod']) {
+        'cod' => 'cod',
+        'digital' => 'digital',
+        _ => 'both',
+      },
       scheduledOrder: _bool(order['scheduledOrder'], true),
       freeDeliveryOver: (order['freeDeliveryOver'] as num?)?.toDouble(),
       addFund: _bool(customer['addFund'], true),

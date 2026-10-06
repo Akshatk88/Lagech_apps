@@ -140,6 +140,7 @@ class OrderRemoteDataSource {
     bool sendCutlery = false,
     String? zoneId,
     Map<String, dynamic>? offlinePayment,
+    double? partialWalletAmount,
   }) async {
     final payload = {
       'items': items.map(itemPayload).toList(),
@@ -157,6 +158,11 @@ class OrderRemoteDataSource {
       'zoneId': ?zoneId,
       // `{ methodId, fields, note }` for paymentMethod "offline" only.
       'offlinePayment': ?offlinePayment,
+      // Partial payment: this much from the wallet, the rest by paymentMethod
+      // (razorpay or cash). The server re-checks the balance and refuses if it
+      // dropped below what the customer was shown.
+      if (partialWalletAmount != null) 'useWallet': true,
+      'walletAmount': ?partialWalletAmount,
     };
 
     // ignore: avoid_print

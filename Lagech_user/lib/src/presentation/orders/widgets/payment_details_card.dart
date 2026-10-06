@@ -52,7 +52,24 @@ class PaymentDetailsCard extends StatelessWidget {
           const SizedBox(height: 16),
           
           if (order.paymentMethod.isNotEmpty)
-            _buildRow('Method', order.paymentMethod.toUpperCase(), textColor, secondaryColor),
+            _buildRow(
+              'Method',
+              order.isPartialPayment
+                  ? 'WALLET + ${order.paymentMethod.toUpperCase()}'
+                  : order.paymentMethod.toUpperCase(),
+              textColor,
+              secondaryColor,
+            ),
+
+          if (order.isPartialPayment) ...[
+            _buildRow('From wallet', '${order.currency} ${order.walletAmount.toStringAsFixed(2)}', textColor, secondaryColor),
+            _buildRow(
+              order.paymentMethod.toLowerCase() == 'cash' ? 'Cash on delivery' : 'Online',
+              '${order.currency} ${order.remainderAmount.toStringAsFixed(2)}',
+              textColor,
+              secondaryColor,
+            ),
+          ],
             
           if (order.paymentStatus.isNotEmpty)
             _buildRow(

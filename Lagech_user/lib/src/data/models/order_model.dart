@@ -286,6 +286,10 @@ class OrderModel {
   final DateTime? paymentTime;
   final double refundAmount;
 
+  /// Partial payment: the part of [total] paid from the wallet
+  /// (`payment.walletAmount`); [paymentMethod] paid or pays the rest. 0 otherwise.
+  final double walletAmount;
+
   final DeliveryPartner? deliveryPartner;
   final double? riderLat;
   final double? riderLng;
@@ -369,6 +373,7 @@ class OrderModel {
     this.transactionId = '',
     this.paymentTime,
     this.refundAmount = 0,
+    this.walletAmount = 0,
     this.deliveryPartner,
     this.riderLat,
     this.riderLng,
@@ -440,6 +445,14 @@ class OrderModel {
       paymentMethod.toLowerCase() == 'offline' &&
       orderStatus.toLowerCase() == 'pending_payment' &&
       offlinePaymentStatus.toLowerCase() != 'rejected';
+
+  /// Paid partly from the wallet and partly by [paymentMethod].
+  bool get isPartialPayment =>
+      walletAmount > 0 && paymentMethod.toLowerCase() != 'wallet';
+
+  /// What [paymentMethod] covers: the total less the wallet part.
+  double get remainderAmount =>
+      isPartialPayment ? (total - walletAmount).clamp(0, total).toDouble() : total;
 
   /// Any delivery fee taken off, by a coupon or by "free delivery over".
   double get totalDeliveryWaived => deliveryFeeWaived + freeDeliveryWaived;
@@ -818,6 +831,7 @@ class OrderModel {
                 ? DateTime.tryParse(payment['createdAt'].toString())
                 : null),
       refundAmount: _money((payment['refund'] as Map?)?['amount']),
+      walletAmount: _money(payment['walletAmount'] ?? json['walletAmount']),
       deliveryPartner: partner is Map
           ? DeliveryPartner.fromApi(partner.cast<String, dynamic>())
           : null,

@@ -38,9 +38,11 @@ class PriceDetailsCard extends StatelessWidget {
 
     final paymentMethodText = order.isOfflinePaymentPending
         ? 'Payment under verification'
-        : order.paymentMethod.isNotEmpty
-            ? 'Paid Via ${order.paymentMethod.toUpperCase()}'
-            : 'Paid Via Online';
+        : order.isPartialPayment
+            ? 'Paid Via WALLET + ${order.paymentMethod.toUpperCase()}'
+            : order.paymentMethod.isNotEmpty
+                ? 'Paid Via ${order.paymentMethod.toUpperCase()}'
+                : 'Paid Via Online';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -218,6 +220,25 @@ class PriceDetailsCard extends StatelessWidget {
                   ),
                 ],
               ),
+
+              // Partial payment: how the bill total was split.
+              if (order.isPartialPayment) ...[
+                const SizedBox(height: 12),
+                _buildBillRow(
+                  'Paid from wallet',
+                  '₹${order.walletAmount.toStringAsFixed(2)}',
+                  greenColor,
+                  secondaryTextColor,
+                ),
+                _buildBillRow(
+                  order.paymentMethod.toLowerCase() == 'cash'
+                      ? 'Cash on delivery'
+                      : 'Paid online',
+                  '₹${order.remainderAmount.toStringAsFixed(2)}',
+                  primaryTextColor,
+                  secondaryTextColor,
+                ),
+              ],
             ],
           ),
         ),

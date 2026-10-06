@@ -50,6 +50,13 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   String _selectedPaymentMethod = 'razorpay'; // 'razorpay' | 'cash' | 'wallet'
   String? _selectedAddressId;
 
+  /// "Use wallet balance" (partial payment): the wallet pays what it holds and
+  /// [_selectedPaymentMethod] (razorpay or cash) pays the rest.
+  bool _useWalletPartial = false;
+
+  /// The wallet part worked out on the last build, for the bill and footer.
+  double? _partialWallet;
+
   @override
   void initState() {
     super.initState();
@@ -110,6 +117,60 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         // pay_later has its own eligibility check in the payment sheet.
         return true;
     }
+  }
+
+  /// Methods that may pay the rest of a partial payment.
+  static const _partialRestMethods = ['razorpay', 'cash'];
+
+  bool _partialRestAvailable(
+    String method,
+    BusinessSettings settings,
+    bool Function(String) isAvailable,
+  ) =>
+      _partialRestMethods.contains(method) &&
+      isAvailable(method) &&
+      settings.partialRestAllows(method);
+
+  /// Whether "Use wallet balance" can be offered: switched on, the wallet
+  /// usable, a balance above 0 but below the total (a balance that covers the
+  /// whole order is the plain wallet method) and a method left for the rest.
+  bool _canOfferPartialWallet({
+    required BusinessSettings settings,
+    required double balance,
+    required double? total,
+    required bool Function(String) isAvailable,
+  }) {
+    if (!settings.partialPaymentEnabled || !isAvailable('wallet')) return false;
+    if (total == null || balance <= 0 || balance >= total) return false;
+    return _partialRestMethods
+        .any((m) => _partialRestAvailable(m, settings, isAvailable));
+  }
+
+  /// The wallet part of this order when the customer chose to use their
+  /// balance and the selected method can pay the rest; null otherwise.
+  double? _partialWalletPart({
+    required BusinessSettings settings,
+    required double balance,
+    required double? total,
+    required bool Function(String) isAvailable,
+  }) {
+    if (!_useWalletPartial) return null;
+    if (!_canOfferPartialWallet(
+      settings: settings,
+      balance: balance,
+      total: total,
+      isAvailable: isAvailable,
+    )) {
+      return null;
+    }
+    if (!_partialRestAvailable(_selectedPaymentMethod, settings, isAvailable)) {
+      return null;
+    }
+    // Never more than the balance, to the paisa.
+    final part = (balance * 100).floor() / 100;
+    // Razorpay cannot charge less than ₹1.
+    if (_selectedPaymentMethod == 'razorpay' && total! - part < 1) return null;
+    return part;
   }
 
   String _paymentMethodName(String method) => switch (method) {
@@ -295,6 +356,42 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
       if (cartItems.isEmpty) return;
 
+      // Partial payment: work the wallet part out again against the final
+      // bill; if it no longer applies, stop rather than charge a different
+      // amount than the customer saw.
+      double? partialWallet;
+      if (_useWalletPartial) {
+        final settingsNow = ref.read(businessSettingsProvider);
+        final hasOfflineMethods =
+            (ref.read(offlinePaymentMethodsProvider).asData?.value ?? const [])
+                .isNotEmpty;
+        bool isAvailableNow(String method) => _isPaymentMethodAvailable(
+              method,
+              settings: settingsNow,
+              zone: checkoutState.calculation?.paymentOptions,
+              isCodAllowed:
+                  ref.read(authViewModelProvider).value?.isCodAllowed ?? true,
+              hasOfflineMethods: hasOfflineMethods,
+            );
+        partialWallet = _partialWalletPart(
+          settings: settingsNow,
+          balance: ref.read(walletViewModelProvider).wallet.balance,
+          total: pricing.total,
+          isAvailable: isAvailableNow,
+        );
+        if (partialWallet == null || partialWallet != _partialWallet) {
+          if (!mounted) return;
+          setState(() {
+            if (partialWallet == null) _useWalletPartial = false;
+          });
+          AppSnackbar.warning(
+            context,
+            'Your wallet split changed. Please review the payment and try again.',
+          );
+          return;
+        }
+      }
+
       Map<String, dynamic>? offlinePayment;
       if (_selectedPaymentMethod == 'offline') {
         final methods = await ref.read(offlinePaymentMethodsProvider.future);
@@ -326,6 +423,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
             // `note`; only this hand-off was missing.
             note: _cookingRequest,
             offlinePayment: offlinePayment,
+            partialWalletAmount: partialWallet,
           );
 
       if (!mounted) return;
@@ -510,6 +608,13 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           hasOfflineMethods: hasOfflineMethods,
         );
     _ensureSelectedMethodAvailable(isAvailable);
+    final partialWallet = _partialWalletPart(
+      settings: settings,
+      balance: ref.watch(walletViewModelProvider).wallet.balance,
+      total: pricing?.total,
+      isAvailable: isAvailable,
+    );
+    _partialWallet = partialWallet;
     final totalDeliveryFee = pricing?.deliveryFee ?? 0.0;
     final platformFee = pricing?.platformFee ?? 0.0;
     final itemTotal = pricing?.subtotal ?? cartState.subtotal;
@@ -650,6 +755,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
             isDark: isDark,
             pricing: pricing,
             resolvedAddress: resolvedAddress,
+            walletPart: partialWallet,
           ),
 
           const SizedBox(height: 12),
@@ -668,6 +774,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         cartRestaurant: cartRestaurant,
         isAvailable: isAvailable,
         maintenance: settings.maintenanceMode ? settings.maintenanceText : null,
+        walletPart: partialWallet,
       ),
     );
   }
@@ -1307,6 +1414,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     required bool isDark,
     required OrderPricing? pricing,
     required AddressModel? resolvedAddress,
+    double? walletPart,
   }) {
     final customerName = _customerName;
     final customerPhone = _customerPhone;
@@ -1688,6 +1796,25 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                       ),
                     ],
                   ),
+                  // Partial payment: how the total is split.
+                  if (walletPart != null) ...[
+                    const SizedBox(height: 10),
+                    _buildBillRow(
+                      'Paid from wallet',
+                      '−₹${walletPart.toStringAsFixed(2)}',
+                      const Color(0xFF059669),
+                      const Color(0xFF059669),
+                    ),
+                    const SizedBox(height: 10),
+                    _buildBillRow(
+                      _selectedPaymentMethod == 'cash'
+                          ? 'To pay in cash on delivery'
+                          : 'To pay online',
+                      '₹${(toPay - walletPart).toStringAsFixed(2)}',
+                      textColor,
+                      textColor,
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -2333,10 +2460,100 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                       ),
                       const SizedBox(height: 20),
 
+                      // Partial payment: "Use wallet balance (₹X)", then a
+                      // method below pays the rest. Shown only while the
+                      // balance is above 0 and below the total.
+                      Consumer(
+                        builder: (context, consumerRef, _) {
+                          final settings =
+                              consumerRef.watch(businessSettingsProvider);
+                          final liveBalance = consumerRef
+                              .watch(walletViewModelProvider)
+                              .wallet
+                              .balance;
+                          if (!_canOfferPartialWallet(
+                            settings: settings,
+                            balance: liveBalance,
+                            total: toPay,
+                            isAvailable: isAvailable,
+                          )) {
+                            return const SizedBox.shrink();
+                          }
+                          final rest = toPay - liveBalance;
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 14),
+                            decoration: BoxDecoration(
+                              color: _useWalletPartial
+                                  ? AppColors.primary.withValues(alpha: 0.08)
+                                  : (isDark
+                                      ? AppColors.cardDark
+                                      : AppColors.secondarySurfaceLight),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: _useWalletPartial
+                                    ? AppColors.primary
+                                    : Colors.transparent,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: SwitchListTile.adaptive(
+                              value: _useWalletPartial,
+                              secondary: Icon(
+                                Icons.account_balance_wallet_outlined,
+                                color: AppColors.primary,
+                              ),
+                              title: Text(
+                                'Use wallet balance (₹${liveBalance.toStringAsFixed(2)})',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: modalTextColor,
+                                ),
+                              ),
+                              subtitle: Text(
+                                _useWalletPartial
+                                    ? 'Choose how to pay the remaining ₹${rest.toStringAsFixed(2)}'
+                                    : 'Pay part with your wallet, the rest online or in cash',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: modalSecondaryColor,
+                                ),
+                              ),
+                              onChanged: (on) {
+                                Haptics.light();
+                                setState(() {
+                                  _useWalletPartial = on;
+                                  if (on &&
+                                      !_partialRestAvailable(
+                                        _selectedPaymentMethod,
+                                        settings,
+                                        isAvailable,
+                                      )) {
+                                    _selectedPaymentMethod = _partialRestMethods
+                                        .firstWhere(
+                                          (m) => _partialRestAvailable(
+                                            m,
+                                            settings,
+                                            isAvailable,
+                                          ),
+                                          orElse: () => _selectedPaymentMethod,
+                                        );
+                                  }
+                                });
+                                setModalState(() {});
+                              },
+                            ),
+                          );
+                        },
+                      ),
+
                       // Option 1: Online Payment (Razorpay / UPI / Cards) —
                       // shown only while Business Settings and the order's
                       // zone both allow it.
-                      if (isAvailable('razorpay'))
+                      if (isAvailable('razorpay') &&
+                          (!_useWalletPartial ||
+                              ref
+                                  .read(businessSettingsProvider)
+                                  .partialRestAllows('razorpay')))
                       _paymentOptionTile(
                         ctx: modalCtx,
                         methodKey: 'razorpay',
@@ -2352,7 +2569,11 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
                       // Option 2: Cash on Delivery (COD) — only shown if admin has allowed COD for this user,
                       // COD is on in Business Settings and the order's zone accepts it
-                      if (isAvailable('cash')) ...[
+                      if (isAvailable('cash') &&
+                          (!_useWalletPartial ||
+                              ref
+                                  .read(businessSettingsProvider)
+                                  .partialRestAllows('cash'))) ...[
                         const SizedBox(height: 10),
                         _paymentOptionTile(
                           ctx: modalCtx,
@@ -2560,7 +2781,11 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     return InkWell(
       onTap: () {
         Haptics.light();
-        setState(() => _selectedPaymentMethod = methodKey);
+        setState(() {
+          _selectedPaymentMethod = methodKey;
+          // Wallet, Pay Later and offline pay the whole order themselves.
+          if (!_partialRestMethods.contains(methodKey)) _useWalletPartial = false;
+        });
         Navigator.pop(ctx);
       },
       borderRadius: BorderRadius.circular(14),
@@ -2666,6 +2891,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     RestaurantModel? cartRestaurant,
     required bool Function(String method) isAvailable,
     String? maintenance,
+    double? walletPart,
   }) {
     final walletState = ref.watch(walletViewModelProvider);
     final walletBalance = walletState.wallet.balance;
@@ -2691,6 +2917,9 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         paymentIcon = Icons.credit_card_rounded;
         paymentDisplay = 'Online Payment (UPI/Cards)';
         break;
+    }
+    if (walletPart != null) {
+      paymentDisplay = 'Wallet ₹${walletPart.toStringAsFixed(0)} + $paymentDisplay';
     }
 
     return Container(
@@ -2885,7 +3114,10 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                               children: [
                                 Flexible(
                                   child: Text(
-                                    _getPaymentButtonLabel(toPay),
+                                    // A partial payment charges only the rest.
+                                    _getPaymentButtonLabel(
+                                      toPay == null ? null : toPay - (walletPart ?? 0),
+                                    ),
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 16,

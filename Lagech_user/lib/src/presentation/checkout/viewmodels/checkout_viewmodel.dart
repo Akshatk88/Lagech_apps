@@ -18,6 +18,7 @@ import '../../home/viewmodels/zone_viewmodel.dart';
 import '../../orders/viewmodels/active_order_viewmodel.dart';
 import '../../orders/viewmodels/orders_viewmodel.dart';
 import '../../wallet/viewmodels/pay_later_viewmodel.dart';
+import '../../wallet/viewmodels/wallet_viewmodel.dart';
 
 class CheckoutState {
   final OrderCalculation? calculation;
@@ -202,6 +203,7 @@ class CheckoutViewModel extends Notifier<CheckoutState> {
     String? deliveryInstructions,
     bool sendCutlery = false,
     Map<String, dynamic>? offlinePayment,
+    double? partialWalletAmount,
   }) async {
     final cart = ref.read(cartViewModelProvider);
     final pricing = state.pricing;
@@ -247,6 +249,7 @@ class CheckoutViewModel extends Notifier<CheckoutState> {
             sendCutlery: sendCutlery,
             zoneId: ref.read(currentZoneIdProvider),
             offlinePayment: offlinePayment,
+            partialWalletAmount: partialWalletAmount,
           );
       return (result: result, error: null);
     } on Failure catch (f) {
@@ -272,6 +275,11 @@ class CheckoutViewModel extends Notifier<CheckoutState> {
   ///
   /// Clears the cart only once the payment has actually settled (success or
   /// webhook-pending), never on a cancellation or a hard failure.
+  ///
+  /// [partialWalletAmount] pays that much from the wallet and the rest with
+  /// [paymentMethod] (`razorpay` or `cash`); the Razorpay sheet then charges
+  /// only the rest. Abandoning the sheet discards the order and the server
+  /// puts the wallet part back.
   Future<PaymentFlowResult> payAndPlaceOrder({
     required Map<String, dynamic> address,
     required String restaurantName,
@@ -280,6 +288,7 @@ class CheckoutViewModel extends Notifier<CheckoutState> {
     String? deliveryInstructions,
     bool sendCutlery = false,
     Map<String, dynamic>? offlinePayment,
+    double? partialWalletAmount,
   }) async {
     final user = ref.read(authViewModelProvider).value;
     final customerName = user?.displayName ?? 'Customer';
@@ -295,7 +304,12 @@ class CheckoutViewModel extends Notifier<CheckoutState> {
       deliveryInstructions: deliveryInstructions,
       sendCutlery: sendCutlery,
       offlinePayment: offlinePayment,
+      partialWalletAmount: partialWalletAmount,
     );
+
+    // A partial payment took (or, refused, did not take) the wallet part:
+    // show the balance the server now holds.
+    if (partialWalletAmount != null) _refreshWallet();
 
     if (placed.error != null) {
       return PaymentFlowResult(outcome: PaymentOutcome.failed, message: placed.error!);
@@ -351,6 +365,8 @@ class CheckoutViewModel extends Notifier<CheckoutState> {
       return PaymentFlowResult(
         outcome: PaymentOutcome.success,
         message: switch (paymentMethod) {
+          'cash' when partialWalletAmount != null =>
+            'Order placed: ₹${partialWalletAmount.toStringAsFixed(0)} from your wallet, the rest in cash 🎉',
           'cash' => 'Order placed with Cash on Delivery 🎉',
           'pay_later' => 'Order placed on Pay Later 🎉',
           'offline' => 'Order placed. Your payment is being verified.',
@@ -395,8 +411,15 @@ class CheckoutViewModel extends Notifier<CheckoutState> {
     } else if (payment.outcome == PaymentOutcome.cancelled && orderId.isNotEmpty) {
       // Don't leave a ghost `pending_payment` order behind when the user backs
       // out of the sheet.
+      // The server puts a partial payment's wallet part back as it discards.
       unawaited(
-        ref.read(orderRemoteDataSourceProvider).discardPendingPayment(orderId).catchError((_) {}),
+        ref
+            .read(orderRemoteDataSourceProvider)
+            .discardPendingPayment(orderId)
+            .catchError((_) {})
+            .whenComplete(() {
+              if (partialWalletAmount != null) _refreshWallet();
+            }),
       );
     }
 
@@ -405,6 +428,10 @@ class CheckoutViewModel extends Notifier<CheckoutState> {
       message: payment.message,
       orderId: orderId,
     );
+  }
+
+  void _refreshWallet() {
+    unawaited(ref.read(walletViewModelProvider.notifier).loadWallet(isRefresh: true));
   }
 }
 
