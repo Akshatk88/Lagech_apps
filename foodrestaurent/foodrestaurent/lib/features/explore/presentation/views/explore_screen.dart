@@ -99,8 +99,8 @@ class ExploreScreen extends ConsumerWidget {
                       context: context,
                       title: 'Delivery settings',
                       subtitle: 'Manage delivery\npreferences',
-                      imageAsset: 'assets/image/deliverysetting.webp',
-                      iconBgColor: AppColors.successSoft,
+                      icon: Icons.delivery_dining_rounded,
+                      iconBgColor: isDark ? AppColors.primaryTintDarkStrong : AppColors.primaryTint,
                       iconColor: AppColors.primary,
                       width: _getCardWidth(context, 3),
                       onTap: () => context.push('/delivery-settings'),
@@ -110,7 +110,7 @@ class ExploreScreen extends ConsumerWidget {
                       context: context,
                       title: 'Zone Setup',
                       subtitle: 'Manage delivery\nzones & areas',
-                      imageAsset: 'assets/image/zonesetup.webp',
+                      icon: Icons.map_rounded,
                       iconBgColor: isDark
                           ? AppColors.primaryTintDarkStrong
                           : AppColors.primaryTint,

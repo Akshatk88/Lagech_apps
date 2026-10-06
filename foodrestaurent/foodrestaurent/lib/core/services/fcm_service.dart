@@ -193,7 +193,7 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       );
       final title = _nonEmpty(message.notification?.title) ??
           _nonEmpty(message.data['title']) ??
-          'Fodron Restaurant Alert';
+          'Lagech Restaurant Alert';
       final body = _nonEmpty(message.notification?.body) ??
           _nonEmpty(message.data['body']) ??
           'You have a new update';
@@ -209,6 +209,28 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       if (kDebugMode) {
         debugPrint('[FCM background] non-new_order handling threw: $e');
       }
+    }
+    return;
+  }
+
+  // On Android the native NewOrderMessagingService already put up the overlay
+  // or its own Accept/Reject notification (with a fallback of its own). The
+  // plugin's receiver still wakes this isolate for the same push, and a second
+  // alert here lingered after the order was answered on the overlay.
+  if (Platform.isAndroid) {
+    if (kDebugMode) {
+      debugPrint('[FCM background] new_order $orderId handled natively — skipping');
+    }
+    // The plain OS copy from the push's notification leg is still removed: the
+    // native alert replaces it, exactly as this handler's own alert used to.
+    try {
+      await LocalNotificationService.instance.initialize(
+        onResponse: (_) {},
+        requestPermission: false,
+      );
+      await cancelFcmTrayCopy(orderId);
+    } catch (_) {
+      // Worst case the plain copy stays — a duplicate, not a missed order.
     }
     return;
   }
@@ -418,7 +440,7 @@ class FcmService {
       final title =
           _nonEmpty(notification?.title) ??
           _nonEmpty(message.data['title']) ??
-          'Fodron Restaurant';
+          'Lagech Restaurant';
       final body =
           _nonEmpty(notification?.body) ??
           _nonEmpty(message.data['body']) ??

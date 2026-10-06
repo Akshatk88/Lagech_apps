@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:food_user_application/config/theme/app_colors.dart';
 import 'package:food_user_application/features/orders/domain/order_model.dart';
+import 'package:food_user_application/features/orders/presentation/widgets/resend_rider_button.dart';
 
 class LiveOrderCard extends ConsumerStatefulWidget {
   const LiveOrderCard({super.key, required this.order});
@@ -50,6 +51,8 @@ class _LiveOrderCardState extends ConsumerState<LiveOrderCard> {
               _buildMapBanner(context),
             _buildInfoGrid(context),
             const SizedBox(height: 16),
+            if (widget.order.canResendToRiders)
+              ResendRiderButton(order: widget.order),
             _buildActionButtons(context),
           ] else
             const SizedBox(height: 16),
@@ -70,33 +73,33 @@ class _LiveOrderCardState extends ConsumerState<LiveOrderCard> {
     switch (widget.order.orderStatus) {
       case 'created':
       case 'confirmed':
-        pillColor = Colors.orange.shade50;
-        pillTextColor = Colors.orange.shade700;
+        pillColor = AppColors.successLight;
+        pillTextColor = AppColors.primaryDeep;
         pillIcon = Icons.check_circle;
         pillText = 'Accepted';
         break;
       case 'preparing':
-        pillColor = Colors.orange.shade50;
-        pillTextColor = Colors.orange.shade700;
+        pillColor = AppColors.primaryTint;
+        pillTextColor = AppColors.primaryDark;
         pillIcon = Icons.soup_kitchen;
         pillText = 'Preparing Food';
         break;
       case 'ready_for_pickup':
-        pillColor = Colors.green.shade50;
-        pillTextColor = Colors.green.shade700;
+        pillColor = AppColors.successLight;
+        pillTextColor = AppColors.primaryDeep;
         pillIcon = Icons.shopping_bag;
         pillText = 'Ready for Pickup';
         break;
       case 'reached_pickup':
-        pillColor = Colors.blue.shade50;
-        pillTextColor = Colors.blue.shade700;
+        pillColor = AppColors.primaryTint;
+        pillTextColor = AppColors.primary;
         pillIcon = Icons.two_wheeler;
         pillText = 'Rider Arrived';
         break;
       case 'picked_up':
       case 'reached_drop':
-        pillColor = Colors.blue.shade50;
-        pillTextColor = Colors.blue.shade700;
+        pillColor = AppColors.primaryTint;
+        pillTextColor = AppColors.primary;
         pillIcon = Icons.two_wheeler;
         pillText = 'Picked Up';
         break;
@@ -104,8 +107,8 @@ class _LiveOrderCardState extends ConsumerState<LiveOrderCard> {
       // finished order showed the pill text "delivered" in lowercase.
       case 'delivered':
       case 'completed':
-        pillColor = Colors.green.shade50;
-        pillTextColor = Colors.green.shade700;
+        pillColor = AppColors.successLight;
+        pillTextColor = AppColors.primaryDeep;
         pillIcon = Icons.check_circle;
         pillText = 'Delivered';
         break;
@@ -130,12 +133,14 @@ class _LiveOrderCardState extends ConsumerState<LiveOrderCard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '#FOD-${widget.order.displayId}',
+                      '#${widget.order.formattedDisplayId}',
                       style: TextStyle(
                         fontWeight: FontWeight.w900,
-                        fontSize: 16,
+                        fontSize: 15,
                         color: isDarkMode ? Colors.white : Colors.black87,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -276,7 +281,7 @@ class _LiveOrderCardState extends ConsumerState<LiveOrderCard> {
             icon: Icons.soup_kitchen,
             isActive: currentStep >= 1,
             isCurrent: currentStep == 1,
-            color: Colors.orange,
+            color: AppColors.primaryLight,
           ),
           _TimelineLine(isActive: currentStep >= 2),
           _TimelineStep(
@@ -294,7 +299,7 @@ class _LiveOrderCardState extends ConsumerState<LiveOrderCard> {
             icon: Icons.two_wheeler,
             isActive: currentStep >= 3,
             isCurrent: currentStep == 3,
-            color: Colors.blue,
+            color: AppColors.primaryDark,
           ),
           _TimelineLine(isActive: currentStep >= 4),
           _TimelineStep(
@@ -316,13 +321,10 @@ class _LiveOrderCardState extends ConsumerState<LiveOrderCard> {
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       height: 60,
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
+        // Plain red tint instead of a placeholder map image.
+        color: AppColors.primaryTint,
         borderRadius: BorderRadius.circular(8),
-        image: const DecorationImage(
-          image: AssetImage('assets/image/map_placeholder.png'), // Need a placeholder or just a generic background
-          fit: BoxFit.cover,
-        ),
-        border: Border.all(color: Colors.grey.shade300),
+        border: Border.all(color: AppColors.primaryTintStrong),
       ),
       child: Stack(
         children: [
@@ -331,22 +333,22 @@ class _LiveOrderCardState extends ConsumerState<LiveOrderCard> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                Icon(Icons.store, color: Colors.orange.shade700, size: 24),
+                Icon(Icons.store, color: AppColors.primary, size: 24),
                 const Expanded(
                   child: Padding(
                     padding: EdgeInsets.symmetric(horizontal: 8.0),
-                    child: Divider(color: Colors.blue, thickness: 2, height: 2), // Dashed in real map
+                    child: Divider(color: AppColors.primaryDark, thickness: 2, height: 2), // Dashed in real map
                   ),
                 ),
                 Container(
                   padding: const EdgeInsets.all(4),
                   decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                  child: const Icon(Icons.two_wheeler, color: Colors.blue, size: 20),
+                  child: const Icon(Icons.two_wheeler, color: AppColors.primaryDark, size: 20),
                 ),
                 const Expanded(
                   child: Padding(
                     padding: EdgeInsets.symmetric(horizontal: 8.0),
-                    child: Divider(color: Colors.blue, thickness: 2, height: 2), // Dashed in real map
+                    child: Divider(color: AppColors.primaryDark, thickness: 2, height: 2), // Dashed in real map
                   ),
                 ),
                 Icon(Icons.location_on, color: Colors.red.shade700, size: 24),
@@ -382,13 +384,13 @@ class _LiveOrderCardState extends ConsumerState<LiveOrderCard> {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 12.0),
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Customer
           Expanded(
-            flex: 3,
+            flex: 4,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -409,19 +411,19 @@ class _LiveOrderCardState extends ConsumerState<LiveOrderCard> {
                 const SizedBox(height: 6),
                 Text(
                   widget.order.customerName,
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: isDarkMode ? Colors.white : Colors.black87),
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5, color: isDarkMode ? Colors.white : Colors.black87),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    const Icon(Icons.phone, size: 11, color: Colors.orange),
+                    const Icon(Icons.phone, size: 12, color: AppColors.primaryDark),
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
                         widget.order.customerPhone.isNotEmpty ? '+91 ${widget.order.customerPhone}' : 'No phone',
-                        style: const TextStyle(color: Colors.orange, fontSize: 11, fontWeight: FontWeight.w500),
+                        style: const TextStyle(color: AppColors.primaryDark, fontSize: 11.5, fontWeight: FontWeight.w500),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -431,19 +433,18 @@ class _LiveOrderCardState extends ConsumerState<LiveOrderCard> {
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6.0),
-            child: Container(width: 1, height: 46, color: Colors.grey.shade200),
-          ),
+          const SizedBox(width: 6),
+          Container(width: 1, height: 48, color: Colors.grey.shade200),
+          const SizedBox(width: 6),
           // Delivery Partner
           Expanded(
-            flex: 4,
+            flex: 5,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Icon(widget.order.hasRider ? Icons.circle : Icons.circle_outlined, size: 9, color: widget.order.hasRider ? Colors.green : Colors.grey.shade400),
+                    Icon(widget.order.hasRider ? Icons.circle : Icons.circle_outlined, size: 10, color: widget.order.hasRider ? AppColors.primary : Colors.grey.shade400),
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
@@ -460,13 +461,13 @@ class _LiveOrderCardState extends ConsumerState<LiveOrderCard> {
                   Row(
                     children: [
                       Container(
-                        width: 22,
-                        height: 22,
+                        width: 24,
+                        height: 24,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: Colors.grey.shade200,
                         ),
-                        child: const Icon(Icons.person, size: 14, color: Colors.grey),
+                        child: const Icon(Icons.person, size: 16, color: Colors.grey),
                       ),
                       const SizedBox(width: 6),
                       Expanded(
@@ -478,27 +479,27 @@ class _LiveOrderCardState extends ConsumerState<LiveOrderCard> {
                                 Flexible(
                                   child: Text(
                                     widget.order.riderName,
-                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: isDarkMode ? Colors.white : Colors.black87),
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: isDarkMode ? Colors.white : Colors.black87),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                                 if (widget.order.riderRating != null) ...[
-                                  const SizedBox(width: 3),
-                                  const Icon(Icons.star, size: 11, color: Colors.orange),
-                                  Text(widget.order.riderRating!.toStringAsFixed(1), style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold)),
+                                  const SizedBox(width: 4),
+                                  const Icon(Icons.star, size: 12, color: AppColors.rating),
+                                  Text(widget.order.riderRating!.toStringAsFixed(1), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                                 ],
                               ],
                             ),
                             const SizedBox(height: 2),
                             Row(
                               children: [
-                                const Icon(Icons.phone, size: 10, color: Colors.orange),
-                                const SizedBox(width: 3),
+                                const Icon(Icons.phone, size: 10, color: AppColors.primaryDark),
+                                const SizedBox(width: 4),
                                 Expanded(
                                   child: Text(
                                     '+91 ${widget.order.riderPhone}',
-                                    style: const TextStyle(color: Colors.orange, fontSize: 10.5, fontWeight: FontWeight.w500),
+                                    style: const TextStyle(color: AppColors.primaryDark, fontSize: 11, fontWeight: FontWeight.w500),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -511,11 +512,11 @@ class _LiveOrderCardState extends ConsumerState<LiveOrderCard> {
                     ],
                   ),
                 ] else
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4.0),
+                  const Padding(
+                    padding: EdgeInsets.only(top: 4.0),
                     child: Text(
                       'Looking for partner...',
-                      style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.grey.shade500),
+                      style: TextStyle(fontSize: 12.5, fontStyle: FontStyle.italic, color: Colors.grey),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -523,10 +524,9 @@ class _LiveOrderCardState extends ConsumerState<LiveOrderCard> {
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6.0),
-            child: Container(width: 1, height: 46, color: Colors.grey.shade200),
-          ),
+          const SizedBox(width: 6),
+          Container(width: 1, height: 48, color: Colors.grey.shade200),
+          const SizedBox(width: 6),
           // ETA
           Expanded(
             flex: 3,
@@ -550,14 +550,14 @@ class _LiveOrderCardState extends ConsumerState<LiveOrderCard> {
                 const SizedBox(height: 6),
                 Text(
                   '15 mins', // Mocked ETA
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: isDarkMode ? Colors.white : Colors.black87),
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5, color: isDarkMode ? Colors.white : Colors.black87),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
                 const Text(
                   'Dist: 2.1 km', // Mocked distance
-                  style: TextStyle(color: Colors.grey, fontSize: 10.5),
+                  style: TextStyle(color: Colors.grey, fontSize: 11),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -579,8 +579,8 @@ class _LiveOrderCardState extends ConsumerState<LiveOrderCard> {
             child: OutlinedButton(
               onPressed: widget.order.hasRider ? () {} : null,
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.orange.shade700,
-                side: BorderSide(color: Colors.orange.shade200),
+                foregroundColor: AppColors.primaryDark,
+                side: BorderSide(color: AppColors.primaryAlpha(0.35)),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
@@ -592,8 +592,8 @@ class _LiveOrderCardState extends ConsumerState<LiveOrderCard> {
             child: OutlinedButton(
               onPressed: () {},
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.orange.shade700,
-                side: BorderSide(color: Colors.orange.shade200),
+                foregroundColor: AppColors.primaryDark,
+                side: BorderSide(color: AppColors.primaryAlpha(0.35)),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
@@ -605,8 +605,8 @@ class _LiveOrderCardState extends ConsumerState<LiveOrderCard> {
             child: OutlinedButton(
               onPressed: () => context.push('/order-details/${widget.order.id}'),
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.orange.shade700,
-                side: BorderSide(color: Colors.orange.shade200),
+                foregroundColor: AppColors.primaryDark,
+                side: BorderSide(color: AppColors.primaryAlpha(0.35)),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),

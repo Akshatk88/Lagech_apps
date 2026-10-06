@@ -156,7 +156,7 @@ class _ZoneSetupScreenState extends ConsumerState<ZoneSetupScreen> {
               ),
               child: const Icon(
                 Icons.location_on_outlined,
-                color: Colors.orangeAccent,
+                color: AppColors.primary,
                 size: 20,
               ),
             ),
@@ -283,7 +283,7 @@ class _ZoneSetupScreenState extends ConsumerState<ZoneSetupScreen> {
       decoration: BoxDecoration(
         color: const Color(0xFFFFF9E6),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.orangeAccent.withValues(alpha: 0.3)),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -372,7 +372,7 @@ class _ZoneSetupScreenState extends ConsumerState<ZoneSetupScreen> {
               ),
               const Icon(
                 Icons.near_me_outlined,
-                color: Colors.orangeAccent,
+                color: AppColors.primary,
                 size: 20,
               ),
             ],

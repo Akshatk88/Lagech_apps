@@ -271,14 +271,14 @@ class _SupportScreenState extends ConsumerState<SupportScreen> {
           'Open',
           '$open',
           Icons.lock_open_outlined,
-          Colors.orange,
+          AppColors.primaryLight,
         ),
         _buildStatCard(
           context,
           'In progress',
           '$inProgress',
           Icons.autorenew,
-          Colors.blue,
+          AppColors.primaryDark,
         ),
         _buildStatCard(
           context,
@@ -339,8 +339,8 @@ class _SupportScreenState extends ConsumerState<SupportScreen> {
   Widget _buildTicketCard(BuildContext context, SupportTicketModel ticket) {
     final statusColor = switch (ticket.status) {
       'resolved' => Colors.green,
-      'in-progress' => Colors.blue,
-      _ => Colors.orange,
+      'in-progress' => AppColors.primaryDark,
+      _ => AppColors.primaryLight,
     };
 
     return Container(

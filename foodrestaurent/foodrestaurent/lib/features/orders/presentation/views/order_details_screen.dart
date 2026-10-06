@@ -5,17 +5,17 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:food_user_application/config/theme/app_colors.dart';
 import 'package:food_user_application/core/network/api_exception.dart';
+import 'package:food_user_application/core/services/new_order_action_channel.dart';
+import 'package:food_user_application/core/services/order_resolution_tracker.dart';
+import 'package:food_user_application/core/services/fcm_service.dart';
 import 'package:food_user_application/features/orders/data/order_repository.dart';
 import 'package:food_user_application/features/orders/domain/order_model.dart';
 import 'package:food_user_application/features/orders/presentation/controllers/live_orders_controller.dart';
-import 'package:food_user_application/core/services/new_order_action_channel.dart';
-import 'package:food_user_application/core/services/order_alert_service.dart';
 import 'package:food_user_application/core/widgets/app_refresh_indicator.dart';
 
 /// Destination for FCM/local-notification taps (`new_order`,
-/// `order_status_update`) and for anyone deep-linking to a single order.
-///
-/// The notification payload only carries an id, so this screen is
+/// `order_status_update`) and for anyone deep-linking to a single order —
+/// the notification payload only carries an id, so this screen is
 /// responsible for resolving it to a full [OrderModel].
 class OrderDetailsScreen extends ConsumerStatefulWidget {
   const OrderDetailsScreen({super.key, required this.orderId});
@@ -38,19 +38,18 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
   }
 
   Future<void> _load() async {
-    // Fast path: the order is very likely already sitting in the
-    // live-orders cache.
+    // Fast path: if order is in cache, display immediately so UI doesn't flicker
     final cached = ref.read(liveOrdersControllerProvider).value;
-
     final match = cached?.where(
       (o) => o.id == widget.orderId || o.displayId == widget.orderId,
     );
-
     if (match != null && match.isNotEmpty) {
       setState(() {
         _order = match.first;
         _loading = false;
       });
+      // Always fetch fresh full order details in the background so items/billing hydrate
+      _fetchFresh(widget.orderId);
       return;
     }
 
@@ -58,53 +57,54 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
       _loading = true;
       _error = null;
     });
+    await _fetchFresh(widget.orderId);
+  }
 
+  Future<void> _fetchFresh(String orderId) async {
     try {
       final order = await ref
           .read(orderRepositoryProvider)
-          .getById(widget.orderId);
-
+          .getById(orderId);
       if (!mounted) return;
-
       setState(() {
         _order = order;
         _loading = false;
       });
     } catch (e) {
       if (!mounted) return;
-
-      setState(() {
-        _error = e;
-        _loading = false;
-      });
+      if (_order == null) {
+        setState(() {
+          _error = e;
+          _loading = false;
+        });
+      }
     }
   }
 
   Future<void> _updateStatus(String newStatus) async {
     final order = _order;
-
     if (order == null) return;
-
-    NewOrderActionChannel.stopSound();
-    ref.read(orderAlertServiceProvider).stopAlert(order.id);
-
+    OrderResolutionTracker.markResolved(order.id);
+    await NewOrderActionChannel.stopSound(order.id);
+    await NewOrderActionChannel.dismiss(order.id);
+    await cancelFcmTrayCopy(order.id);
     try {
       final updated = await ref
           .read(orderRepositoryProvider)
           .updateStatus(order.id, newStatus);
-
       await ref.read(liveOrdersControllerProvider.notifier).refresh();
-
       if (!mounted) return;
-
-      setState(() => _order = updated);
+      if (updated.items.isNotEmpty) {
+        setState(() => _order = updated);
+      } else {
+        setState(() => _order = order.copyWith(orderStatus: newStatus));
+        _fetchFresh(widget.orderId);
+      }
     } catch (e) {
       if (!mounted) return;
-
       final message = e is ApiException
           ? e.message
           : 'Failed to update order. Please try again.';
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message), backgroundColor: AppColors.error),
       );
@@ -113,15 +113,44 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AsyncValue<List<OrderModel>>>(
+      liveOrdersControllerProvider,
+      (previous, next) {
+        final list = next.value;
+        if (list == null) return;
+        final match = list.where(
+          (o) => o.id == widget.orderId || o.displayId == widget.orderId,
+        );
+        if (match.isNotEmpty) {
+          final liveOrder = match.first;
+          if (_order == null ||
+              liveOrder.orderStatus != _order!.orderStatus ||
+              (liveOrder.items.isNotEmpty && _order!.items.isEmpty) ||
+              liveOrder.hasRider != _order!.hasRider) {
+            setState(() {
+              _order = liveOrder.items.isNotEmpty
+                  ? liveOrder
+                  : _order?.copyWith(
+                      orderStatus: liveOrder.orderStatus,
+                      riderName: liveOrder.riderName,
+                      riderPhone: liveOrder.riderPhone,
+                    ) ?? liveOrder;
+            });
+            if (liveOrder.items.isEmpty) {
+              _fetchFresh(widget.orderId);
+            }
+          }
+        }
+      },
+    );
+
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
         elevation: 0,
         title: Text(
-          _order != null ? 'Order FOD-${_order!.displayId}' : 'Order Details',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+          _order != null ? 'Order ${_order!.formattedDisplayId}' : 'Order Details',
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -164,23 +193,19 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
 
   Widget _buildContent(BuildContext context, OrderModel order) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-
     final cardColor = isDarkMode ? AppColors.surfaceDark : Colors.white;
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         _StatusHeaderCard(order: order, cardColor: cardColor),
-
         const SizedBox(height: 16),
-
         _SectionCard(
           cardColor: cardColor,
           title: 'Customer',
           icon: Icons.person_outline,
           child: CustomerInfo(order: order),
         ),
-
         if (!order.deliveryAddress.isEmpty) ...[
           const SizedBox(height: 16),
           _SectionCard(
@@ -190,7 +215,6 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
             child: AddressInfo(order: order),
           ),
         ],
-
         if (order.hasRider) ...[
           const SizedBox(height: 16),
           _SectionCard(
@@ -200,25 +224,20 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
             child: RiderInfo(order: order),
           ),
         ],
-
         const SizedBox(height: 16),
-
         _SectionCard(
           cardColor: cardColor,
           title: 'Items',
           icon: Icons.receipt_long_outlined,
           child: ItemsList(order: order),
         ),
-
         const SizedBox(height: 16),
-
         _SectionCard(
           cardColor: cardColor,
           title: 'Bill details',
           icon: Icons.payments_outlined,
           child: BillDetails(order: order),
         ),
-
         if (order.note.isNotEmpty || order.deliveryInstructions.isNotEmpty) ...[
           const SizedBox(height: 16),
           _SectionCard(
@@ -230,26 +249,20 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
               children: [
                 if (order.note.isNotEmpty)
                   Text(order.note, style: const TextStyle(fontSize: 14)),
-
                 if (order.note.isNotEmpty &&
                     order.deliveryInstructions.isNotEmpty)
                   const SizedBox(height: 8),
-
                 if (order.deliveryInstructions.isNotEmpty)
                   Text(
-                    'Delivery instructions: '
-                    '${order.deliveryInstructions}',
+                    'Delivery instructions: ${order.deliveryInstructions}',
                     style: const TextStyle(fontSize: 14),
                   ),
               ],
             ),
           ),
         ],
-
         const SizedBox(height: 24),
-
         _buildActions(context, order),
-
         const SizedBox(height: 24),
       ],
     );
@@ -268,8 +281,7 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
                     builder: (context) => AlertDialog(
                       title: const Text('Reject this order?'),
                       content: const Text(
-                        'The customer will be notified and refunded '
-                        'per policy.',
+                        'The customer will be notified and refunded per policy.',
                       ),
                       actions: [
                         TextButton(
@@ -286,7 +298,6 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
                       ],
                     ),
                   );
-
                   if (confirmed == true) {
                     await _updateStatus('cancelled_by_restaurant');
                   }
@@ -315,9 +326,7 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
                 ),
               ),
             ),
-
             const SizedBox(width: 16),
-
             Expanded(
               child: ElevatedButton(
                 onPressed: () => _updateStatus('confirmed'),
@@ -348,7 +357,6 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
             ),
           ],
         );
-
       case 'confirmed':
         return SizedBox(
           width: double.infinity,
@@ -368,7 +376,6 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
             ),
           ),
         );
-
       case 'preparing':
         return SizedBox(
           width: double.infinity,
@@ -388,7 +395,6 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
             ),
           ),
         );
-
       default:
         if (order.isCancelled) {
           return Text(
@@ -398,7 +404,6 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
             style: const TextStyle(color: AppColors.error, fontSize: 14),
           );
         }
-
         return const SizedBox.shrink();
     }
   }
@@ -409,19 +414,15 @@ Color _statusColor(String status) {
     case 'created':
     case 'confirmed':
       return AppColors.primary;
-
     case 'preparing':
       return AppColors.rating;
-
     case 'ready_for_pickup':
     case 'reached_pickup':
     case 'picked_up':
     case 'reached_drop':
-      return Colors.blue;
-
+      return AppColors.primaryDark;
     case 'delivered':
       return AppColors.success;
-
     default:
       return AppColors.error;
   }
@@ -431,37 +432,26 @@ String _statusLabel(String status) {
   switch (status) {
     case 'created':
       return 'Awaiting acceptance';
-
     case 'confirmed':
       return 'Accepted';
-
     case 'preparing':
       return 'Preparing';
-
     case 'ready_for_pickup':
       return 'Ready for pickup';
-
     case 'reached_pickup':
       return 'Rider at restaurant';
-
     case 'picked_up':
       return 'Out for delivery';
-
     case 'reached_drop':
       return 'Arriving';
-
     case 'delivered':
       return 'Delivered';
-
     case 'cancelled_by_user':
       return 'Cancelled by customer';
-
     case 'cancelled_by_restaurant':
       return 'Cancelled by restaurant';
-
     case 'cancelled_by_admin':
       return 'Cancelled';
-
     default:
       return status;
   }
@@ -476,7 +466,6 @@ class _StatusHeaderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _statusColor(order.orderStatus);
-
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -486,71 +475,48 @@ class _StatusHeaderCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // FIX: Prevent status/date row overflow.
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Flexible(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    _statusLabel(order.orderStatus),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  _statusLabel(order.orderStatus),
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
-
-              const SizedBox(width: 10),
-
-              Flexible(
-                child: Text(
-                  DateFormat(
-                    'd MMM  •  h:mm a',
-                  ).format(order.createdAt.toLocal()),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.right,
-                  style: const TextStyle(color: Colors.grey, fontSize: 12),
-                ),
+              Text(
+                DateFormat(
+                  'd MMM  •  h:mm a',
+                ).format(order.createdAt.toLocal()),
+                style: const TextStyle(color: Colors.grey, fontSize: 12),
               ),
             ],
           ),
-
           const SizedBox(height: 16),
-
-          // FIX: This was the main RIGHT OVERFLOWED error.
           Row(
             children: [
-              Expanded(
-                child: Text(
-                  'FOD-${order.displayId}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w900,
-                  ),
+              Text(
+                order.formattedDisplayId,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
-
-              const SizedBox(width: 12),
-
+              const Spacer(),
               Text(
                 '₹${order.total.toStringAsFixed(2)}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w900,
@@ -558,7 +524,6 @@ class _StatusHeaderCard extends StatelessWidget {
               ),
             ],
           ),
-
           if (order.orderStatus == 'created' &&
               order.acceptanceDeadlineAt != null) ...[
             const SizedBox(height: 12),
@@ -585,50 +550,35 @@ class _AcceptanceCountdownState extends State<AcceptanceCountdown> {
   @override
   void initState() {
     super.initState();
-
     Future.doWhile(() async {
       await Future.delayed(const Duration(seconds: 1));
-
       if (!mounted) return false;
-
       setState(() => _remaining = widget.deadline.difference(DateTime.now()));
-
       return !_remaining.isNegative;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_remaining.isNegative) {
-      return const SizedBox.shrink();
-    }
-
+    if (_remaining.isNegative) return const SizedBox.shrink();
     final minutes = _remaining.inMinutes
         .remainder(60)
         .toString()
         .padLeft(2, '0');
-
     final seconds = _remaining.inSeconds
         .remainder(60)
         .toString()
         .padLeft(2, '0');
-
     return Row(
       children: [
         const Icon(Icons.timer_outlined, size: 16, color: AppColors.error),
-
         const SizedBox(width: 6),
-
-        Flexible(
-          child: Text(
-            'Accept within $minutes:$seconds',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.error,
-              fontWeight: FontWeight.bold,
-              fontSize: 13,
-            ),
+        Text(
+          'Accept within $minutes:$seconds',
+          style: const TextStyle(
+            color: AppColors.error,
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
           ),
         ),
       ],
@@ -664,25 +614,17 @@ class _SectionCard extends StatelessWidget {
           Row(
             children: [
               Icon(icon, size: 18, color: AppColors.primary),
-
               const SizedBox(width: 8),
-
-              Expanded(
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                  ),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
                 ),
               ),
             ],
           ),
-
           const SizedBox(height: 14),
-
           child,
         ],
       ),
@@ -705,34 +647,27 @@ class CustomerInfo extends StatelessWidget {
             children: [
               Text(
                 order.customerName,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-
               if (order.customerPhone.isNotEmpty) ...[
                 const SizedBox(height: 4),
                 Text(
                   order.customerPhone,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Colors.grey, fontSize: 13),
                 ),
               ],
             ],
           ),
         ),
-
         if (order.customerPhone.isNotEmpty)
           IconButton(
             icon: const Icon(Icons.copy_outlined, size: 18, color: Colors.grey),
             tooltip: 'Copy number',
             onPressed: () {
               Clipboard.setData(ClipboardData(text: order.customerPhone));
-
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Phone number copied')),
               );
@@ -751,7 +686,6 @@ class AddressInfo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final address = order.deliveryAddress;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -765,8 +699,6 @@ class AddressInfo extends StatelessWidget {
             ),
             child: Text(
               address.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 color: AppColors.primary,
                 fontSize: 11,
@@ -774,7 +706,6 @@ class AddressInfo extends StatelessWidget {
               ),
             ),
           ),
-
         Text(address.fullAddress, style: const TextStyle(fontSize: 14)),
       ],
     );
@@ -796,37 +727,26 @@ class RiderInfo extends StatelessWidget {
             children: [
               Text(
                 order.riderName,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-
               if (order.riderPhone.isNotEmpty) ...[
                 const SizedBox(height: 4),
                 Text(
                   order.riderPhone,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Colors.grey, fontSize: 13),
                 ),
               ],
             ],
           ),
         ),
-
-        if (order.riderRating != null) const SizedBox(width: 8),
-
         if (order.riderRating != null)
           Row(
-            mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(Icons.star, size: 16, color: AppColors.rating),
-
               const SizedBox(width: 4),
-
               Text(
                 order.riderRating!.toStringAsFixed(1),
                 style: const TextStyle(
@@ -861,42 +781,31 @@ class ItemsList extends StatelessWidget {
                   size: 14,
                   color: item.isVeg ? Colors.green : Colors.red,
                 ),
-
                 const SizedBox(width: 8),
-
-                // FIX: Give item text only the available width.
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         '${item.quantity} x ${item.name}',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 14),
                       ),
-
                       if (item.variantName.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 2),
                           child: Text(
                             item.variantName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               color: Colors.grey,
                               fontSize: 12,
                             ),
                           ),
                         ),
-
                       if (item.notes.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 2),
                           child: Text(
                             'Note: ${item.notes}',
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               color: Colors.grey,
                               fontSize: 12,
@@ -907,43 +816,25 @@ class ItemsList extends StatelessWidget {
                     ],
                   ),
                 ),
-
-                const SizedBox(width: 8),
-
-                // FIX: Price is kept constrained.
-                Flexible(
-                  flex: 0,
-                  child: Text(
-                    '₹${(item.price * item.quantity).toStringAsFixed(2)}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.right,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
+                Text(
+                  '₹${(item.price * item.quantity).toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],
             ),
           ),
-
         if (order.sendCutlery) ...[
           const Divider(height: 8),
-
           const Row(
             children: [
               Icon(Icons.restaurant_outlined, size: 16, color: Colors.grey),
-
               SizedBox(width: 8),
-
-              Expanded(
-                child: Text(
-                  'Cutlery requested',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 13, color: Colors.grey),
-                ),
+              Text(
+                'Cutlery requested',
+                style: TextStyle(fontSize: 13, color: Colors.grey),
               ),
             ],
           ),
@@ -962,33 +853,19 @@ class BillDetails extends StatelessWidget {
   Widget build(BuildContext context) {
     final pricing = order.pricing;
 
-    // FIX: All bill rows now use Expanded/Flexible.
     Widget row(String label, double amount, {bool isDiscount = false}) {
-      if (amount == 0) {
-        return const SizedBox.shrink();
-      }
-
+      if (amount == 0) return const SizedBox.shrink();
       return Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Expanded(
-              child: Text(
-                label,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.grey, fontSize: 14),
-              ),
-            ),
-
-            const SizedBox(width: 12),
-
             Text(
-              '${isDiscount ? '- ' : ''}'
-              '₹${amount.toStringAsFixed(2)}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.right,
+              label,
+              style: const TextStyle(color: Colors.grey, fontSize: 14),
+            ),
+            Text(
+              '${isDiscount ? '- ' : ''}₹${amount.toStringAsFixed(2)}',
               style: TextStyle(
                 fontSize: 14,
                 color: isDiscount ? AppColors.success : null,
@@ -1002,15 +879,10 @@ class BillDetails extends StatelessWidget {
     return Column(
       children: [
         row('Subtotal', pricing.subtotal),
-
         row('Packaging fee', pricing.packagingFee),
-
         row('Delivery fee', pricing.deliveryFee),
-
         row('Platform fee', pricing.platformFee),
-
         row('Tax', pricing.tax),
-
         if (pricing.discount > 0)
           row(
             pricing.couponCode.isNotEmpty
@@ -1019,90 +891,50 @@ class BillDetails extends StatelessWidget {
             pricing.discount,
             isDiscount: true,
           ),
-
         const Divider(height: 20),
-
         Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Expanded(
-              child: Text(
-                'Total',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-              ),
+            const Text(
+              'Total',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
             ),
-
-            const SizedBox(width: 12),
-
             Text(
               '₹${order.total.toStringAsFixed(2)}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.right,
               style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
             ),
           ],
         ),
-
         const SizedBox(height: 12),
-
-        // FIX: Payment method row cannot overflow.
         Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Expanded(
-              child: Text(
-                'Payment method',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: Colors.grey, fontSize: 13),
-              ),
+            const Text(
+              'Payment method',
+              style: TextStyle(color: Colors.grey, fontSize: 13),
             ),
-
-            const SizedBox(width: 12),
-
-            Flexible(
-              child: Text(
-                order.paymentMethod.isEmpty
-                    ? '—'
-                    : order.paymentMethod.toUpperCase(),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.right,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+            Text(
+              order.paymentMethod.isEmpty
+                  ? '—'
+                  : order.paymentMethod.toUpperCase(),
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
             ),
           ],
         ),
-
         if (order.paymentStatus.isNotEmpty) ...[
           const SizedBox(height: 6),
-
-          // FIX: Payment status row cannot overflow.
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Expanded(
-                child: Text(
-                  'Payment status',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: Colors.grey, fontSize: 13),
-                ),
+              const Text(
+                'Payment status',
+                style: TextStyle(color: Colors.grey, fontSize: 13),
               ),
-
-              const SizedBox(width: 12),
-
-              Flexible(
-                child: Text(
-                  order.paymentStatus.toUpperCase(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.right,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
+              Text(
+                order.paymentStatus.toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
@@ -1112,3 +944,4 @@ class BillDetails extends StatelessWidget {
     );
   }
 }
+

@@ -243,12 +243,12 @@ class MenuCategoriesScreen extends ConsumerWidget {
                       ),
                       decoration: BoxDecoration(
                         color: category.isPending
-                            ? Colors.orange.withValues(alpha: 0.1)
+                            ? AppColors.primaryLight.withValues(alpha: 0.1)
                             : AppColors.primary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: category.isPending
-                              ? Colors.orange
+                              ? AppColors.primaryLight
                               : AppColors.primary,
                           width: 0.5,
                         ),
@@ -262,7 +262,7 @@ class MenuCategoriesScreen extends ConsumerWidget {
                                 : Icons.check_circle_outline,
                             size: 12,
                             color: category.isPending
-                                ? Colors.orange
+                                ? AppColors.primaryLight
                                 : AppColors.primary,
                           ),
                           const SizedBox(width: 4),
@@ -274,7 +274,7 @@ class MenuCategoriesScreen extends ConsumerWidget {
                                       : 'Rejected'),
                             style: TextStyle(
                               color: category.isPending
-                                  ? Colors.orange
+                                  ? AppColors.primaryLight
                                   : AppColors.primary,
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
@@ -638,7 +638,7 @@ class _CreateCategoryBottomSheetState
                   width: 24,
                   child: Checkbox(
                     value: _keepActive,
-                    activeColor: Colors.blue,
+                    activeColor: AppColors.primaryDark,
                     onChanged: (value) =>
                         setState(() => _keepActive = value ?? true),
                   ),

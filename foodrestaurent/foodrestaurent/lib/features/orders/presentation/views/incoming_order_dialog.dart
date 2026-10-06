@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,9 +8,10 @@ import 'package:intl/intl.dart';
 import 'package:food_user_application/config/theme/app_colors.dart';
 import 'package:food_user_application/core/network/api_exception.dart';
 import 'package:food_user_application/core/services/new_order_action_channel.dart';
+import 'package:food_user_application/core/services/order_resolution_tracker.dart';
+import 'package:food_user_application/core/services/fcm_service.dart';
 import 'package:food_user_application/features/orders/data/order_repository.dart';
 import 'package:food_user_application/features/orders/domain/order_model.dart';
-import 'package:food_user_application/core/services/order_alert_service.dart';
 import 'package:food_user_application/features/orders/presentation/controllers/live_orders_controller.dart';
 
 // A push can arrive more than once in a burst (e.g. connectivity blip causing
@@ -23,16 +26,20 @@ Future<void> showIncomingOrderDialog(
   BuildContext context, {
   required String orderId,
 }) async {
+  if (OrderResolutionTracker.isResolved(orderId)) return;
   if (_incomingOrderDialogShowing) return;
   _incomingOrderDialogShowing = true;
+  NewOrderActionChannel.startSound(orderId);
   try {
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
+      useRootNavigator: true,
       builder: (_) => IncomingOrderDialog(orderId: orderId),
     );
   } finally {
     _incomingOrderDialogShowing = false;
+    NewOrderActionChannel.stopSound(orderId);
   }
 }
 
@@ -50,41 +57,35 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
   OrderModel? _order;
   bool _loading = true;
   bool _acting = false;
-  bool _dismissed = false;
 
-  void _safeDismiss([String? snackbarMessage]) {
-    if (_dismissed) return;
-    _dismissed = true;
-    NewOrderActionChannel.stopSound();
-    NewOrderActionChannel.dismiss(widget.orderId);
-    try {
-      ref.read(orderAlertServiceProvider).stopAlert(widget.orderId);
-    } catch (_) {}
+  /// Shown inside the dialog: a SnackBar would render behind the dialog's barrier,
+  /// so a refused Accept looked like the button did nothing.
+  String? _error;
 
-    if (mounted && Navigator.canPop(context)) {
-      if (snackbarMessage != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(snackbarMessage),
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-      Navigator.of(context).pop();
-    }
+  /// Several paths close this dialog (the response, the live-orders listener
+  /// seeing a cancellation, the initial load). Popping twice removed the page
+  /// underneath it — that was the crash after Reject.
+  bool _closed = false;
+
+  void _close() {
+    if (_closed || !mounted) return;
+    _closed = true;
+    Navigator.of(context).pop();
   }
 
   @override
   void initState() {
     super.initState();
-    NewOrderActionChannel.startSound(widget.orderId);
+    if (OrderResolutionTracker.isResolved(widget.orderId)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _close());
+      return;
+    }
     _load();
   }
 
   @override
   void dispose() {
-    _dismissed = true;
-    NewOrderActionChannel.stopSound();
+    NewOrderActionChannel.stopSound(widget.orderId);
     super.dispose();
   }
 
@@ -112,9 +113,27 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
         }
       }
     }
-    if (!mounted || _dismissed) return;
-    if (order == null || order.isCancelled) {
-      _safeDismiss('Order is no longer available or was cancelled.');
+    // Only orders still waiting for the restaurant's answer. The 'new' bucket
+    // also holds 'confirmed', so an order already accepted on the overlay or the
+    // notification re-opened this dialog, and its Accept then failed.
+    final isNewOrPending = order != null &&
+        !order.isCancelled &&
+        const {'created', 'placed', 'pending'}.contains(order.orderStatus);
+
+    if (order != null && !isNewOrPending) {
+      OrderResolutionTracker.markResolved(widget.orderId);
+      NewOrderActionChannel.stopSound(widget.orderId);
+      NewOrderActionChannel.dismiss(widget.orderId);
+      cancelFcmTrayCopy(widget.orderId);
+      if (mounted && !_closed && order.isCancelled) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Order was cancelled.'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      _close();
       return;
     }
     setState(() {
@@ -124,7 +143,10 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
   }
 
   Future<void> _respond(String orderStatus) async {
-    if (_acting || _dismissed) return;
+    // Silence first; the order is only marked handled once the server agrees, so a
+    // refused response does not stop it from being offered again.
+    await NewOrderActionChannel.stopSound(widget.orderId);
+    if (!mounted) return;
 
     if (orderStatus == 'cancelled_by_restaurant') {
       final confirmed = await showDialog<bool>(
@@ -150,55 +172,87 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
         ),
       );
       if (confirmed != true) return;
+      if (!mounted) return;
     }
 
-    if (!mounted || _dismissed) return;
-    setState(() => _acting = true);
-
-    // Stop ringtone and notifications immediately on rejection/acceptance
-    NewOrderActionChannel.stopSound();
-    NewOrderActionChannel.dismiss(widget.orderId);
+    setState(() {
+      _acting = true;
+      _error = null;
+    });
     try {
-      ref.read(orderAlertServiceProvider).stopAlert(widget.orderId);
-    } catch (_) {}
-
-    try {
-      final targetId = _order?.id ?? widget.orderId;
       await ref
           .read(liveOrdersControllerProvider.notifier)
-          .updateStatus(targetId, orderStatus);
-      _safeDismiss();
-    } catch (e) {
-      if (mounted) {
-        setState(() => _acting = false);
-        final message = e is ApiException
-            ? e.message
-            : 'Failed to update order. Please try again.';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message), backgroundColor: AppColors.error),
-        );
+          .updateStatus(widget.orderId, orderStatus);
+      OrderResolutionTracker.markResolved(widget.orderId);
+      await NewOrderActionChannel.dismiss(widget.orderId);
+      await cancelFcmTrayCopy(widget.orderId);
+      _close();
+    } catch (e, st) {
+      debugPrint('IncomingOrderDialog: $orderStatus failed for ${widget.orderId}: $e\n$st');
+      if (!mounted || _closed) return;
+
+      // Already answered elsewhere (overlay, notification, another device)?
+      // Then there is nothing left to do here — close instead of showing an error.
+      try {
+        final latest =
+            await ref.read(orderRepositoryProvider).getById(widget.orderId);
+        if (latest.orderStatus != 'created' && mounted && !_closed) {
+          OrderResolutionTracker.markResolved(widget.orderId);
+          await NewOrderActionChannel.dismiss(widget.orderId);
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                latest.isCancelled
+                    ? 'This order was cancelled.'
+                    : 'This order was already accepted.',
+              ),
+            ),
+          );
+          unawaited(ref.read(liveOrdersControllerProvider.notifier).refresh());
+          _close();
+          return;
+        }
+      } catch (_) {
+        // Fall through to showing the original error.
       }
+      if (!mounted || _closed) return;
+      setState(() {
+        _acting = false;
+        _error = apiErrorMessage(e, 'Failed to update order. Please try again.');
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
     ref.listen<AsyncValue<List<OrderModel>>>(liveOrdersControllerProvider, (prev, next) {
-      if (_acting || _dismissed) return;
       if (next.hasValue) {
         final orders = next.value!;
         final match = orders.where(
           (o) => o.id == widget.orderId || o.displayId == widget.orderId,
         );
-        if (match.isEmpty || match.first.isCancelled) {
-          _safeDismiss('Order was cancelled or updated.');
+        // Skipped while this dialog's own request is in flight: a Reject comes
+        // back as a cancellation, and _respond closes the dialog itself.
+        if (match.isNotEmpty && match.first.isCancelled && !_acting && !_closed) {
+          OrderResolutionTracker.markResolved(widget.orderId);
+          NewOrderActionChannel.dismiss(widget.orderId);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Order was cancelled or updated.'),
+              duration: Duration(seconds: 3),
+            ),
+          );
+          _close();
         }
       }
     });
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      backgroundColor: const Color(0xFFFFF9F5), // Light warm background
+      backgroundColor: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       child: ConstrainedBox(
         constraints: BoxConstraints(
@@ -209,7 +263,7 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
           child: _loading
               ? const SizedBox(
                   height: 120,
-                  child: Center(child: CircularProgressIndicator()),
+                  child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
                 )
               : _order == null
               ? _buildFallback(context)
@@ -256,6 +310,34 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
   }) {
     return Column(
       children: [
+        if (_error != null) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.error.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.error.withValues(alpha: 0.4)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.error_outline, size: 18, color: AppColors.error),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _error!,
+                    style: const TextStyle(
+                      color: AppColors.error,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -266,8 +348,8 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
                     : () => _respond('cancelled_by_restaurant'),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 14),
-                  foregroundColor: Colors.red,
-                  side: const BorderSide(color: Colors.red),
+                  foregroundColor: AppColors.error,
+                  side: const BorderSide(color: AppColors.error),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(30),
                   ),
@@ -299,7 +381,7 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
                       onPressed: _acting ? null : () => _respond('confirmed'),
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        backgroundColor: Colors.orange.shade700,
+                        backgroundColor: AppColors.primaryButton,
                         foregroundColor: Colors.white,
                         elevation: 0,
                         shape: RoundedRectangleBorder(
@@ -339,7 +421,7 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.orange.shade50,
+                        color: AppColors.primaryTint,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: _DialogAcceptanceCountdown(deadline: deadline),
@@ -357,8 +439,9 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
             onPressed: _acting
                 ? null
                 : () {
-                    _safeDismiss();
-                    context.push('/order-details/$detailsOrderId');
+                    final router = GoRouter.of(context);
+                    _close();
+                    router.push('/order-details/$detailsOrderId');
                   },
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -366,13 +449,13 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
                 Icon(
                   Icons.visibility_outlined,
                   size: 16,
-                  color: Colors.orange.shade700,
+                  color: AppColors.primaryDark,
                 ),
                 const SizedBox(width: 6),
                 Text(
                   'View full details',
                   style: TextStyle(
-                    color: Colors.orange.shade700,
+                    color: AppColors.primaryDark,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -380,7 +463,7 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
                 Icon(
                   Icons.chevron_right,
                   size: 16,
-                  color: Colors.orange.shade700,
+                  color: AppColors.primaryDark,
                 ),
               ],
             ),
@@ -419,8 +502,8 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
                   width: 50,
                   height: 50,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Colors.orange.shade400, Colors.orange.shade600],
+                    gradient: const LinearGradient(
+                      colors: [AppColors.primary, AppColors.primaryDark],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
@@ -438,7 +521,7 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
                   child: Container(
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
-                      color: Colors.red,
+                      color: AppColors.error,
                       shape: BoxShape.circle,
                       border: Border.all(color: Colors.white, width: 2),
                     ),
@@ -465,7 +548,7 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
               ),
             ),
             const SizedBox(width: 6),
-            Icon(Icons.auto_awesome, color: Colors.orange.shade300, size: 20),
+            const Icon(Icons.auto_awesome, color: AppColors.primary, size: 20),
           ],
         ),
         Container(
@@ -474,7 +557,7 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.orange.shade100, width: 1.5),
+            border: Border.all(color: AppColors.primaryAlpha(0.20), width: 1.5),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -493,7 +576,7 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'FOD-${order.displayId}',
+                      order.formattedDisplayId,
                       style: const TextStyle(
                         fontWeight: FontWeight.w900,
                         fontSize: 13,
@@ -508,7 +591,7 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
               Container(
                 width: 1,
                 height: 30,
-                color: Colors.orange.shade100,
+                color: AppColors.primaryAlpha(0.20),
                 margin: const EdgeInsets.symmetric(horizontal: 8),
               ),
               Row(
@@ -564,13 +647,13 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
                       Container(
                         width: 48,
                         height: 48,
-                        decoration: BoxDecoration(
-                          color: Colors.orange.shade100,
+                        decoration: const BoxDecoration(
+                          color: AppColors.primaryTint,
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(
+                        child: const Icon(
                           Icons.person,
-                          color: Colors.orange.shade700,
+                          color: AppColors.primaryDark,
                           size: 28,
                         ),
                       ),
@@ -600,13 +683,13 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
                       ),
                       Container(
                         padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.shade50,
+                        decoration: const BoxDecoration(
+                          color: AppColors.primaryTint,
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(
+                        child: const Icon(
                           Icons.phone_outlined,
-                          color: Colors.orange.shade700,
+                          color: AppColors.primaryDark,
                           size: 20,
                         ),
                       ),
@@ -621,12 +704,12 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.orange.shade50,
+                          color: AppColors.primaryTint,
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Icon(
+                        child: const Icon(
                           Icons.location_on,
-                          color: Colors.orange.shade700,
+                          color: AppColors.primaryDark,
                           size: 20,
                         ),
                       ),
@@ -652,15 +735,15 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
                                     vertical: 2,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: Colors.orange.shade50,
+                                    color: AppColors.primaryTint,
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: Text(
                                     order.deliveryAddress.label.isEmpty
                                         ? 'Other'
                                         : order.deliveryAddress.label,
-                                    style: TextStyle(
-                                      color: Colors.orange.shade700,
+                                    style: const TextStyle(
+                                      color: AppColors.primaryDeep,
                                       fontSize: 10,
                                       fontWeight: FontWeight.bold,
                                     ),
@@ -690,12 +773,12 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.orange.shade50,
+                        color: AppColors.primaryTint,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(
+                      child: const Icon(
                         Icons.shopping_bag,
-                        color: Colors.orange.shade700,
+                        color: AppColors.primaryDark,
                         size: 20,
                       ),
                     ),
@@ -759,12 +842,12 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.orange.shade50,
+                        color: AppColors.primaryTint,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(
+                      child: const Icon(
                         Icons.receipt_long,
-                        color: Colors.orange.shade700,
+                        color: AppColors.primaryDark,
                         size: 20,
                       ),
                     ),
@@ -804,14 +887,14 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
                     vertical: 12,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
+                    color: AppColors.primaryTint,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.account_balance_wallet,
-                        color: Colors.orange.shade700,
+                        color: AppColors.primaryDark,
                         size: 20,
                       ),
                       const SizedBox(width: 12),
@@ -830,7 +913,7 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
                         style: const TextStyle(
                           fontWeight: FontWeight.w900,
                           fontSize: 16,
-                          color: Colors.black87,
+                          color: AppColors.primaryDeep,
                         ),
                       ),
                     ],
@@ -888,7 +971,7 @@ class _DialogAcceptanceCountdownState
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.schedule, size: 16, color: Colors.orange.shade700),
+        Icon(Icons.schedule, size: 16, color: AppColors.primary),
         const SizedBox(width: 6),
         Column(
           mainAxisSize: MainAxisSize.min,
@@ -901,7 +984,7 @@ class _DialogAcceptanceCountdownState
             Text(
               '$minutes:$seconds',
               style: TextStyle(
-                color: Colors.orange.shade700,
+                color: AppColors.primary,
                 fontWeight: FontWeight.bold,
                 fontSize: 11,
               ),

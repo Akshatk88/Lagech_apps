@@ -313,7 +313,7 @@ class OutletInfoScreen extends ConsumerWidget {
 
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [Colors.orange.shade100, Colors.orange.shade50],
+              colors: [AppColors.primaryTintStrong, AppColors.primaryTint],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -329,11 +329,10 @@ class OutletInfoScreen extends ConsumerWidget {
                 child: IgnorePointer(
                   child: Opacity(
                     opacity: 0.15,
-                    child: Image.asset(
-                      'assets/image/shopman.webp',
-                      width: 130,
-                      height: 130,
-                      fit: BoxFit.contain,
+                    child: Icon(
+                      Icons.storefront_rounded,
+                      size: 130,
+                      color: AppColors.primary,
                     ),
                   ),
                 ),
@@ -797,7 +796,7 @@ class OutletInfoScreen extends ConsumerWidget {
             'A location update is pending admin review.',
             softWrap: true,
             style: TextStyle(
-              color: Colors.orange.shade800,
+              color: AppColors.primaryDark,
               fontSize: 12,
               fontWeight: FontWeight.w600,
             ),

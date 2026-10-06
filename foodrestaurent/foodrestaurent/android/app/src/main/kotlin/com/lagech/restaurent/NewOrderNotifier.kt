@@ -6,53 +6,98 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.media.AudioAttributes
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
+import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Posts the new-order alert, with Accept and Reject on the notification itself.
+ * Posts the new-order alert with Accept and Reject action buttons and fullScreenIntent.
  *
- * Everything here runs from Kotlin with no Flutter engine, which is the point. The
- * previous alert was drawn by `flutter_local_notifications` from the Dart background
- * handler, so it only appeared once an engine had been started — and when the app is
- * killed or the phone has been idle, that either happens late or not at all. Posting
- * natively happens the instant FCM delivers, in every app state.
+ * Sound is handled EXCLUSIVELY by NewOrderRingtone on the USAGE_ALARM stream, while
+ * this notification is set to silent so Android does NOT play a competing sound copy.
  */
 object NewOrderNotifier {
 
+    private const val TAG = "NewOrderNotifier"
+
     /**
-     * Versioned, and it MUST be bumped to change importance or sound.
-     *
-     * A channel's importance and sound are fixed at creation: calling
-     * createNotificationChannel again on the same id silently ignores both, forever,
-     * including across app updates. Only a new id takes effect. Reinstalling to test
-     * hides this, which is how it survives review.
+     * Bumped to v6 so Android OS resets sound to null (silent channel).
+     * Audio is exclusively played by NewOrderRingtone in a clean single loop.
      */
-    private const val CHANNEL_ID = "new_order_ringing_v5"
+    private const val CHANNEL_ID = "new_order_ringing_v6"
     private const val CHANNEL_NAME = "New order alerts"
 
     const val ACTION_ACCEPT = "com.lagech.restaurent.NEW_ORDER_ACCEPT"
     const val ACTION_REJECT = "com.lagech.restaurent.NEW_ORDER_REJECT"
     const val EXTRA_ORDER_ID = "orderId"
 
+    /** Maps all aliases (MongoId, readable orderNumber, displayId) to the canonical order ID */
+    private val aliasToCanonical = ConcurrentHashMap<String, String>()
+
     /** Keyed on the order so a withdrawal can cancel exactly this alert. */
     fun notificationId(orderId: String?): Int =
         (orderId ?: "new_order").hashCode() and 0x7fffffff
 
+    /** Extracts a canonical ID consistent between Socket.IO and FCM */
+    fun canonicalOrderId(allIds: Collection<String>, data: Map<String, String>): String {
+        val mongoId = data["orderMongoId"]?.takeIf { it.isNotBlank() }
+            ?: data["_id"]?.takeIf { it.isNotBlank() }
+            ?: allIds.firstOrNull { it.length == 24 && it.all { c -> c.isDigit() || c in 'a'..'f' || c in 'A'..'F' } }
+        if (mongoId != null) return mongoId
+
+        return data["orderId"]?.takeIf { it.isNotBlank() }
+            ?: data["orderDisplayId"]?.takeIf { it.isNotBlank() }
+            ?: allIds.firstOrNull()
+            ?: "new_order"
+    }
+
     fun show(context: Context, data: Map<String, String>) {
-        val orderId = NewOrderMessagingService.orderIdOf(data) ?: return
+        val allIds = NewOrderMessagingService.allOrderIdsOf(data)
+        val canonicalId = canonicalOrderId(allIds, data)
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
+        // Map every alias to the canonical ID so dismiss/cancel always hits the same notification
+        for (id in allIds) {
+            aliasToCanonical[id] = canonicalId
+        }
+        aliasToCanonical[canonicalId] = canonicalId
+
+        // Record in FCM deduplication cache so subsequent FCM/Socket events don't duplicate
+        NewOrderMessagingService.recordAlert(allIds)
+
+        val ringMillis = expiryMillis(data)
+
+        // Unlocked and outside the app: the overlay card, as on the delivery app. The
+        // in-app dialog covers the foreground, and the lock screen stays with the
+        // full-screen notification below, which an overlay cannot draw over.
+        if (!AppForeground.isForeground && NewOrderOverlay.canShow(context)) {
+            wakeScreen(context)
+            NewOrderOverlay.show(context, data, canonicalId, allIds, ringMillis) {
+                postNotification(context, manager, data, canonicalId, allIds, ringMillis)
+            }
+            return
+        }
+
+        postNotification(context, manager, data, canonicalId, allIds, ringMillis)
+    }
+
+    private fun postNotification(
+        context: Context,
+        manager: NotificationManager,
+        data: Map<String, String>,
+        canonicalId: String,
+        allIds: List<String>,
+        ringMillis: Long,
+    ) {
         createChannel(context, manager)
         wakeScreen(context)
 
-        val ringMillis = expiryMillis(data)
         val title = data["title"]?.takeIf { it.isNotBlank() } ?: "New order received"
         val body = data["body"]?.takeIf { it.isNotBlank() } ?: buildBody(data)
-        val soundUri = Uri.parse("android.resource://${context.packageName}/raw/tujh_bin")
+        val notifId = notificationId(canonicalId)
 
         val notification: Notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.mipmap.launcher_icon)
@@ -60,80 +105,72 @@ object NewOrderNotifier {
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setSound(soundUri)
-            // CATEGORY_CALL earns call-style ranking and gets through most Do Not
-            // Disturb configurations. Not cosmetic: without it the full-screen intent
-            // is treated as an ordinary notification.
+            // Silent notification because NewOrderRingtone handles the loud looping audio
+            .setSilent(true)
+            .setSound(null)
             .setCategory(NotificationCompat.CATEGORY_CALL)
-            // PUBLIC so the buttons are usable straight from the lock screen, which is
-            // where this alert most often arrives.
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            // Neither swipeable nor auto-dismissed: an order alert must be answered,
-            // not brushed away. It is cancelled explicitly on Accept, Reject, the
-            // order being taken elsewhere, or expiry.
             .setOngoing(true)
             .setAutoCancel(false)
-            .setFullScreenIntent(openAppIntent(context, orderId), true)
-            .setContentIntent(openAppIntent(context, orderId))
+            .setFullScreenIntent(openAppIntent(context, canonicalId), true)
+            .setContentIntent(openAppIntent(context, canonicalId))
             .addAction(
                 android.R.drawable.ic_menu_close_clear_cancel,
                 "Reject",
-                actionIntent(context, ACTION_REJECT, orderId),
+                actionIntent(context, ACTION_REJECT, canonicalId),
             )
             .addAction(
                 android.R.drawable.ic_menu_send,
                 "Accept",
-                actionIntent(context, ACTION_ACCEPT, orderId),
+                actionIntent(context, ACTION_ACCEPT, canonicalId),
             )
             .setTimeoutAfter(ringMillis + 10_000)
             .build()
 
-        manager.notify(notificationId(orderId), notification)
+        manager.notify(notifId, notification)
+        Log.i(TAG, "Notification posted for canonicalId: $canonicalId (notifId: $notifId)")
 
-        // After the notification is up, so the restaurant is never left with a sound
-        // and nothing on screen explaining it.
-        NewOrderRingtone.start(context, orderId, ringMillis)
+        // Start looping ringtone (MediaPlayer) with all alias IDs
+        NewOrderRingtone.start(context, allIds.ifEmpty { listOf(canonicalId) }, ringMillis)
     }
 
     /** Take the alert down and stop the ring — order taken elsewhere, or cancelled. */
     fun dismiss(context: Context, orderId: String?) {
         NewOrderRingtone.stop(null)
+        NewOrderOverlay.dismiss(orderId?.let { aliasToCanonical[it] ?: it })
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (orderId != null) {
+            val canonical = aliasToCanonical[orderId] ?: orderId
+            manager.cancel(notificationId(canonical))
             manager.cancel(notificationId(orderId))
         }
     }
 
-    /**
-     * Last-resort alert when the rich one could not be posted. Deliberately minimal —
-     * no full-screen intent, no actions — because whatever broke [show] is most likely
-     * one of those.
-     */
+    /** Last-resort minimal alert */
     fun showFallback(context: Context, data: Map<String, String>) {
-        val orderId = NewOrderMessagingService.orderIdOf(data) ?: return
+        val allIds = NewOrderMessagingService.allOrderIdsOf(data)
+        val canonicalId = canonicalOrderId(allIds, data)
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         createChannel(context, manager)
 
-        val soundUri = Uri.parse("android.resource://${context.packageName}/raw/tujh_bin")
-
+        val notifId = notificationId(canonicalId)
         manager.notify(
-            notificationId(orderId),
+            notifId,
             NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.mipmap.launcher_icon)
                 .setContentTitle(data["title"]?.takeIf { it.isNotBlank() } ?: "New order received")
                 .setContentText(buildBody(data))
                 .setPriority(NotificationCompat.PRIORITY_MAX)
-                .setSound(soundUri)
+                .setSilent(true)
+                .setSound(null)
                 .setCategory(NotificationCompat.CATEGORY_CALL)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setAutoCancel(true)
-                .setContentIntent(openAppIntent(context, orderId))
+                .setContentIntent(openAppIntent(context, canonicalId))
                 .build(),
         )
 
-        // The rich alert failed, so this is all there is. Being heard matters more
-        // here than in the normal path, not less.
-        NewOrderRingtone.start(context, orderId, expiryMillis(data))
+        NewOrderRingtone.start(context, allIds.ifEmpty { listOf(canonicalId) }, expiryMillis(data))
     }
 
     private fun actionIntent(context: Context, action: String, orderId: String): PendingIntent {
@@ -143,8 +180,6 @@ object NewOrderNotifier {
         }
         return PendingIntent.getBroadcast(
             context,
-            // Distinct per action AND per order, or Android reuses one PendingIntent
-            // and Reject silently carries Accept's extras.
             (action + orderId).hashCode() and 0x7fffffff,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
@@ -169,47 +204,41 @@ object NewOrderNotifier {
     private fun createChannel(context: Context, manager: NotificationManager) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
 
-        val soundUri = Uri.parse("android.resource://${context.packageName}/raw/tujh_bin")
-        val audioAttributes = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_ALARM)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-            .build()
-
-        val channels = listOf(
-            Triple(CHANNEL_ID, CHANNEL_NAME, "High priority alarm alerts for new orders."),
-            Triple("new_order_ringing_v4", "New order alerts (legacy)", "Legacy channel — superseded by v5."),
-            Triple("new_order_channel", "New Order Notifications", "High priority alerts for incoming orders from backend."),
-            Triple("new_order_channel_v3", "Order Alerts", "High priority alerts for new orders with ringing sound."),
-            Triple("new_order_ringing_v3", "New order alerts (legacy)", "Legacy channel — superseded by v4."),
+        // Delete legacy channels that played sound so they don't produce audio artifacts
+        val legacyChannels = listOf(
+            "new_order_ringing_v5",
+            "new_order_ringing_v4",
+            "new_order_channel",
+            "new_order_channel_v3",
+            "new_order_ringing_v3"
         )
-
-        for ((id, name, desc) in channels) {
-            if (manager.getNotificationChannel(id) == null) {
-                val channel = NotificationChannel(
-                    id,
-                    name,
-                    NotificationManager.IMPORTANCE_HIGH,
-                ).apply {
-                    description = desc
-                    setSound(soundUri, audioAttributes)
-                    enableVibration(true)
-                    vibrationPattern = longArrayOf(0, 500, 250, 500, 250, 500)
-                    setBypassDnd(true)
-                    lockscreenVisibility = Notification.VISIBILITY_PUBLIC
-                    setShowBadge(true)
+        for (legacyId in legacyChannels) {
+            try {
+                if (manager.getNotificationChannel(legacyId) != null) {
+                    manager.deleteNotificationChannel(legacyId)
                 }
-                manager.createNotificationChannel(channel)
+            } catch (_: Throwable) {}
+        }
+
+        // Create the clean v6 channel with NO notification sound (audio handled by NewOrderRingtone)
+        if (manager.getNotificationChannel(CHANNEL_ID) == null) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                CHANNEL_NAME,
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply {
+                description = "High priority alarm alerts for incoming orders."
+                setSound(null, null) // Silent! NewOrderRingtone handles the ringtone
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 500, 250, 500, 250, 500)
+                setBypassDnd(true)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                setShowBadge(true)
             }
+            manager.createNotificationChannel(channel)
         }
     }
 
-    /**
-     * Screen on, briefly, so a full-screen intent is taken rather than downgraded.
-     *
-     * A full-screen intent only launches straight through when the screen is off or
-     * locked; on an awake device Android turns it into an ordinary heads-up. Released
-     * on a timeout rather than by hand, so a missed release can never pin the screen.
-     */
     private fun wakeScreen(context: Context) {
         try {
             val power = context.getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -224,7 +253,6 @@ object NewOrderNotifier {
             )
             lock.acquire(10_000L)
         } catch (_: Throwable) {
-            // Costs the straight-to-screen launch on a sleeping device, not the alert.
         }
     }
 

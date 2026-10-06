@@ -223,8 +223,8 @@ class _FeedbackScreenState extends ConsumerState<FeedbackScreen> {
       children: [
         _buildBar(Colors.red, 40),
         _buildBar(Colors.redAccent, 60),
-        _buildBar(Colors.orange, 80),
-        _buildBar(Colors.amber, 100),
+        _buildBar(AppColors.primaryLight, 80),
+        _buildBar(AppColors.primarySoft, 100),
         _buildBar(Colors.yellow, 120),
         _buildBar(Colors.lightGreen, 140),
         _buildBar(Colors.green, 160),

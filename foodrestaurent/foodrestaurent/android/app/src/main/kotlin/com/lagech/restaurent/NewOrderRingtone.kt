@@ -17,14 +17,9 @@ import android.util.Log
 /**
  * Rings until the restaurant accepts or rejects.
  *
- * A notification channel's sound plays exactly ONCE and cannot be told to repeat.
- * That is the whole reason this exists: a single short chirp from a phone that is
- * locked, or face-down on a counter in a noisy kitchen, is missed, and the order sits
- * unanswered until it expires. This owns the audio instead so it can loop, and stops
- * the moment there is a decision.
- *
- * Process-wide rather than tied to any one screen: the alert must keep ringing while
- * the app is closed, and must survive whatever the restaurant is doing on the phone.
+ * Plays exactly ONCE in a continuous loop until explicitly stopped on Accept/Reject/Dismiss.
+ * Deduplicates across all order ID representations (MongoId vs displayId vs orderId) so that
+ * simultaneous Socket.IO and FCM events NEVER restart or overlap the ringtone.
  */
 object NewOrderRingtone {
 
@@ -33,42 +28,38 @@ object NewOrderRingtone {
     private var focusRequest: AudioFocusRequest? = null
     private var audioManager: AudioManager? = null
 
-    /** The order this ring belongs to, so a stale stop cannot silence a newer one. */
-    private var ringingFor: String? = null
+    /** All order IDs (aliases, MongoId, readable orderNumber) currently ringing */
+    private val currentRingingIds = mutableSetOf<String>()
 
     private val handler = Handler(Looper.getMainLooper())
     private val stopRunnable = Runnable { stop(null) }
 
     /**
      * Hard ceiling, independent of every other stop path.
-     *
-     * Every other stop depends on something happening — a button press, the order
-     * being taken elsewhere, the app being opened. If any of those is missed, an
-     * unbounded loop would ring until the process died. This guarantees silence.
      */
     private const val MAX_RING_MS = 120_000L
 
     private const val TAG = "NewOrderRingtone"
 
     @Synchronized
-    fun start(context: Context, orderId: String, ringMillis: Long) {
-        // Already ringing for this same order: leave it alone. Both the notifier and
-        // the app can call this, and restarting the track would make it stutter back
-        // to the beginning.
-        if (ringingFor == orderId && player != null) return
+    fun start(context: Context, orderIds: Collection<String>, ringMillis: Long) {
+        val filteredIds = orderIds.filter { it.isNotBlank() }
 
-        // A DIFFERENT order replaces the current ring rather than layering a second
-        // player on top of it — two ringtones at once is worse than either.
+        // If already ringing for this exact same order (or any of its ID aliases), do NOT restart or stutter!
+        if (player != null && (filteredIds.isEmpty() || currentRingingIds.any { filteredIds.contains(it) })) {
+            Log.i(TAG, "Already ringing for order aliases: $filteredIds (active: $currentRingingIds) — keeping current ringtone playing smoothly")
+            currentRingingIds.addAll(filteredIds)
+            return
+        }
+
+        // A DIFFERENT order replaces the current ring rather than layering a second player on top
         stopInternal()
 
-        ringingFor = orderId
-        Log.i(TAG, "starting ring for $orderId (${ringMillis}ms)")
+        currentRingingIds.addAll(filteredIds)
+        val primaryId = filteredIds.firstOrNull() ?: "new_order"
+        Log.i(TAG, "Starting single clean ring for $primaryId (aliases: $filteredIds, ${ringMillis}ms)")
 
         val attributes = AudioAttributes.Builder()
-            // ALARM usage: plays even in silent mode and DND, exactly like a clock
-            // alarm. NOTIFICATION_RINGTONE was silenced whenever the restaurant had
-            // their ring volume down or DND on — the most common reason the alert
-            // was never heard.
             .setUsage(AudioAttributes.USAGE_ALARM)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
             .build()
@@ -76,8 +67,8 @@ object NewOrderRingtone {
         requestAudioFocus(context, attributes)
 
         try {
-            val p = MediaPlayer.create(context, R.raw.tujh_bin, attributes, audioManager?.generateAudioSessionId() ?: 0)
-                ?: MediaPlayer.create(context, R.raw.tujh_bin)
+            val p = MediaPlayer.create(context, R.raw.tujh_bin1, attributes, audioManager?.generateAudioSessionId() ?: 0)
+                ?: MediaPlayer.create(context, R.raw.tujh_bin1)
             if (p != null) {
                 p.setAudioAttributes(attributes)
                 p.isLooping = true
@@ -87,9 +78,9 @@ object NewOrderRingtone {
                 }
                 p.start()
                 player = p
-                Log.i(TAG, "ringtone started successfully")
+                Log.i(TAG, "Ringtone started successfully (single clean loop)")
             } else {
-                val soundUri = Uri.parse("android.resource://${context.packageName}/raw/tujh_bin")
+                val soundUri = Uri.parse("android.resource://${context.packageName}/raw/tujh_bin1")
                 player = MediaPlayer().apply {
                     setAudioAttributes(attributes)
                     setDataSource(context, soundUri)
@@ -116,9 +107,14 @@ object NewOrderRingtone {
         handler.postDelayed(stopRunnable, ringMillis.coerceIn(5_000L, MAX_RING_MS))
     }
 
+    @Synchronized
+    fun start(context: Context, orderId: String, ringMillis: Long) {
+        start(context, listOf(orderId), ringMillis)
+    }
+
     /**
      * Stop the ringing unconditionally.
-     * Any decision (Accept, Reject, Dismiss, or manual stop) must immediately silence the audio.
+     * Any decision (Accept, Reject, Dismiss, or manual stop) immediately silences the audio.
      */
     @Synchronized
     fun stop(orderId: String? = null) {
@@ -128,9 +124,16 @@ object NewOrderRingtone {
     @Synchronized
     fun isRinging(): Boolean = player != null
 
+    @Synchronized
+    fun isRingingFor(ids: Collection<String>): Boolean {
+        if (player == null) return false
+        if (ids.isEmpty()) return true
+        return currentRingingIds.any { ids.contains(it) }
+    }
+
     private fun stopInternal() {
         handler.removeCallbacks(stopRunnable)
-        ringingFor = null
+        currentRingingIds.clear()
 
         try {
             player?.let {
@@ -138,7 +141,6 @@ object NewOrderRingtone {
                 it.release()
             }
         } catch (_: Throwable) {
-            // Already released, or never got as far as being prepared.
         }
         player = null
 
@@ -164,7 +166,6 @@ object NewOrderRingtone {
 
             val pattern = longArrayOf(0, 600, 500)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                // repeat = 0: restart the pattern from index 0 forever, until cancel().
                 vibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))
             } else {
                 @Suppress("DEPRECATION")
@@ -175,10 +176,6 @@ object NewOrderRingtone {
         }
     }
 
-    /**
-     * Duck whatever else is playing. A phone playing music or a video in the shop
-     * would otherwise mix the alert underneath it, which is how it gets missed.
-     */
     private fun requestAudioFocus(context: Context, attributes: AudioAttributes) {
         try {
             val manager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -187,9 +184,6 @@ object NewOrderRingtone {
                 val request = AudioFocusRequest
                     .Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
                     .setAudioAttributes(attributes)
-                    // Accept delayed focus: on a busy device another app may hold
-                    // focus briefly. With delayed=true the system queues us instead
-                    // of returning FAILED, so the ring still starts once it can.
                     .setAcceptsDelayedFocusGain(true)
                     .build()
                 focusRequest = request

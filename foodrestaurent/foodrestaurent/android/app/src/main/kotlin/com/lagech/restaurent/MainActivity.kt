@@ -1,6 +1,7 @@
 package com.lagech.restaurent
 
 import android.content.Intent
+import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -8,12 +9,28 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
 
     private val ORDER_ACTION_CHANNEL = "app.foodrestaurant/new_order_action"
+    private val TAG = "MainActivity"
 
     /**
      * Held so a decision arriving from the notification can be pushed at Dart
      * immediately, instead of waiting for the next time Dart happens to poll.
      */
     private var actionChannel: MethodChannel? = null
+
+    override fun onResume() {
+        super.onResume()
+        AppForeground.isForeground = true
+        Log.d(TAG, "AppForeground.isForeground = true")
+        if (PendingOrderAction.hasPending()) {
+            actionChannel?.invokeMethod("onOrderAction", PendingOrderAction.consume())
+        }
+    }
+
+    override fun onPause() {
+        AppForeground.isForeground = false
+        Log.d(TAG, "AppForeground.isForeground = false")
+        super.onPause()
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)

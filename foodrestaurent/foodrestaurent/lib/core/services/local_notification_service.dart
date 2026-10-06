@@ -24,7 +24,7 @@ class LocalNotificationService {
   static const _defaultChannel = AndroidNotificationChannel(
     'default',
     'General notifications',
-    description: 'Order updates and general alerts from Fodron Restaurant.',
+    description: 'Order updates and general alerts from Lagech Restaurant.',
     importance: Importance.high,
   );
 
@@ -35,7 +35,7 @@ class LocalNotificationService {
   static const _highImportanceChannel = AndroidNotificationChannel(
     'high_importance_channel',
     'Order updates',
-    description: 'Order status updates and alerts from Fodron Restaurant.',
+    description: 'Order status updates and alerts from Lagech Restaurant.',
     importance: Importance.max,
   );
 
@@ -44,7 +44,7 @@ class LocalNotificationService {
     'Order Alerts',
     description: 'High priority alerts for new orders with ringing sound.',
     importance: Importance.max,
-    sound: const RawResourceAndroidNotificationSound('tujh_bin'),
+    sound: const RawResourceAndroidNotificationSound('tujh_bin1'),
     playSound: true,
     enableVibration: true,
     vibrationPattern: Int64List.fromList([0, 500, 250, 500, 250, 500]),
@@ -56,20 +56,19 @@ class LocalNotificationService {
     'New Order Notifications',
     description: 'High priority alerts for new orders with ringing sound.',
     importance: Importance.max,
-    sound: const RawResourceAndroidNotificationSound('tujh_bin'),
+    sound: const RawResourceAndroidNotificationSound('tujh_bin1'),
     playSound: true,
     enableVibration: true,
     vibrationPattern: Int64List.fromList([0, 500, 250, 500, 250, 500]),
   );
 
-  /// Channel used by native Kotlin NewOrderNotifier (bumped to v5 — USAGE_ALARM)
+  /// Channel used by native Kotlin NewOrderNotifier (bumped to v6 — silent notification channel, USAGE_ALARM ringtone)
   static final _nativeNewOrderChannel = AndroidNotificationChannel(
-    'new_order_ringing_v5',
+    'new_order_ringing_v6',
     'New Order Ringing Alerts',
     description: 'High priority alarm alerts for incoming restaurant orders.',
     importance: Importance.max,
-    sound: const RawResourceAndroidNotificationSound('tujh_bin'),
-    playSound: true,
+    playSound: false,
     enableVibration: true,
     vibrationPattern: Int64List.fromList([0, 500, 250, 500, 250, 500]),
   );
@@ -202,7 +201,7 @@ class LocalNotificationService {
       return false;
     }
 
-    final channel = isNewOrder ? _backendNewOrderChannel : _defaultChannel;
+    final channel = isNewOrder ? _nativeNewOrderChannel : _defaultChannel;
     final useFullScreen = isNewOrder && fullScreenIntent;
 
     if (kDebugMode && isNewOrder) {
@@ -213,7 +212,7 @@ class LocalNotificationService {
       final enabled = await androidPlugin?.areNotificationsEnabled();
       debugPrint(
         '[LocalNotification] about to show new_order notification — '
-        'channel: ${channel.id}, sound: tujh_bin, '
+        'channel: ${channel.id}, audio handled by NewOrderRingtone, '
         'actions: [Accept($orderAcceptActionId), Reject($orderRejectActionId)], '
         'notificationsEnabledAtOsLevel: $enabled',
       );
@@ -234,10 +233,7 @@ class LocalNotificationService {
             fullScreenIntent: useFullScreen,
             ongoing: useFullScreen,
             autoCancel: !useFullScreen,
-            sound: isNewOrder
-                ? const RawResourceAndroidNotificationSound('tujh_bin')
-                : null,
-            playSound: true,
+            playSound: !isNewOrder,
             enableVibration: true,
             vibrationPattern: isNewOrder
                 ? Int64List.fromList([0, 500, 250, 500, 250, 500])
@@ -250,7 +246,7 @@ class LocalNotificationService {
                 : null,
           ),
           iOS: DarwinNotificationDetails(
-            sound: isNewOrder ? 'tujh_bin.mp3' : null,
+            sound: isNewOrder ? 'tujh_bin1.mp3' : null,
             presentSound: true,
             // Cuts through Focus modes and shows on the lock screen at full
             // prominence — matches the Android `max` importance channel.

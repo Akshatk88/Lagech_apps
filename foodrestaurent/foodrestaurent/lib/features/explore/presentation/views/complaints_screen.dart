@@ -193,8 +193,8 @@ class _ComplaintsScreenState extends ConsumerState<ComplaintsScreen> {
   Widget _buildComplaintCard(BuildContext context, ComplaintModel complaint) {
     final statusColor = switch (complaint.status) {
       'resolved' => Colors.green,
-      'in-progress' => Colors.blue,
-      _ => Colors.orange,
+      'in-progress' => AppColors.primaryDark,
+      _ => AppColors.primaryLight,
     };
 
     return Container(

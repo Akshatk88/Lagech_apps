@@ -9,6 +9,9 @@
     <!-- Lets the full-screen alert wake the screen rather than waiting for the
          restaurant to pick the phone up. -->
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <!-- "Display over other apps": draws the new-order card on top of whatever the
+         restaurant has open, the way the delivery app does. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
     <uses-permission android:name="android.permission.CAMERA"/>
     <!-- Lets the app prompt the restaurant to exempt itself from Doze/App
          Standby battery optimization, which on some OEMs (Xiaomi, Vivo, Oppo)

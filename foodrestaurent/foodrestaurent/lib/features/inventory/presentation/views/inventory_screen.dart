@@ -608,7 +608,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
     final statusColor = switch (item.approvalStatus) {
       'approved' => AppColors.primary,
       'rejected' => AppColors.error,
-      _ => Colors.orange,
+      _ => AppColors.primaryLight,
     };
 
     return GestureDetector(
@@ -691,7 +691,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                   const SizedBox(height: 4),
                   const Text(
                     'Pending admin approval',
-                    style: TextStyle(color: Colors.orange, fontSize: 11),
+                    style: TextStyle(color: AppColors.primaryLight, fontSize: 11),
                   ),
                 ],
               ],
@@ -793,7 +793,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
     final statusColor = switch (addon.approvalStatus) {
       'approved' => AppColors.primary,
       'rejected' => AppColors.error,
-      _ => Colors.orange,
+      _ => AppColors.primaryLight,
     };
 
     return GestureDetector(

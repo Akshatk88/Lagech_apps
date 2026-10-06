@@ -33,6 +33,7 @@ class NewOrderActionReceiver : BroadcastReceiver() {
 
         // Stop the noise first, always.
         NewOrderRingtone.stop(null)
+        NewOrderOverlay.dismiss(orderId)
         try {
             val manager =
                 context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

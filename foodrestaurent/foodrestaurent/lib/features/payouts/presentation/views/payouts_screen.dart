@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import 'package:food_user_application/config/theme/app_colors.dart';
+import 'package:food_user_application/core/widgets/brand_icon_badge.dart';
 import 'package:food_user_application/core/network/api_exception.dart';
 import 'package:food_user_application/features/finance/domain/finance_model.dart';
 import 'package:food_user_application/features/finance/domain/subscription_invoice_model.dart';
@@ -175,8 +176,10 @@ class _PayoutsScreenState extends ConsumerState<PayoutsScreen> {
       leadingWidth: 64,
       titleSpacing: 0,
 
+      // No extra side padding: the drawer button and the illustration already
+      // take ~140px, and the old 94px of padding left the name at "Cen…".
       title: Padding(
-        padding: const EdgeInsets.only(left: 24, right: 70),
+        padding: const EdgeInsets.symmetric(horizontal: 4),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -187,7 +190,7 @@ class _PayoutsScreenState extends ConsumerState<PayoutsScreen> {
               textAlign: TextAlign.center,
               style: theme.textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w900,
-                fontSize: 24,
+                fontSize: 20,
               ),
             ),
 
@@ -233,13 +236,15 @@ class _PayoutsScreenState extends ConsumerState<PayoutsScreen> {
               key: ValueKey(
                 _isPayoutsTab ? 'wallet_image' : 'calculator_image',
               ),
-              width: 92,
-              height: 92,
-              child: Image.asset(
-                _isPayoutsTab
-                    ? 'assets/image/wallet.webp'
-                    : 'assets/image/calculater.webp',
-                fit: BoxFit.contain,
+              width: 64,
+              height: 64,
+              child: Center(
+                child: BrandIconBadge(
+                  icon: _isPayoutsTab
+                      ? Icons.account_balance_wallet_rounded
+                      : Icons.receipt_long_rounded,
+                  size: 56,
+                ),
               ),
             ),
           ),
@@ -477,7 +482,11 @@ class _PayoutsScreenState extends ConsumerState<PayoutsScreen> {
 
           const SizedBox(height: 20),
 
-          Row(
+          // IntrinsicHeight: `stretch` alone asks for an infinite height inside
+          // the page's scroll view, which failed layout and left the whole
+          // Invoices tab blank.
+          IntrinsicHeight(
+            child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
@@ -503,10 +512,12 @@ class _PayoutsScreenState extends ConsumerState<PayoutsScreen> {
               ),
             ],
           ),
+          ),
 
           const SizedBox(height: 12),
 
-          Row(
+          IntrinsicHeight(
+            child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
@@ -515,7 +526,7 @@ class _PayoutsScreenState extends ConsumerState<PayoutsScreen> {
                   title: 'Taxes',
                   value: '₹${finance.invoiceTaxes.toStringAsFixed(2)}',
                   icon: Icons.receipt_outlined,
-                  color: Colors.purple,
+                  color: AppColors.primaryDeep,
                 ),
               ),
 
@@ -527,10 +538,11 @@ class _PayoutsScreenState extends ConsumerState<PayoutsScreen> {
                   title: 'Gross amount',
                   value: '₹${finance.invoiceGross.toStringAsFixed(2)}',
                   icon: Icons.monetization_on_outlined,
-                  color: Colors.blue,
+                  color: AppColors.primaryDark,
                 ),
               ),
             ],
+          ),
           ),
         ],
       ),
@@ -1245,14 +1257,7 @@ class _PayoutsScreenState extends ConsumerState<PayoutsScreen> {
 
             const SizedBox(width: 6),
 
-            SizedBox(
-              width: 62,
-              height: 62,
-              child: Image.asset(
-                'assets/image/calander.webp',
-                fit: BoxFit.contain,
-              ),
-            ),
+            const BrandIconBadge(icon: Icons.event_repeat_rounded, size: 56),
           ],
         ),
       ),
@@ -1315,12 +1320,7 @@ class _PayoutsScreenState extends ConsumerState<PayoutsScreen> {
       ),
       child: Column(
         children: [
-          Image.asset(
-            'assets/image/notification.webp',
-            width: 90,
-            height: 90,
-            fit: BoxFit.contain,
-          ),
+          const BrandIconBadge(icon: Icons.request_quote_outlined, size: 84),
 
           const SizedBox(height: 16),
 

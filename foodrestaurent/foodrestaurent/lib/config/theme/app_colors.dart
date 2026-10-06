@@ -14,6 +14,7 @@ class AppColors {
 
   /// Darker red for buttons / strong brand surfaces.
   static const Color primaryButton = Color(0xFFD00000);
+  static const Color primaryDark = Color(0xFFB70000);
 
   /// Secondary red accent.
   static const Color secondary = Color(0xFFFF3333);
@@ -25,22 +26,22 @@ class AppColors {
 
   // ==================== SUPPORTING ACCENT ====================
 
-  /// Supporting teal accent for delivery/maps etc.
-  static const Color accent = Color(0xFF00B5B8);
+  /// Accent — red family, so nothing in the app falls outside red & white.
+  static const Color accent = Color(0xFFE00000);
 
-  static const Color accentBright = Color(0xFF12CFD2);
+  static const Color accentBright = Color(0xFFFF3333);
 
-  static const Color accentLight = Color(0xFF2ED3D6);
+  static const Color accentLight = Color(0xFFFF6666);
 
-  static const Color accentDeep = Color(0xFF018F91);
+  static const Color accentDeep = Color(0xFFC90000);
 
-  static const Color accentDark = Color(0xFF046F72);
+  static const Color accentDark = Color(0xFFB70000);
 
-  static const Color accentTint = Color(0xFFE6F8F8);
+  static const Color accentTint = Color(0xFFFFF0F1);
 
-  static const Color accentTintStrong = Color(0xFFC4EFEF);
+  static const Color accentTintStrong = Color(0xFFFFD6D9);
 
-  static const Color accentTintDark = Color(0xFF0C2B2C);
+  static const Color accentTintDark = Color(0xFF3D1114);
 
   // ==================== BRAND NEUTRAL ====================
 
@@ -199,6 +200,7 @@ class AppColors {
   static const Color successDeep = Color(0xFF22C55E);
 
   static const Color successSoft = Color(0xFFE9FBEF);
+  static const Color successLight = Color(0xFFE9FBEF);
 
   /// Warning.
   static const Color warning = Color(0xFFF59E0B);

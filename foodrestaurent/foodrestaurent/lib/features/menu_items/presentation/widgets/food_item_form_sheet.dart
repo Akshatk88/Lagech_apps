@@ -263,16 +263,16 @@ class _FoodItemFormSheetState extends ConsumerState<FoodItemFormSheet> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
+                  color: AppColors.primaryTint,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange.shade200),
+                  border: Border.all(color: AppColors.primaryTintStrong),
                 ),
                 child: Row(
                   children: [
                     Expanded(
                       child: Text(
                         'Customers will see the lowest variant price first.',
-                        style: TextStyle(color: Colors.orange.shade800, fontSize: 13),
+                        style: TextStyle(color: AppColors.primaryDark, fontSize: 13),
                       ),
                     ),
                   ],

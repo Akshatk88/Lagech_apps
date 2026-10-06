@@ -1,13 +1,23 @@
-import 'package:flutter/material.dart';
-import 'package:food_user_application/config/theme/app_colors.dart';
-import 'package:food_user_application/core/services/battery_optimization_service.dart';
+import 'dart:io';
 
-/// One-time prompt asking the restaurant to whitelist the app from battery
-/// optimization, so new-order alerts keep arriving after the app is killed or
-/// backgrounded for a while — some OEMs (Xiaomi, Vivo, Oppo, ...) otherwise
-/// block the app from starting up at all to show them.
-class BatteryOptimizationDialog extends StatelessWidget {
-  const BatteryOptimizationDialog({super.key});
+import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:food_user_application/config/theme/app_colors.dart';
+
+/// Asks for "Display over other apps", which lets the new-order card appear on top
+/// of whatever the restaurant has open instead of only as a notification.
+class OverlayPermissionDialog extends StatelessWidget {
+  const OverlayPermissionDialog({super.key});
+
+  /// Whether the prompt is worth showing at all on this device.
+  static Future<bool> isNeeded() async {
+    if (!Platform.isAndroid) return false;
+    try {
+      return !(await Permission.systemAlertWindow.isGranted);
+    } catch (_) {
+      return false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -28,14 +38,14 @@ class BatteryOptimizationDialog extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
               child: const Icon(
-                Icons.notifications_active_rounded,
+                Icons.picture_in_picture_alt_rounded,
                 size: 32,
                 color: AppColors.primary,
               ),
             ),
             const SizedBox(height: 20),
             const Text(
-              "Don't miss new orders",
+              'Show orders on top',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w800,
@@ -45,10 +55,9 @@ class BatteryOptimizationDialog extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Some phones stop apps running in the background to save '
-              'battery. Allow Lagech Restaurant to run in the background so '
-              "you always get the new-order alert, even when the app isn't "
-              'open.',
+              'Allow "Display over other apps" so a new order pops up with '
+              'Accept and Reject on top of any screen, even when the app is '
+              'in the background.',
               style: TextStyle(
                 fontSize: 14,
                 color: Colors.black54,
@@ -93,8 +102,11 @@ class BatteryOptimizationDialog extends StatelessWidget {
                     child: ElevatedButton(
                       onPressed: () async {
                         Navigator.of(context).pop();
-                        await BatteryOptimizationService.requestIgnoreBatteryOptimizations();
-                        await BatteryOptimizationService.openAutostartSettings();
+                        try {
+                          await Permission.systemAlertWindow.request();
+                        } catch (_) {
+                          // Settings screen unavailable; the notification still works.
+                        }
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,

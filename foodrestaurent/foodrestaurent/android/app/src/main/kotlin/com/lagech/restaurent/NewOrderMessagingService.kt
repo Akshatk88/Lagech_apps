@@ -3,28 +3,20 @@ package com.lagech.restaurent
 import android.util.Log
 import com.google.firebase.messaging.RemoteMessage
 import io.flutter.plugins.firebase.messaging.FlutterFirebaseMessagingService
+import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Raises the new-order alert from Kotlin, the moment the push lands.
+ * Handles incoming FCM pushes for restaurant orders.
  *
- * ## Why this exists
+ * When app is in BACKGROUND or KILLED:
+ *  - Native Kotlin shows the high-priority heads-up alert with Accept / Reject buttons.
+ *  - Native Kotlin plays the looping ringtone (USAGE_ALARM).
+ *  - super.onMessageReceived is NOT called to prevent Flutter's background isolate from
+ *    spawning and posting a duplicate notification with duplicate sound.
  *
- * The alert used to be drawn by `flutter_local_notifications` from the Dart
- * background handler, which only runs once a Flutter engine has been started. When
- * the app is killed, or the phone has been sitting idle, that happens late or not at
- * all — so the alert arrived silently, or long after the order did. This runs before
- * any engine is involved.
- *
- * ## Why it extends FlutterFirebaseMessagingService
- *
- * Android gives the MESSAGING_EVENT intent filter to exactly ONE service. A plain
- * `FirebaseMessagingService` declared here would win that election and silently
- * displace the `firebase_messaging` plugin's own service — Dart would stop receiving
- * pushes entirely, taking every other notification in the app with it. The symptom is
- * brutal to diagnose, because this alert keeps working perfectly while everything
- * else goes quiet.
- *
- * Extending the plugin's service and calling `super` keeps both paths alive.
+ * When app is in FOREGROUND:
+ *  - FCM push is forwarded to Flutter via super.onMessageReceived so the in-app
+ *    order dialog and live orders controller handle the alert cleanly.
  */
 class NewOrderMessagingService : FlutterFirebaseMessagingService() {
 
@@ -32,50 +24,70 @@ class NewOrderMessagingService : FlutterFirebaseMessagingService() {
         val data = message.data
         val notification = message.notification
         val rawType = (data["type"] ?: data["eventType"] ?: data["event"])?.lowercase()?.trim()
-        val orderId = orderIdOf(data)
+        val allIds = allOrderIdsOf(data)
+        val orderId = allIds.firstOrNull()
         val notifTitle = (notification?.title ?: data["title"] ?: "").lowercase()
 
-        Log.i(TAG, "FCM received: rawType=$rawType id=$orderId notifTitle=$notifTitle")
+        Log.i(TAG, "FCM received: rawType=$rawType ids=$allIds notifTitle=$notifTitle foreground=${AppForeground.isForeground}")
 
         val isNewOrder = rawType in NEW_ORDER_TYPES
         val statusVal = (data["orderStatus"] ?: data["status"] ?: "").lowercase()
         val isCloseOrder = rawType in CLOSE_TYPES || statusVal.contains("cancel") || statusVal.contains("reject")
 
-        if (isNewOrder || isCloseOrder) {
+        if (isNewOrder) {
             try {
-                if (isNewOrder) {
-                    val allIds = allOrderIdsOf(data)
-                    val effectiveOrderId = allIds.firstOrNull() ?: orderId
+                if (isDuplicateAlert(allIds)) {
+                    Log.i(TAG, "Deduplicated new-order push for order: $orderId (aliases=$allIds)")
+                    return
+                }
 
-                    if (isDuplicateAlert(allIds)) {
-                        Log.i(TAG, "Deduplicated new-order push for order: $effectiveOrderId (aliases=$allIds)")
-                    } else {
-                        val mergedData = HashMap<String, String>(data)
-                        if (notification?.title?.isNotBlank() == true && !mergedData.containsKey("title")) {
-                            mergedData["title"] = notification.title!!
-                        }
-                        if (notification?.body?.isNotBlank() == true && !mergedData.containsKey("body")) {
-                            mergedData["body"] = notification.body!!
-                        }
-                        if (effectiveOrderId != null && !mergedData.containsKey("orderId")) {
-                            mergedData["orderId"] = effectiveOrderId
-                        }
-                        NewOrderNotifier.show(applicationContext, mergedData)
+                if (!AppForeground.isForeground) {
+                    // App is backgrounded or killed: native Kotlin handles the notification + alarm sound
+                    Log.i(TAG, "App is in background/killed, showing native NewOrderNotifier alert")
+                    val mergedData = HashMap<String, String>(data)
+                    if (notification?.title?.isNotBlank() == true && !mergedData.containsKey("title")) {
+                        mergedData["title"] = notification.title!!
                     }
-                } else if (isCloseOrder) {
-                    NewOrderNotifier.dismiss(applicationContext, orderId)
+                    if (notification?.body?.isNotBlank() == true && !mergedData.containsKey("body")) {
+                        mergedData["body"] = notification.body!!
+                    }
+                    if (orderId != null && !mergedData.containsKey("orderId")) {
+                        mergedData["orderId"] = orderId
+                    }
+                    NewOrderNotifier.show(applicationContext, mergedData)
+
+                    // Do NOT call super.onMessageReceived(message) here!
+                    // This prevents Flutter background isolate from posting a duplicate notification
+                    // and playing duplicate sound!
+                    return
+                } else {
+                    // App is in foreground: let Flutter in-app dialog and order controller handle it
+                    Log.i(TAG, "App is in foreground, passing new_order push to Flutter engine")
+                    super.onMessageReceived(message)
+                    return
                 }
             } catch (t: Throwable) {
-                Log.e(TAG, "failed to post new-order alert", t)
-                if (isNewOrder) {
+                Log.e(TAG, "Failed to handle new-order push", t)
+                if (!AppForeground.isForeground) {
                     try {
                         NewOrderNotifier.showFallback(applicationContext, data)
-                    } catch (_: Throwable) {
-                    }
+                    } catch (_: Throwable) {}
                 }
+                return
             }
         }
 
+        if (isCloseOrder) {
+            try {
+                NewOrderNotifier.dismiss(applicationContext, orderId)
+            } catch (t: Throwable) {
+                Log.e(TAG, "Failed to dismiss order on close event", t)
+            }
+            super.onMessageReceived(message)
+            return
+        }
+
+        // Pass all other push types (chat, general updates, etc.) to Flutter
         super.onMessageReceived(message)
     }
 
@@ -85,7 +97,7 @@ class NewOrderMessagingService : FlutterFirebaseMessagingService() {
 
     companion object {
         private const val TAG = "NewOrderFcm"
-        private val recentAlerts = java.util.concurrent.ConcurrentHashMap<String, Long>()
+        private val recentAlerts = ConcurrentHashMap<String, Long>()
         private const val DEDUPE_WINDOW_MS = 30_000L
 
         fun isDuplicateAlert(ids: Collection<String>): Boolean {
@@ -97,14 +109,22 @@ class NewOrderMessagingService : FlutterFirebaseMessagingService() {
             }
             if (isDupe) return true
 
+            recordAlert(ids)
+            return false
+        }
+
+        fun recordAlert(ids: Collection<String>) {
+            if (ids.isEmpty()) return
+            val now = System.currentTimeMillis()
             for (id in ids) {
-                recentAlerts[id] = now
+                if (id.isNotBlank()) {
+                    recentAlerts[id] = now
+                }
             }
             if (recentAlerts.size > 150) {
                 val cutoff = now - (5 * 60_000L)
                 recentAlerts.entries.removeIf { it.value < cutoff }
             }
-            return false
         }
 
         private val NEW_ORDER_TYPES = setOf(

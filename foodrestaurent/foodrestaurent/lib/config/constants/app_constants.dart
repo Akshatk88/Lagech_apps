@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 class AppConstants {
-  static const String title = 'Fodron Restaurant';
+  static const String title = 'Lagech Restaurant';
 
   /// Backend REST API host domain (staging/test server).
   static const String apiHost = String.fromEnvironment(

@@ -6,6 +6,7 @@ import 'package:food_user_application/config/theme/app_colors.dart';
 import 'package:food_user_application/core/providers/core_providers.dart';
 import 'package:food_user_application/core/widgets/battery_optimization_dialog.dart';
 import 'package:food_user_application/core/widgets/exit_app_dialog.dart';
+import 'package:food_user_application/core/widgets/overlay_permission_dialog.dart';
 
 class MainLayoutScreen extends ConsumerStatefulWidget {
   final StatefulNavigationShell navigationShell;
@@ -23,16 +24,29 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowBatteryPrompt());
   }
 
-  // One-time, best-effort — shown once per device regardless of the choice
-  // made, so declining doesn't nag the restaurant on every app open.
+  /// Once per app launch while it is still missing — the overlay is how a
+  /// backgrounded restaurant sees new orders, so it is asked for until granted.
+  static bool _askedForOverlayThisLaunch = false;
+
   Future<void> _maybeShowBatteryPrompt() async {
+    // One-time, best-effort — shown once per device regardless of the choice
+    // made, so declining doesn't nag the restaurant on every app open.
     final tokenStorage = ref.read(tokenStorageProvider);
-    if (await tokenStorage.hasSeenBatteryPrompt) return;
-    await tokenStorage.setHasSeenBatteryPrompt();
-    if (!mounted) return;
+    if (!await tokenStorage.hasSeenBatteryPrompt) {
+      await tokenStorage.setHasSeenBatteryPrompt();
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => const BatteryOptimizationDialog(),
+      );
+    }
+
+    if (_askedForOverlayThisLaunch) return;
+    _askedForOverlayThisLaunch = true;
+    if (!await OverlayPermissionDialog.isNeeded() || !mounted) return;
     await showDialog<void>(
       context: context,
-      builder: (context) => const BatteryOptimizationDialog(),
+      builder: (context) => const OverlayPermissionDialog(),
     );
   }
 

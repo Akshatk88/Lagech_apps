@@ -102,7 +102,7 @@ class OrderAlertService {
     stringData['title'] = title;
     stringData['body'] = body;
 
-    // 1. Show real system notification outside app
+    // 1. Show real system notification outside app and start alarm sound
     if (Platform.isAndroid) {
       try {
         await NewOrderActionChannel.showAlert(stringData);
@@ -114,6 +114,7 @@ class OrderAlertService {
           isNewOrder: true,
           fullScreenIntent: true,
         );
+        await NewOrderActionChannel.startSound(orderId, ringMillis: 60000);
       }
     } else {
       await LocalNotificationService.instance.show(
@@ -123,10 +124,8 @@ class OrderAlertService {
         isNewOrder: true,
         fullScreenIntent: true,
       );
+      await NewOrderActionChannel.startSound(orderId, ringMillis: 60000);
     }
-
-    // 2. Start continuous ringing sound (loops until decision or timeout)
-    await NewOrderActionChannel.startSound(orderId, ringMillis: 60000);
 
     // 3. Refresh live orders list immediately
     try {
