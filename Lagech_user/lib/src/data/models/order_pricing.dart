@@ -51,6 +51,12 @@ class OrderPricing {
   /// Why the coupon that was sent did not apply, worded for the customer.
   final String? couponError;
 
+  /// Tip for the delivery partner, already included in [total].
+  final double riderTip;
+
+  /// `delivery` or `takeaway`, as the server priced it.
+  final String orderType;
+
   /// Verbatim server payload, echoed into order creation unchanged.
   final Map<String, dynamic> raw;
 
@@ -78,6 +84,8 @@ class OrderPricing {
     this.newCustomerDiscount = 0,
     this.campaignDiscount = 0,
     this.couponError,
+    this.riderTip = 0,
+    this.orderType = 'delivery',
     this.raw = const {},
   });
 
@@ -145,6 +153,8 @@ class OrderPricing {
       couponError: (json['couponError'] as String?)?.trim().isNotEmpty == true
           ? (json['couponError'] as String).trim()
           : null,
+      riderTip: _d(json['riderTip']),
+      orderType: (json['orderType'] ?? 'delivery').toString(),
       raw: json,
     );
   }

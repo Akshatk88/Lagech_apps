@@ -17,6 +17,7 @@ import '../../di/catalog_providers.dart';
 import '../../di/location_providers.dart';
 import '../../di/settings_providers.dart';
 import '../../data/models/business_settings_model.dart';
+import '../../data/models/order_options_model.dart';
 import '../common_widgets/maintenance_banner.dart';
 import 'viewmodels/cart_viewmodel.dart';
 import '../checkout/viewmodels/checkout_viewmodel.dart';
@@ -24,6 +25,7 @@ import '../wallet/viewmodels/wallet_viewmodel.dart';
 import '../wallet/viewmodels/pay_later_viewmodel.dart';
 import '../restaurant/widgets/food_detail_sheet.dart';
 import 'widgets/cart_recommendations_section.dart';
+import 'widgets/checkout_options.dart';
 import 'widgets/coupon_sheet.dart';
 import 'widgets/empty_cart_view.dart';
 import 'widgets/offline_payment_sheet.dart';
@@ -69,8 +71,49 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       if (items.isNotEmpty) {
         final rid = items.first.food.restaurantId;
         ref.invalidate(restaurantByIdProvider(rid));
+        // Keep the order type / slot / tip within what this restaurant
+        // offers (takeaway preselected when it is the only type).
+        ref.invalidate(restaurantOrderOptionsProvider(rid));
+        if (!mounted) return;
+        ref.listenManual<AsyncValue<RestaurantOrderOptions>>(
+          restaurantOrderOptionsProvider(rid),
+          (_, next) {
+            final options = next.asData?.value;
+            if (options == null) return;
+            unawaited(
+              ref
+                  .read(checkoutViewModelProvider.notifier)
+                  .applyOrderOptions(options),
+            );
+          },
+          fireImmediately: true,
+        );
       }
     });
+  }
+
+  /// The cart restaurant's checkout options; delivery only until they load.
+  RestaurantOrderOptions _orderOptions(String? restaurantId) {
+    if (restaurantId == null || restaurantId.isEmpty) {
+      return RestaurantOrderOptions.deliveryOnly;
+    }
+    return ref
+            .watch(restaurantOrderOptionsProvider(restaurantId))
+            .asData
+            ?.value ??
+        RestaurantOrderOptions.deliveryOnly;
+  }
+
+  Future<void> _pickScheduleSlot(ScheduleOptions schedule) async {
+    final slot = await ScheduleSlotSheet.show(
+      context,
+      schedule: schedule,
+      selected: ref.read(checkoutViewModelProvider).scheduledSlot,
+    );
+    if (slot == null || !mounted) return;
+    unawaited(
+      ref.read(checkoutViewModelProvider.notifier).setScheduledSlot(slot),
+    );
   }
 
   AddressModel? _resolveSelectedAddress() {
@@ -101,11 +144,14 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     required ZonePaymentOptions? zone,
     required bool isCodAllowed,
     required bool hasOfflineMethods,
+    bool takeaway = false,
   }) {
     switch (method) {
       case 'razorpay':
         return settings.digitalEnabled && (zone?.digitalPayment ?? true);
       case 'cash':
+        // Takeaway is paid up front: online, wallet or offline only.
+        if (takeaway) return false;
         return isCodAllowed &&
             settings.codEnabled &&
             (zone?.cashOnDelivery ?? true);
@@ -113,6 +159,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         return settings.walletPaymentEnabled && (zone?.wallet ?? true);
       case 'offline':
         return settings.offlineEnabled && hasOfflineMethods;
+      case 'pay_later':
+        return !takeaway;
       default:
         // pay_later has its own eligibility check in the payment sheet.
         return true;
@@ -265,8 +313,10 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         }
       }
 
+      // Takeaway needs no address; one is still sent when there is one.
+      final takeaway = ref.read(checkoutViewModelProvider).isTakeaway;
       var address = _resolveSelectedAddress();
-      if (address == null) {
+      if (address == null && !takeaway) {
         // Empty could mean "genuinely no saved address" or "the last load
         // attempt failed" (e.g. a timeout) — retry once so a transient
         // failure doesn't get mistaken for having no address at all.
@@ -276,7 +326,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           address = _resolveSelectedAddress();
         }
       }
-      if (address == null) {
+      if (address == null && !takeaway) {
         final addressNotifier = ref.read(addressViewModelProvider.notifier);
         final loadFailed = addressNotifier.error != null;
         final hasSavedAddress = ref.read(addressViewModelProvider).isNotEmpty;
@@ -299,7 +349,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       }
 
       var checkoutState = ref.read(checkoutViewModelProvider);
-      if (checkoutState.addressId != address.id) {
+      if (address != null && checkoutState.addressId != address.id) {
         await ref
             .read(checkoutViewModelProvider.notifier)
             .setAddress(address.id);
@@ -372,6 +422,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
               isCodAllowed:
                   ref.read(authViewModelProvider).value?.isCodAllowed ?? true,
               hasOfflineMethods: hasOfflineMethods,
+              takeaway: checkoutState.isTakeaway,
             );
         partialWallet = _partialWalletPart(
           settings: settingsNow,
@@ -414,7 +465,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       final result = await ref
           .read(checkoutViewModelProvider.notifier)
           .payAndPlaceOrder(
-            address: address.toOrderPayload(customerName: _customerName),
+            address: address?.toOrderPayload(customerName: _customerName),
             restaurantName: await _restaurantNameForCart(cartItems),
             paymentMethod: _selectedPaymentMethod,
             // The cooking request was collected and shown, but never left the
@@ -606,8 +657,12 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           zone: checkoutState.calculation?.paymentOptions,
           isCodAllowed: isCodAllowed,
           hasOfflineMethods: hasOfflineMethods,
+          takeaway: checkoutState.isTakeaway,
         );
     _ensureSelectedMethodAvailable(isAvailable);
+    final orderOptions =
+        _orderOptions(groupOrder.isNotEmpty ? groupOrder.first : null);
+    final isTakeaway = checkoutState.isTakeaway;
     final partialWallet = _partialWalletPart(
       settings: settings,
       balance: ref.watch(walletViewModelProvider).wallet.balance,
@@ -641,7 +696,13 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       backgroundColor: pageBgColor,
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(62),
-        child: _buildHeader(context, cartRestaurant, addressDisplay, isDark),
+        child: _buildHeader(
+          context,
+          cartRestaurant,
+          addressDisplay,
+          isDark,
+          takeaway: isTakeaway,
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
@@ -741,8 +802,35 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           if (!billReady)
             _buildBillNotReadyNotice(checkoutState, isDark),
 
+          // Delivery / Takeaway — only when the restaurant offers both.
+          if (orderOptions.offersChoice) ...[
+            OrderTypeToggle(
+              orderType: checkoutState.orderType,
+              onChanged: (type) => unawaited(
+                ref.read(checkoutViewModelProvider.notifier).setOrderType(type),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          // Rider tip — delivery orders only, when tips are switched on.
+          if (orderOptions.tips.usable && !isTakeaway) ...[
+            TipSelectorCard(
+              tips: orderOptions.tips,
+              tip: checkoutState.riderTip,
+              onChanged: (tip) => unawaited(
+                ref.read(checkoutViewModelProvider.notifier).setRiderTip(tip),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+
           // Delivery Details & Total Bill Card (Screenshot 2)
           _buildDeliveryDetailsCard(
+            orderOptions: orderOptions,
+            isTakeaway: isTakeaway,
+            scheduledSlot: checkoutState.scheduledSlot,
+            restaurant: cartRestaurant,
             itemTotal: itemTotal,
             totalDeliveryFee: totalDeliveryFee,
             platformFee: platformFee,
@@ -784,8 +872,9 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     BuildContext context,
     RestaurantModel? restaurant,
     String addressDisplay,
-    bool isDark,
-  ) {
+    bool isDark, {
+    bool takeaway = false,
+  }) {
     final restaurantName = restaurant?.name ?? '';
     final bgColor = isDark ? AppColors.surfaceDark : Colors.white;
 
@@ -830,7 +919,9 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      _deliveryLine(restaurant?.deliveryTime ?? '', addressDisplay),
+                      takeaway
+                          ? 'Takeaway · collect from the restaurant'
+                          : _deliveryLine(restaurant?.deliveryTime ?? '', addressDisplay),
                       style: TextStyle(
                         color: isDark
                             ? AppColors.textSecondaryDark
@@ -1415,7 +1506,15 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     required OrderPricing? pricing,
     required AddressModel? resolvedAddress,
     double? walletPart,
+    RestaurantOrderOptions orderOptions = RestaurantOrderOptions.deliveryOnly,
+    bool isTakeaway = false,
+    ScheduleSlot? scheduledSlot,
+    RestaurantModel? restaurant,
   }) {
+    // Slots only while the admin allows scheduled orders and the restaurant
+    // has some left.
+    final showSchedule = orderOptions.schedule.hasSlots &&
+        ref.watch(businessSettingsProvider.select((s) => s.scheduledOrder));
     final customerName = _customerName;
     final customerPhone = _customerPhone;
     final hasSavedAddress = ref.watch(addressViewModelProvider).isNotEmpty;
@@ -1445,7 +1544,22 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       ),
       child: Column(
         children: [
-          // 1. Delivery time row
+          // 1. Delivery time row — Now / Schedule when the restaurant offers
+          // slots, otherwise as before.
+          if (showSchedule)
+            ScheduleChoiceRow(
+              title: isTakeaway ? 'Takeaway' : 'Delivery',
+              schedule: orderOptions.schedule,
+              slot: scheduledSlot,
+              onNow: () => unawaited(
+                ref
+                    .read(checkoutViewModelProvider.notifier)
+                    .setScheduledSlot(null),
+              ),
+              onPickSlot: () =>
+                  unawaited(_pickScheduleSlot(orderOptions.schedule)),
+            )
+          else
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
             child: Row(
@@ -1460,9 +1574,9 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Delivery',
-                        style: TextStyle(
+                      Text(
+                        isTakeaway ? 'Takeaway' : 'Delivery',
+                        style: const TextStyle(
                           fontSize: 13.5,
                           fontWeight: FontWeight.bold,
                           color: Color(0xFF1E1E1E),
@@ -1489,7 +1603,10 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           Divider(height: 1, color: isDark ? AppColors.borderDark : const Color(0xFFF3F4F6)),
 
 
-          // 3. Delivery address row
+          // 3. Delivery address row — for takeaway, where to collect instead.
+          if (isTakeaway)
+            _buildPickupRow(restaurant)
+          else
           InkWell(
             onTap: openAddressPicker,
             child: Padding(
@@ -1695,6 +1812,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                     secondaryColor,
                     textColor,
                   ),
+                  // Takeaway has no delivery fee to show.
+                  if (!isTakeaway) ...[
                   const SizedBox(height: 10),
                   _buildBillRow(
                     AppLocalizations.of(context)!.deliveryFee,
@@ -1723,6 +1842,17 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                           color: Color(0xFF059669),
                         ),
                       ),
+                    ),
+                  ],
+                  ],
+                  // The tip is part of the server's total.
+                  if ((pricing?.riderTip ?? 0) > 0) ...[
+                    const SizedBox(height: 10),
+                    _buildBillRow(
+                      'Delivery partner tip',
+                      '₹${pricing!.riderTip.toStringAsFixed(pricing.riderTip % 1 == 0 ? 0 : 2)}',
+                      secondaryColor,
+                      textColor,
                     ),
                   ],
                   const SizedBox(height: 10),
@@ -1828,6 +1958,63 @@ class _CartScreenState extends ConsumerState<CartScreen> {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  /// Takeaway: the restaurant the customer collects the order from.
+  Widget _buildPickupRow(RestaurantModel? restaurant) {
+    final name = restaurant?.name ?? '';
+    final address = restaurant?.area ?? '';
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.storefront_outlined,
+            size: 20,
+            color: Color(0xFF1E1E1E),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name.isEmpty ? 'Collect from the restaurant' : 'Collect from $name',
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E1E1E),
+                  ),
+                ),
+                if (address.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    address,
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      color: Color(0xFF6B7280),
+                      height: 1.3,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                const SizedBox(height: 3),
+                Text(
+                  "You'll get a pickup code to show at the counter",
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -2646,6 +2833,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                       // (order.service.js asserts this server-side too), so a
                       // due here routes to the repay screen instead of letting
                       // the user pick a method that will just get rejected.
+                      // Not for takeaway, which is paid up front.
+                      if (isAvailable('pay_later'))
                       Consumer(
                         builder: (context, consumerRef, _) {
                           final payLater = consumerRef

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/error/failures.dart';
 import '../../../data/models/order_model.dart';
+import '../../../data/models/order_options_model.dart';
 import '../../../data/models/order_pricing.dart';
 import '../../../di/catalog_providers.dart';
 import '../../../di/location_providers.dart';
@@ -32,6 +33,15 @@ class CheckoutState {
   final String? addressId;
   final bool priceChangesAccepted;
 
+  /// `delivery` (default) or `takeaway`.
+  final String orderType;
+
+  /// The slot picked under "Schedule"; null means "Now".
+  final ScheduleSlot? scheduledSlot;
+
+  /// Tip for the delivery partner in rupees; 0 for none. Delivery only.
+  final double riderTip;
+
   const CheckoutState({
     this.calculation,
     this.isCalculating = false,
@@ -40,9 +50,14 @@ class CheckoutState {
     this.deliveryMode = 'basic',
     this.addressId,
     this.priceChangesAccepted = false,
+    this.orderType = 'delivery',
+    this.scheduledSlot,
+    this.riderTip = 0,
   });
 
   OrderPricing? get pricing => calculation?.pricing;
+
+  bool get isTakeaway => orderType == 'takeaway';
 
   /// Blocks order submission until the user acknowledges menu price drift.
   bool get needsPriceConfirmation =>
@@ -59,8 +74,12 @@ class CheckoutState {
     String? deliveryMode,
     String? addressId,
     bool? priceChangesAccepted,
+    String? orderType,
+    ScheduleSlot? scheduledSlot,
+    double? riderTip,
     bool clearError = false,
     bool clearCoupon = false,
+    bool clearSchedule = false,
   }) {
     return CheckoutState(
       calculation: calculation ?? this.calculation,
@@ -70,6 +89,10 @@ class CheckoutState {
       deliveryMode: deliveryMode ?? this.deliveryMode,
       addressId: addressId ?? this.addressId,
       priceChangesAccepted: priceChangesAccepted ?? this.priceChangesAccepted,
+      orderType: orderType ?? this.orderType,
+      scheduledSlot:
+          clearSchedule ? null : (scheduledSlot ?? this.scheduledSlot),
+      riderTip: riderTip ?? this.riderTip,
     );
   }
 }
@@ -114,6 +137,64 @@ class CheckoutViewModel extends Notifier<CheckoutState> {
     await recalculate();
   }
 
+  /// Delivery or takeaway. Takeaway carries no rider tip.
+  Future<void> setOrderType(String type) async {
+    if (type == state.orderType) return;
+    state = state.copyWith(
+      orderType: type,
+      riderTip: type == 'takeaway' ? 0 : null,
+    );
+    await recalculate();
+  }
+
+  /// A slot from the restaurant's order options, or null for "Now".
+  Future<void> setScheduledSlot(ScheduleSlot? slot) async {
+    if (slot?.scheduledAt == state.scheduledSlot?.scheduledAt) return;
+    state = slot == null
+        ? state.copyWith(clearSchedule: true)
+        : state.copyWith(scheduledSlot: slot);
+    await recalculate();
+  }
+
+  Future<void> setRiderTip(double tip) async {
+    if (tip == state.riderTip) return;
+    state = state.copyWith(riderTip: tip < 0 ? 0 : tip);
+    await recalculate();
+  }
+
+  /// Keeps the order type, slot and tip within what the restaurant's order
+  /// options allow: takeaway is preselected when it is the only type, and a
+  /// choice that is no longer offered falls back to the default.
+  Future<void> applyOrderOptions(RestaurantOrderOptions options) async {
+    var type = state.orderType;
+    if (options.takeawayOnly) {
+      type = 'takeaway';
+    } else if (type == 'takeaway' && !options.takeaway) {
+      type = 'delivery';
+    }
+    final slot = state.scheduledSlot;
+    final keepSlot = slot != null &&
+        options.schedule.enabled &&
+        options.schedule.offers(slot.scheduledAt);
+    var tip = state.riderTip;
+    if (type == 'takeaway' || !options.tips.usable) {
+      tip = 0;
+    } else if (tip > options.tips.max) {
+      tip = options.tips.max;
+    }
+    if (type == state.orderType &&
+        (keepSlot || slot == null) &&
+        tip == state.riderTip) {
+      return;
+    }
+    state = state.copyWith(
+      orderType: type,
+      riderTip: tip,
+      clearSchedule: !keepSlot,
+    );
+    await recalculate();
+  }
+
   Future<void> applyCoupon(String code) async {
     state = state.copyWith(couponCode: code.trim().toUpperCase());
     await recalculate();
@@ -137,7 +218,15 @@ class CheckoutViewModel extends Notifier<CheckoutState> {
   Future<void> recalculate() async {
     final cart = ref.read(cartViewModelProvider);
     if (cart.items.isEmpty) {
-      state = state.copyWith(calculation: null, isCalculating: false, clearError: true);
+      // A new cart starts from the defaults: delivery, now, no tip.
+      state = state.copyWith(
+        calculation: null,
+        isCalculating: false,
+        clearError: true,
+        orderType: 'delivery',
+        riderTip: 0,
+        clearSchedule: true,
+      );
       return;
     }
 
@@ -160,6 +249,9 @@ class CheckoutViewModel extends Notifier<CheckoutState> {
             zoneId: ref.read(currentZoneIdProvider),
             couponCode: state.couponCode,
             deliveryMode: state.deliveryMode,
+            scheduledAt: state.scheduledSlot?.scheduledAt,
+            orderType: state.orderType,
+            riderTip: state.isTakeaway ? 0 : state.riderTip,
           );
       var priced = calculation;
       // An older backend does not send paymentOptions with the quote; ask the
@@ -194,7 +286,7 @@ class CheckoutViewModel extends Notifier<CheckoutState> {
   ///
   /// Refuses to submit while price drift is unacknowledged.
   Future<({Map<String, dynamic>? result, String? error})> placeOrder({
-    required Map<String, dynamic> address,
+    required Map<String, dynamic>? address,
     required String customerName,
     required String customerPhone,
     required String restaurantName,
@@ -250,6 +342,9 @@ class CheckoutViewModel extends Notifier<CheckoutState> {
             zoneId: ref.read(currentZoneIdProvider),
             offlinePayment: offlinePayment,
             partialWalletAmount: partialWalletAmount,
+            orderType: state.orderType,
+            scheduledAt: state.scheduledSlot?.scheduledAt,
+            riderTip: state.isTakeaway ? 0 : state.riderTip,
           );
       return (result: result, error: null);
     } on Failure catch (f) {
@@ -258,6 +353,10 @@ class CheckoutViewModel extends Notifier<CheckoutState> {
       // and the quote so the screen catches up with what the server said.
       if (f is ValidationFailure) {
         unawaited(ref.read(businessSettingsProvider.notifier).refresh());
+        // ...and the restaurant's order options: a slot may have closed.
+        ref.invalidate(
+          restaurantOrderOptionsProvider(cart.items.first.food.restaurantId),
+        );
         unawaited(recalculate());
       }
       return (result: null, error: f.message);
@@ -281,7 +380,8 @@ class CheckoutViewModel extends Notifier<CheckoutState> {
   /// only the rest. Abandoning the sheet discards the order and the server
   /// puts the wallet part back.
   Future<PaymentFlowResult> payAndPlaceOrder({
-    required Map<String, dynamic> address,
+    // Null only for a takeaway order with no saved address.
+    required Map<String, dynamic>? address,
     required String restaurantName,
     String paymentMethod = 'razorpay',
     String? note,

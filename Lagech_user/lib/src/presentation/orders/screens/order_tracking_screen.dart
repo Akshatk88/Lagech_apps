@@ -22,6 +22,7 @@ import '../../navigation/route_names.dart';
 import '../viewmodels/active_order_viewmodel.dart';
 import '../viewmodels/order_tracking_viewmodel.dart';
 import '../widgets/live_tracking_map.dart';
+import '../widgets/order_fulfilment_card.dart';
 
 class OrderTrackingScreen extends ConsumerStatefulWidget {
   final String orderId;
@@ -175,7 +176,15 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
                                   sliver: SliverList.list(
                                     children: [
-                                      if (state.dropOtp != null && state.dropOtp!.isNotEmpty)
+                                      // Takeaway pickup code / scheduled slot.
+                                      if (OrderFulfilmentCard.appliesTo(order))
+                                        OrderFulfilmentCard(
+                                          order: order,
+                                          margin: const EdgeInsets.only(bottom: 14),
+                                        ),
+                                      if (!order.isTakeaway &&
+                                          state.dropOtp != null &&
+                                          state.dropOtp!.isNotEmpty)
                                         _DropOtpCard(otp: state.dropOtp!),
                                       const _PromoBannerCarousel(),
                                       const _CouponCards(),
@@ -298,6 +307,12 @@ class _TrackingHeader extends StatelessWidget {
     if (order.isDelivered) return 'Delivered';
     if (order.isCancelled) return order.statusLabel;
     if (order.isOfflinePaymentPending) return order.statusLabel;
+    final scheduledAt = order.scheduledAt;
+    if (order.isScheduled && scheduledAt != null && order.isAwaitingAcceptance) {
+      return 'Scheduled for ${formatScheduledTime(scheduledAt)}';
+    }
+    // No rider on a takeaway order.
+    if (order.isTakeaway) return order.statusLabel;
     final eta = order.etaLabel;
     if (eta != null && eta != 'Calculating...') {
       return '$eta • On Time';

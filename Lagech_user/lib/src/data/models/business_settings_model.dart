@@ -20,6 +20,7 @@ class BusinessSettings {
     this.addFund = true,
     this.vegNonVegToggle = true,
     this.newCustomerDiscount,
+    this.tips = TipSettings.off,
   });
 
   /// Defaults used until (or unless) the settings load.
@@ -72,6 +73,9 @@ class BusinessSettings {
   /// `customer.newCustomerDiscount`, or null when switched off.
   final NewCustomerDiscountInfo? newCustomerDiscount;
 
+  /// `tips` — rider tips at checkout. Off unless the server says so.
+  final TipSettings tips;
+
   /// The message to show while checkout is closed for maintenance.
   String get maintenanceText => maintenanceMessage.trim().isNotEmpty
       ? maintenanceMessage.trim()
@@ -108,6 +112,44 @@ class BusinessSettings {
       newCustomerDiscount: nc is Map
           ? NewCustomerDiscountInfo.fromApi(nc.cast<String, dynamic>())
           : null,
+      tips: json['tips'] is Map
+          ? TipSettings.fromApi((json['tips'] as Map).cast<String, dynamic>())
+          : TipSettings.off,
+    );
+  }
+}
+
+/// Rider tips as the admin configured them: `{ enabled, presets, max }`.
+class TipSettings {
+  const TipSettings({
+    this.enabled = false,
+    this.presets = const [],
+    this.max = 0,
+  });
+
+  static const off = TipSettings();
+
+  final bool enabled;
+
+  /// Suggested amounts in rupees, e.g. 10, 20, 30, 50.
+  final List<int> presets;
+
+  /// Largest tip the server accepts, in rupees.
+  final double max;
+
+  /// Whether a tip can be offered at all.
+  bool get usable => enabled && max > 0;
+
+  factory TipSettings.fromApi(Map<String, dynamic> json) {
+    final max = (json['max'] as num?)?.toDouble() ?? 0;
+    return TipSettings(
+      enabled: json['enabled'] == true,
+      presets: ((json['presets'] as List?) ?? const [])
+          .whereType<num>()
+          .map((e) => e.toInt())
+          .where((e) => e > 0 && e <= max)
+          .toList(),
+      max: max,
     );
   }
 }

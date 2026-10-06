@@ -164,8 +164,14 @@ class PriceDetailsCard extends StatelessWidget {
               if (newCustomerDiscount > 0)
                 _buildBillRow('New customer discount', '-₹${newCustomerDiscount.toStringAsFixed(0)}', greenColor, greenColor),
 
-              // Delivery Fee
-              if (order.deliveryCharge > 0)
+              // Delivery partner tip (part of the total).
+              if (order.driverTip > 0)
+                _buildBillRow('Delivery partner tip', '₹${order.driverTip.toStringAsFixed(order.driverTip % 1 == 0 ? 0 : 2)}', primaryTextColor, secondaryTextColor),
+
+              // Delivery Fee — none on a takeaway order.
+              if (order.isTakeaway)
+                const SizedBox.shrink()
+              else if (order.deliveryCharge > 0)
                 _buildBillRow('Delivery Fee', '₹${order.deliveryCharge.toStringAsFixed(0)}', primaryTextColor, secondaryTextColor)
               else
                 _buildBillRowWithBadge('Delivery Fee', waivedFee, 'FREE', secondaryTextColor, greenColor),

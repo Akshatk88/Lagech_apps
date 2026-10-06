@@ -341,6 +341,22 @@ class OrderModel {
   final String foodRatingComment;
   final String deliveryRatingComment;
 
+  /// `delivery` (default) or `takeaway`.
+  final String orderType;
+
+  /// Placed for a chosen slot rather than "as soon as possible".
+  final bool isScheduled;
+
+  /// Start of the slot the customer picked.
+  final DateTime? scheduledAt;
+
+  /// When a scheduled order goes to the restaurant.
+  final DateTime? releaseAt;
+
+  /// 4-digit code a takeaway customer shows at the counter; empty once the
+  /// order is collected (or for delivery orders).
+  final String pickupCode;
+
   const OrderModel({
     required this.id,
     required this.orderNumber,
@@ -412,7 +428,19 @@ class OrderModel {
     this.deliveryRating = 0.0,
     this.foodRatingComment = '',
     this.deliveryRatingComment = '',
+    this.orderType = 'delivery',
+    this.isScheduled = false,
+    this.scheduledAt,
+    this.releaseAt,
+    this.pickupCode = '',
   });
+
+  bool get isTakeaway => orderType.toLowerCase() == 'takeaway';
+
+  /// The pickup code to show at the counter, while the order is still to be
+  /// collected.
+  bool get showPickupCode =>
+      isTakeaway && pickupCode.isNotEmpty && isActive && !isDelivered;
 
   static const _activeStatuses = {
     'pending',
@@ -536,6 +564,16 @@ class OrderModel {
   /// render the same wording.
   String get statusLabel {
     if (isOfflinePaymentPending) return 'Payment under verification';
+    if (isTakeaway) {
+      switch (orderStatus.toLowerCase()) {
+        case 'ready':
+        case 'ready_for_pickup':
+          return 'Ready to collect';
+        case 'delivered':
+        case 'completed':
+          return 'Collected';
+      }
+    }
     switch (orderStatus.toLowerCase()) {
       case 'pending_payment':
         return 'Awaiting payment';
@@ -628,6 +666,14 @@ class OrderModel {
     'delivered',
   ];
 
+  static const List<String> _takeawayLifecycle = [
+    'created',
+    'confirmed',
+    'preparing',
+    'ready_for_pickup',
+    'delivered',
+  ];
+
   /// A dynamic timeline the UI renders without hardcoding stages.
   ///
   /// Each stage's completion is derived from where [orderStatus] sits in the
@@ -644,7 +690,9 @@ class OrderModel {
       'completed' => 'delivered',
       _ => orderStatus.toLowerCase(),
     };
-    final currentIndex = _lifecycle.indexOf(normStatus);
+    // Takeaway has no rider: created → confirmed → preparing → ready → collected.
+    final lifecycle = isTakeaway ? _takeawayLifecycle : _lifecycle;
+    final currentIndex = lifecycle.indexOf(normStatus);
 
     DateTime? timeFor(String status) {
       for (final e in statusHistory) {
@@ -654,13 +702,19 @@ class OrderModel {
     }
 
     final stages = <OrderStage>[];
-    for (var i = 0; i < _lifecycle.length; i++) {
-      final status = _lifecycle[i];
+    for (var i = 0; i < lifecycle.length; i++) {
+      final status = lifecycle[i];
       final reached = currentIndex >= 0 && i <= currentIndex;
       stages.add(
         OrderStage(
           status: status,
-          label: _labelFor(status),
+          label: isTakeaway
+              ? switch (status) {
+                  'ready_for_pickup' => 'Ready to collect',
+                  'delivered' => 'Collected',
+                  _ => _labelFor(status),
+                }
+              : _labelFor(status),
           isCompleted: reached && status != normStatus,
           isCurrent: status == normStatus,
           at: timeFor(status),
@@ -821,7 +875,10 @@ class OrderModel {
       walletUsed: _money(pricing['walletUsed'] ?? pricing['walletDiscount']),
       rewardDiscount: _money(pricing['rewardDiscount']),
       driverTip: _money(
-        pricing['tip'] ?? pricing['driverTip'] ?? pricing['deliveryTip'],
+        pricing['riderTip'] ??
+            pricing['tip'] ??
+            pricing['driverTip'] ??
+            pricing['deliveryTip'],
       ),
       currency: (pricing['currency'] ?? json['currency'] ?? 'INR').toString(),
       originalDeliveryFee: _money(pricing['originalDeliveryFee']),
@@ -892,6 +949,13 @@ class OrderModel {
       deliveryRating: _money(deliveryRatingMap?['rating']),
       foodRatingComment: (restaurantRatingMap?['comment'] ?? '').toString(),
       deliveryRatingComment: (deliveryRatingMap?['comment'] ?? '').toString(),
+      orderType: (json['orderType'] ?? pricing['orderType'] ?? 'delivery')
+          .toString()
+          .toLowerCase(),
+      isScheduled: json['isScheduled'] == true,
+      scheduledAt: DateTime.tryParse((json['scheduledAt'] ?? '').toString()),
+      releaseAt: DateTime.tryParse((json['releaseAt'] ?? '').toString()),
+      pickupCode: (json['pickupCode'] ?? '').toString(),
     );
   }
 }

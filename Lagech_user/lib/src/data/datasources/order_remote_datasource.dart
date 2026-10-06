@@ -78,6 +78,21 @@ class OrderRemoteDataSource {
     };
   }
 
+  /// `orderType` / `riderTip` for `/calculate` and `POST /orders`. Only sent
+  /// when they differ from the server's defaults (delivery, no tip), so a
+  /// plain delivery order sends exactly what it always did.
+  static Map<String, dynamic> _orderOptionsPayload({
+    required String orderType,
+    required double riderTip,
+  }) {
+    final takeaway = orderType == 'takeaway';
+    return {
+      if (takeaway) 'orderType': 'takeaway',
+      // The server refuses a tip on takeaway.
+      if (!takeaway && riderTip > 0) 'riderTip': riderTip,
+    };
+  }
+
   /// `POST /food/orders/calculate` — the only source of truth for the bill.
   Future<OrderCalculation> calculate({
     required List<CartItemModel> items,
@@ -87,6 +102,8 @@ class OrderRemoteDataSource {
     String? couponCode,
     String deliveryMode = 'basic',
     DateTime? scheduledAt,
+    String orderType = 'delivery',
+    double riderTip = 0,
   }) async {
     final payload = {
       'items': items.map(itemPayload).toList(),
@@ -96,6 +113,7 @@ class OrderRemoteDataSource {
       'couponCode': ?couponCode,
       'deliveryMode': deliveryMode,
       'scheduledAt': ?scheduledAt?.toUtc().toIso8601String(),
+      ..._orderOptionsPayload(orderType: orderType, riderTip: riderTip),
     };
 
     // Print Calculate API Request Payload
@@ -131,7 +149,7 @@ class OrderRemoteDataSource {
     required List<CartItemModel> items,
     required String restaurantId,
     required String restaurantName,
-    required Map<String, dynamic> address,
+    required Map<String, dynamic>? address,
     required Map<String, dynamic> pricing,
     required String customerName,
     required String customerPhone,
@@ -143,10 +161,17 @@ class OrderRemoteDataSource {
     String? zoneId,
     Map<String, dynamic>? offlinePayment,
     double? partialWalletAmount,
+    String orderType = 'delivery',
+    DateTime? scheduledAt,
+    double riderTip = 0,
   }) async {
     final payload = {
       'items': items.map(itemPayload).toList(),
-      'address': address,
+      // Optional for takeaway only.
+      'address': ?address,
+      ..._orderOptionsPayload(orderType: orderType, riderTip: riderTip),
+      // The slot the customer picked; absent means "as soon as possible".
+      'scheduledAt': ?scheduledAt?.toUtc().toIso8601String(),
       'restaurantId': restaurantId,
       'restaurantName': restaurantName,
       'customerName': customerName,

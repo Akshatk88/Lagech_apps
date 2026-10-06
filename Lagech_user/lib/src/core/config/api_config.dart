@@ -138,4 +138,8 @@ class ApiPaths {
   static const String publicBusinessSettings = '/food/public/business-settings';
   static const String offlinePaymentMethods = '/food/public/offline-payment-methods';
   static const String zonePaymentOptions = '/food/zones/payment-options';
+
+  /// Delivery / takeaway, schedule slots and rider tips for one restaurant.
+  static String restaurantOrderOptions(String id) =>
+      '/food/public/restaurants/$id/order-options';
 }

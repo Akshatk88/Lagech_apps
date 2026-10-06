@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/datasources/settings_remote_datasource.dart';
 import '../data/models/business_settings_model.dart';
+import '../data/models/order_options_model.dart';
 import 'network_providers.dart';
 
 final settingsRemoteDataSourceProvider = Provider<SettingsRemoteDataSource>((ref) {
@@ -59,5 +60,20 @@ final offlinePaymentMethodsProvider =
         .getOfflinePaymentMethods();
   } catch (_) {
     return const [];
+  }
+});
+
+/// Checkout options (delivery / takeaway, schedule slots, rider tips) for the
+/// restaurant in the cart. A failed call falls back to
+/// [RestaurantOrderOptions.deliveryOnly] — checkout exactly as before.
+final restaurantOrderOptionsProvider = FutureProvider.autoDispose
+    .family<RestaurantOrderOptions, String>((ref, restaurantId) async {
+  if (restaurantId.isEmpty) return RestaurantOrderOptions.deliveryOnly;
+  try {
+    return await ref
+        .read(settingsRemoteDataSourceProvider)
+        .getRestaurantOrderOptions(restaurantId);
+  } catch (_) {
+    return RestaurantOrderOptions.deliveryOnly;
   }
 });

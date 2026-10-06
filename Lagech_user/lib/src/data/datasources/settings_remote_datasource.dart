@@ -1,6 +1,7 @@
 import '../../core/config/api_config.dart';
 import '../../core/network/api_client.dart';
 import '../models/business_settings_model.dart';
+import '../models/order_options_model.dart';
 
 /// Transport for the public Business Settings endpoints. All unauthenticated.
 class SettingsRemoteDataSource {
@@ -39,6 +40,19 @@ class SettingsRemoteDataSource {
       auth: false,
     );
     return ZonePaymentOptions.fromApi(data);
+  }
+
+  /// `GET /food/public/restaurants/:restaurantId/order-options` — delivery /
+  /// takeaway, schedule slots and tips for checkout. Never cached: slots move
+  /// with the clock.
+  Future<RestaurantOrderOptions> getRestaurantOrderOptions(
+    String restaurantId,
+  ) async {
+    final data = await _client.get<Map<String, dynamic>>(
+      ApiPaths.restaurantOrderOptions(restaurantId),
+      auth: false,
+    );
+    return RestaurantOrderOptions.fromApi(data);
   }
 
   /// `GET /food/public/offline-payment-methods`. Empty when the feature is

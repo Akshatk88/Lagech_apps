@@ -15,6 +15,7 @@ import '../../navigation/route_names.dart';
 import '../utils/reorder.dart';
 import '../viewmodels/orders_viewmodel.dart';
 import '../widgets/order_details_header.dart';
+import '../widgets/order_fulfilment_card.dart';
 import '../widgets/order_help_card.dart';
 import '../widgets/order_timeline_card.dart';
 import '../widgets/price_details_card.dart';
@@ -162,6 +163,15 @@ class OrderDetailsScreen extends ConsumerWidget {
                   OrderTimelineCard(order: order),
 
                   const SizedBox(height: 16),
+
+                  // Takeaway (pickup code) / scheduled slot, when applicable.
+                  if (OrderFulfilmentCard.appliesTo(order)) ...[
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: OrderFulfilmentCard(order: order),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
 
                   // Cooking request, when the customer left one.
                   if (order.note.trim().isNotEmpty) ...[
