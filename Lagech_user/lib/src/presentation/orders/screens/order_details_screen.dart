@@ -15,6 +15,7 @@ import '../../navigation/route_names.dart';
 import '../utils/reorder.dart';
 import '../viewmodels/orders_viewmodel.dart';
 import '../widgets/order_details_header.dart';
+import '../widgets/order_help_card.dart';
 import '../widgets/order_timeline_card.dart';
 import '../widgets/price_details_card.dart';
 import '../widgets/previous_conversations_card.dart';
@@ -175,6 +176,14 @@ class OrderDetailsScreen extends ConsumerWidget {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: PriceDetailsCard(order: order),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Request a refund / report an issue, as the server allows.
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: OrderHelpCard(order: order),
                   ),
 
                   const SizedBox(height: 16),

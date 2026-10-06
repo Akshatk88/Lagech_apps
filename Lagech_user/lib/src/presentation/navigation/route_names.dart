@@ -21,6 +21,7 @@ class RouteNames {
   static const String orderDetails = '/orders/details/:id';
   static const String orderTracking = '/orders/track/:id';
   static const String orderDelivered = '/orders/delivered/:id';
+  static const String orderHelpRequests = '/refunds-and-reports';
   static const String referral = '/referral';
   static const String referralTicket = '/refer-earn/ticket';
   static const String favorites = '/favorites';

@@ -114,6 +114,14 @@ class ApiPaths {
   static const String verifyPayment = '/food/orders/verify-payment';
   static String orderById(String id) => '$orders/$id';
 
+  // ---- Refund requests & order issue reports (Bearer USER) ----
+  static String orderRefundRequest(String id) => '/food/user/orders/$id/refund-request';
+  static String orderIssues(String id) => '/food/user/orders/$id/issues';
+  static const String refundRequests = '/food/user/refund-requests';
+  static const String orderIssueReports = '/food/user/order-issues';
+  static const String refundReasons = '/food/public/refund-reasons';
+  static const String orderIssueReasons = '/food/public/order-issue-reasons';
+
   // ---- Notifications / FCM ----
   static const String notificationInbox = '/food/notifications/inbox';
   static const String fcmSaveMobile = '/fcm-tokens/mobile/save';

@@ -234,6 +234,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             },
             isDark: isDark,
           ),
+          if (isLoggedIn)
+            _buildNavTile(
+              icon: Icons.receipt_long_outlined,
+              title: 'Refunds & reported issues',
+              onTap: () {
+                Haptics.light();
+                context.push(RouteNames.orderHelpRequests);
+              },
+              isDark: isDark,
+            ),
           _buildNavTile(
             icon: Icons.chat_bubble_outline_rounded,
             title: 'Hear from restaurants',
