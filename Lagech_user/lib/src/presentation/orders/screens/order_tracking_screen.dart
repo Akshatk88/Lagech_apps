@@ -1014,23 +1014,35 @@ class _DeliveryPartnerCard extends StatelessWidget {
                     Text(
                       partner.name.isEmpty ? 'Delivery partner' : partner.name,
                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15.5, color: textColor),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 3),
-                    Row(
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 4,
+                      runSpacing: 2,
                       children: [
-                        if (partner.rating > 0) ...[
-                          const Icon(Icons.star_rounded, color: Color(0xFF1FA855), size: 15),
-                          const SizedBox(width: 2),
-                          Text(partner.rating.toStringAsFixed(1), style: TextStyle(fontSize: 12.5, color: secondary, fontWeight: FontWeight.w600)),
-                        ],
-                        if (partner.totalRatings > 0) ...[
-                          const SizedBox(width: 8),
-                          Text('${partner.totalRatings} ratings', style: TextStyle(fontSize: 12.5, color: secondary)),
-                        ],
+                        if (partner.rating > 0)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.star_rounded, color: Color(0xFF1FA855), size: 14),
+                              const SizedBox(width: 2),
+                              Text(partner.rating.toStringAsFixed(1), style: TextStyle(fontSize: 12, color: secondary, fontWeight: FontWeight.w600)),
+                            ],
+                          ),
+                        if (partner.totalRatings > 0)
+                          Text('${partner.totalRatings} ratings', style: TextStyle(fontSize: 12, color: secondary)),
                       ],
                     ),
                     const SizedBox(height: 2),
-                    Text(statusLabel, style: TextStyle(fontSize: 12.5, color: AppColors.primary, fontWeight: FontWeight.w600)),
+                    Text(
+                      statusLabel,
+                      style: TextStyle(fontSize: 12.5, color: AppColors.primary, fontWeight: FontWeight.w600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ],
                 ),
               ),

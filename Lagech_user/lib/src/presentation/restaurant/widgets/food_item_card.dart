@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/haptics.dart';
 import '../../../data/models/food_model.dart';
+import '../../../di/catalog_providers.dart';
 import '../../cart/utils/cart_restaurant_guard.dart';
 import '../../cart/viewmodels/cart_viewmodel.dart';
 import '../../cart/widgets/floating_view_cart_bar.dart';
+import '../../common_widgets/app_snackbar.dart';
 import '../../common_widgets/smart_image.dart';
 
 class FoodItemCard extends ConsumerStatefulWidget {
@@ -133,6 +135,37 @@ class _FoodItemCardState extends ConsumerState<FoodItemCard> {
     int quantity,
     String? cartItemId,
   ) {
+    final restaurant = ref.watch(restaurantByIdProvider(widget.food.restaurantId)).asData?.value;
+    final isClosed = restaurant != null && !restaurant.isOpen;
+
+    if (isClosed) {
+      return Container(
+        height: 30,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade400,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        alignment: Alignment.center,
+        child: InkWell(
+          onTap: () {
+            AppSnackbar.warning(
+              context,
+              '${restaurant.name} is currently closed and not accepting orders.',
+            );
+          },
+          child: const Text(
+            'CLOSED',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      );
+    }
+
     final hasQty = quantity > 0;
     final primaryColor = Theme.of(context).primaryColor;
 

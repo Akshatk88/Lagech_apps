@@ -88,6 +88,7 @@ class OrderDetailsScreen extends ConsumerWidget {
       context,
       ref,
       order.restaurantId,
+      forceCheck: true,
     );
     if (!allowed || !context.mounted) return;
 

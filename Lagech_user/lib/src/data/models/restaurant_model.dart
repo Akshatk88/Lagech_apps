@@ -135,7 +135,18 @@ class RestaurantModel {
       }
     }
 
-    // 4. isAcceptingOrders flag: if false, it cannot accept orders (closed for ordering)
+    // 0. Primary explicit isOpen check
+    final openVal = json['isOpen'] ?? json['isRestaurantOpen'] ?? json['open'];
+    if (openVal != null) {
+      if (openVal == false ||
+          openVal.toString().trim().toLowerCase() == 'false' ||
+          openVal == 0 ||
+          openVal.toString().trim() == '0') {
+        return false;
+      }
+    }
+
+    // 1. isAcceptingOrders flag: if false, it cannot accept orders (closed for ordering)
     if (json.containsKey('isAcceptingOrders')) {
       final acc = json['isAcceptingOrders'];
       if (acc == false ||
@@ -146,7 +157,7 @@ class RestaurantModel {
       }
     }
 
-    // 4b. Nested availability / availabilityStatus / operationalStatus from backend
+    // 2. Nested availability / availabilityStatus / operationalStatus from backend
     final avail = json['availability'] ?? json['availabilityStatus'] ?? json['operationalStatus'];
     if (avail is Map) {
       if (avail['isOpen'] == false || avail['isOpen']?.toString().trim().toLowerCase() == 'false') {
@@ -163,7 +174,7 @@ class RestaurantModel {
       }
     }
 
-    // 4c. isEffectivelyOnline flag
+    // 3. isEffectivelyOnline flag
     if (json.containsKey('isEffectivelyOnline')) {
       final eff = json['isEffectivelyOnline'];
       if (eff == false || eff?.toString().trim().toLowerCase() == 'false') {
@@ -171,12 +182,24 @@ class RestaurantModel {
       }
     }
 
-    // 4d. Outlet timings evaluation if present
+    // 4. isOnline flag
+    if (json.containsKey('isOnline')) {
+      final online = json['isOnline'];
+      if (online == false ||
+          online?.toString().trim().toLowerCase() == 'false' ||
+          online == 0 ||
+          online?.toString().trim() == '0') {
+        return false;
+      }
+    }
+
+    // 5. Outlet timings evaluation if present
+    final now = DateTime.now();
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    final todayName = days[now.weekday - 1];
+
     if (json['outletTimings'] is Map) {
       final timings = json['outletTimings'] as Map;
-      final now = DateTime.now();
-      const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-      final todayName = days[now.weekday - 1];
       final todayTiming = timings[todayName] ?? timings[todayName.toLowerCase()];
       if (todayTiming is Map) {
         if (todayTiming['isOpen'] == false || todayTiming['isOpen']?.toString().trim().toLowerCase() == 'false') {
@@ -204,41 +227,52 @@ class RestaurantModel {
       }
     }
 
-    // 5. isOpen / isRestaurantOpen / open flags
-    final openVal = json['isOpen'] ?? json['isRestaurantOpen'] ?? json['open'];
-    if (openVal != null) {
-      if (openVal == false ||
-          openVal.toString().trim().toLowerCase() == 'false' ||
-          openVal == 0 ||
-          openVal.toString().trim() == '0') {
+    // 6. Flat openingTime and closingTime check (fallback if outletTimings is missing)
+    final flatOpen = json['openingTime']?.toString();
+    final flatClose = json['closingTime']?.toString();
+    if (flatOpen != null && flatOpen.isNotEmpty && flatClose != null && flatClose.isNotEmpty) {
+      try {
+        final openParts = flatOpen.split(':');
+        final closeParts = flatClose.split(':');
+        if (openParts.length >= 2 && closeParts.length >= 2) {
+          final openMin = int.parse(openParts[0].trim()) * 60 + int.parse(openParts[1].trim());
+          final closeMin = int.parse(closeParts[0].trim()) * 60 + int.parse(closeParts[1].trim());
+          final nowMin = now.hour * 60 + now.minute;
+          if (closeMin > openMin) {
+            if (nowMin < openMin || nowMin >= closeMin) return false;
+          } else if (closeMin < openMin) {
+            if (nowMin < openMin && nowMin >= closeMin) return false;
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 7. Check if openDays restricts today
+    if (json['openDays'] is List) {
+      final openDaysList = (json['openDays'] as List)
+          .map((e) => e.toString().trim().toLowerCase())
+          .toList();
+      if (openDaysList.isNotEmpty && !openDaysList.contains(todayName.toLowerCase())) {
         return false;
-      }
-      if (openVal == true ||
-          openVal.toString().trim().toLowerCase() == 'true' ||
-          openVal == 1 ||
-          openVal.toString().trim() == '1') {
-        return true;
       }
     }
 
-    // 6. isOnline flag
-    if (json.containsKey('isOnline')) {
-      final online = json['isOnline'];
-      if (online == false ||
-          online?.toString().trim().toLowerCase() == 'false' ||
-          online == 0 ||
-          online?.toString().trim() == '0') {
-        return false;
-      }
+    // 8. If openVal was explicitly true
+    if (openVal != null &&
+        (openVal == true ||
+            openVal.toString().trim().toLowerCase() == 'true' ||
+            openVal == 1 ||
+            openVal.toString().trim() == '1')) {
+      return true;
     }
 
-    // 7. If isAcceptingOrders was explicitly true
+    // 9. If isAcceptingOrders was explicitly true
     if (json['isAcceptingOrders'] == true ||
         json['isAcceptingOrders']?.toString().trim().toLowerCase() == 'true') {
       return true;
     }
 
-    // 8. If status was explicitly open/active
+    // 10. If status was explicitly open/active
     if (rawStatus == 'open' || rawStatus == 'active' || rawStatus == 'opened') {
       return true;
     }

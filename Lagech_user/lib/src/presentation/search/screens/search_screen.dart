@@ -146,7 +146,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       );
     }
 
-    final allowed = await ensureCartRestaurant(context, ref, food.restaurantId);
+    final allowed = await ensureCartRestaurant(
+      context,
+      ref,
+      food.restaurantId,
+      forceCheck: true,
+    );
     if (!allowed || !mounted) return;
 
     ref.read(cartViewModelProvider.notifier).addItem(food);
@@ -316,6 +321,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   errorBorder: InputBorder.none,
                   focusedErrorBorder: InputBorder.none,
                   disabledBorder: InputBorder.none,
+                  filled: false, // theme fills every field; the pill draws the background
                   isDense: true,
                   contentPadding: EdgeInsets.zero,
                 ),

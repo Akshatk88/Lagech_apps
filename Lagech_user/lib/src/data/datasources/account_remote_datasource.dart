@@ -229,11 +229,8 @@ Body: ${jsonEncode(bodyMap)}
 Token: $token''');
 
     if (jwt == null || jwt.isEmpty) {
-      debugPrint('''
-[FCM] Authorization Failed
-JWT Token: NULL
-Expiry: N/A
-Current User: ${user?.id ?? "Guest"}''');
+      debugPrint('[FCM] User not logged in yet. Token cached locally and will be synced upon login.');
+      return false;
     }
 
     try {
@@ -242,7 +239,7 @@ Current User: ${user?.id ?? "Guest"}''');
         data: bodyMap,
         options: Options(
           headers: {
-            if (jwt != null && jwt.isNotEmpty) 'Authorization': 'Bearer $jwt',
+            'Authorization': 'Bearer $jwt',
             'Content-Type': 'application/json',
           },
         ),
@@ -268,7 +265,7 @@ Headers: $responseHeaders''');
         if (statusCode == 401 || statusCode == 403) {
           debugPrint('''
 [FCM] Authorization Failed
-JWT Token: ${jwt ?? "NULL"}
+JWT Token: $jwt
 Expiry: N/A
 Current User: ${user?.id ?? "Guest"}''');
         }

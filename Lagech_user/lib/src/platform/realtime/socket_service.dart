@@ -26,7 +26,7 @@ class OrderSocketMessage {
   double? get lat => _num(data['lat'] ?? data['latitude'] ?? data['boy_lat']);
   double? get lng => _num(data['lng'] ?? data['longitude'] ?? data['boy_lng']);
   double get heading => _num(data['heading']) ?? 0.0;
-  String? get otp => data['otp']?.toString();
+  String? get otp => (data['otp'] ?? data['code'] ?? data['handoverOtp'])?.toString();
   String? get orderId => (data['orderId'] ?? data['orderMongoId'])?.toString();
 }
 
@@ -65,10 +65,10 @@ class SocketService {
       final socket = io.io(
         ApiConfig.host,
         io.OptionBuilder()
-            // Keep 'polling' first — some networks block the initial
-            // websocket upgrade handshake.
-            .setTransports(['polling', 'websocket'])
+            .setTransports(['websocket', 'polling'])
             .setAuth({'token': accessToken})
+            .setExtraHeaders({'Authorization': 'Bearer $accessToken', 'authorization': 'Bearer $accessToken'})
+            .setQuery({'token': accessToken})
             .disableAutoConnect()
             .enableReconnection()
             .setReconnectionAttempts(1 << 30)

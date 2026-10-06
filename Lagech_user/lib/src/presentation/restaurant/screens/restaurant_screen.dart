@@ -13,6 +13,7 @@ import '../../branding/app_colors.dart';
 import '../../cart/utils/cart_restaurant_guard.dart';
 import '../../cart/viewmodels/cart_viewmodel.dart';
 import '../../cart/widgets/floating_view_cart_bar.dart';
+import '../../common_widgets/app_snackbar.dart';
 import '../../common_widgets/skeleton_loading.dart';
 import '../../common_widgets/smart_image.dart';
 import '../../coupons/viewmodels/coupons_viewmodel.dart';
@@ -637,6 +638,10 @@ class _RestaurantScreenState extends ConsumerState<RestaurantScreen> {
                         errorBorder: InputBorder.none,
                         focusedErrorBorder: InputBorder.none,
                         disabledBorder: InputBorder.none,
+                        // The theme fills every TextField; here that drew a
+                        // second, differently coloured box inside the pill.
+                        filled: false,
+                        fillColor: Colors.transparent,
                         isDense: true,
                         contentPadding: EdgeInsets.zero,
                       ),
@@ -776,6 +781,54 @@ class _RestaurantScreenState extends ConsumerState<RestaurantScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Closed Alert Banner
+          if (!restaurant.isOpen) ...[
+            Container(
+              margin: EdgeInsets.only(bottom: 10.h),
+              padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF3B1E1E) : const Color(0xFFFEE2E2),
+                borderRadius: BorderRadius.circular(12.r),
+                border: Border.all(
+                  color: isDark ? const Color(0xFF7F1D1D) : const Color(0xFFFCA5A5),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.store_mall_directory_outlined,
+                    color: Color(0xFFDC2626),
+                    size: 22,
+                  ),
+                  SizedBox(width: 10.w),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Restaurant Currently Closed',
+                          style: TextStyle(
+                            color: isDark ? const Color(0xFFFCA5A5) : const Color(0xFF991B1B),
+                            fontSize: 13.5.sp,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        SizedBox(height: 2.h),
+                        Text(
+                          'This restaurant is not accepting orders at the moment.',
+                          style: TextStyle(
+                            color: isDark ? const Color(0xFFE2E8F0) : const Color(0xFF7F1D1D),
+                            fontSize: 11.5.sp,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
           // Pure Veg Indicator matching Screenshot 5 (only if restaurant is pure veg)
           if (restaurant.isPureVeg) ...[
             Row(
@@ -2082,6 +2135,15 @@ class _RestaurantScreenState extends ConsumerState<RestaurantScreen> {
   }
 
   Future<void> _handleFirstAddToCart(FoodModel dish) async {
+    final currentRestaurant =
+        ref.read(restaurantViewModelProvider).restaurant ?? widget.restaurant;
+    if (currentRestaurant != null && !currentRestaurant.isOpen) {
+      AppSnackbar.warning(
+        context,
+        '${currentRestaurant.name} is currently closed and not accepting orders.',
+      );
+      return;
+    }
     Haptics.light();
     await addFoodToCart(context, ref, dish);
   }
@@ -2092,6 +2154,41 @@ class _RestaurantScreenState extends ConsumerState<RestaurantScreen> {
     int quantity,
     String? cartItemId,
   ) {
+    final currentRestaurant =
+        ref.watch(restaurantViewModelProvider).restaurant ?? widget.restaurant;
+    final isClosed = currentRestaurant != null && !currentRestaurant.isOpen;
+
+    if (isClosed) {
+      return GestureDetector(
+        key: const ValueKey('closed_btn'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          AppSnackbar.warning(
+            context,
+            '${currentRestaurant.name} is currently closed and not accepting orders.',
+          );
+        },
+        child: Container(
+          width: 96.w,
+          height: 34.h,
+          decoration: BoxDecoration(
+            color: Colors.grey.shade400,
+            borderRadius: BorderRadius.circular(8.r),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            'CLOSED',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 12.sp,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ),
+      );
+    }
+
     final hasQty = quantity > 0;
 
     return AnimatedSwitcher(

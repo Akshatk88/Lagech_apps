@@ -257,6 +257,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
               hintStyle: TextStyle(fontSize: 14, color: secondary, fontWeight: FontWeight.w400),
               prefixIcon: Icon(icon, color: _orange, size: 20),
               border: InputBorder.none,
+              filled: false, // theme fills every field; the container draws the background
               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
             ),
           ),

@@ -14,6 +14,7 @@ class RouteNames {
   static const String restaurantDetail = '/restaurant-detail';
   static const String foodDetail = '/food-detail';
   static const String addAddress = '/add-address';
+  static const String selectLocation = '/select-location';
   static const String allOffers = '/all-offers';
   static const String store99 = '/store-99';
   static const String notifications = '/notifications';

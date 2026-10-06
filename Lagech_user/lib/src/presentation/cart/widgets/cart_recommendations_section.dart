@@ -7,10 +7,12 @@ import '../../branding/app_colors.dart';
 import '../../common_widgets/skeleton_loading.dart';
 import '../../common_widgets/smart_image.dart';
 import '../../home/viewmodels/veg_filter_provider.dart';
+import '../../../di/catalog_providers.dart';
 import '../../../di/restaurant_providers.dart';
 import '../../restaurant/viewmodels/restaurant_detail_viewmodel.dart';
 import '../../restaurant/widgets/food_detail_sheet.dart';
 import '../animations/add_to_cart_animation.dart';
+import '../utils/cart_restaurant_guard.dart';
 import '../viewmodels/cart_viewmodel.dart';
 
 class CartRecommendationsSection extends ConsumerStatefulWidget {
@@ -74,6 +76,11 @@ class _CartRecommendationsSectionState extends ConsumerState<CartRecommendations
     final textColor = isDark ? Colors.white : AppColors.textPrimaryLight;
     final secondaryTextColor = isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
     final cardBg = isDark ? AppColors.cardDark : Colors.white;
+
+    final restaurant = ref.watch(restaurantByIdProvider(widget.restaurantId)).asData?.value;
+    if (restaurant != null && !restaurant.isOpen) {
+      return const SizedBox.shrink();
+    }
 
     final menuAsync = ref.watch(restaurantMenuProvider(widget.restaurantId));
     final isVegOnly = ref.watch(vegFilterProvider);
@@ -299,8 +306,16 @@ class _RecommendationProductCard extends ConsumerStatefulWidget {
 class _RecommendationProductCardState extends ConsumerState<_RecommendationProductCard> {
   final GlobalKey _imageKey = GlobalKey();
 
-  void _onAddToCart() {
+  Future<void> _onAddToCart() async {
     Haptics.light();
+    final allowed = await ensureCartRestaurant(
+      context,
+      ref,
+      widget.food.restaurantId,
+      forceCheck: true,
+    );
+    if (!allowed || !mounted) return;
+
     final targetKey = widget.targetCartKey;
     if (targetKey == null || targetKey.currentContext == null) {
       ref.read(cartViewModelProvider.notifier).addItem(widget.food);

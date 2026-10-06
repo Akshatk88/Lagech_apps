@@ -262,8 +262,12 @@ class _HomeHeaderBannerState extends ConsumerState<HomeHeaderBanner> {
     String locationTitle = 'Select Location';
     String locationSubtitle = 'Tap to choose address';
 
-    // 1. If user explicitly entered/selected a location, show that
-    if (activeLocation != null && activeLocation.isManual && activeLocation.title.isNotEmpty) {
+    // 1. If user explicitly entered/selected a location — including "Use current
+    //    location" — show that. Background-detected GPS does not count: that one
+    //    still yields to a saved default address below.
+    if (activeLocation != null &&
+        (activeLocation.isManual || activeLocation.isCurrentLocation) &&
+        activeLocation.title.isNotEmpty) {
       locationTitle = activeLocation.title;
       locationSubtitle = activeLocation.subtitle;
     }
@@ -303,9 +307,11 @@ class _HomeHeaderBannerState extends ConsumerState<HomeHeaderBanner> {
             behavior: HitTestBehavior.opaque,
             onTap: () async {
               Haptics.light();
-              await context.push(RouteNames.addAddress);
+              await context.push(RouteNames.selectLocation);
               if (context.mounted) {
-                ref.invalidate(activeLocationProvider);
+                // activeLocationProvider is deliberately NOT invalidated: that
+                // resets it to empty, wiping a "Use current location" choice
+                // (only manual picks are restored from disk).
                 ref.invalidate(addressViewModelProvider);
                 ref.invalidate(homeViewModelProvider);
               }

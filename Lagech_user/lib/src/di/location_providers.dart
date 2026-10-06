@@ -19,12 +19,18 @@ class UserLocationInfo {
   final double? longitude;
   final bool isManual;
 
+  /// The user explicitly asked for "Use current location". Unlike a location the
+  /// app detected in the background, this should win over a saved default
+  /// address in the header. Not persisted: GPS is re-read each launch.
+  final bool isCurrentLocation;
+
   const UserLocationInfo({
     required this.title,
     required this.subtitle,
     this.latitude,
     this.longitude,
     this.isManual = false,
+    this.isCurrentLocation = false,
   });
 }
 
@@ -78,6 +84,20 @@ class ActiveLocationNotifier extends Notifier<UserLocationInfo?> {
     } catch (_) {}
   }
 
+  /// Forgets a previously chosen place on disk without touching what is on
+  /// screen — used after switching to live GPS, so the old manual pick is not
+  /// restored on the next launch.
+  Future<void> forgetSavedSelection() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_prefTitleKey);
+      await prefs.remove(_prefSubtitleKey);
+      await prefs.remove(_prefLatKey);
+      await prefs.remove(_prefLngKey);
+      await prefs.remove(_prefManualKey);
+    } catch (_) {}
+  }
+
   void clear() {
     state = null;
     SharedPreferences.getInstance().then((prefs) {
@@ -94,7 +114,7 @@ class ActiveLocationNotifier extends Notifier<UserLocationInfo?> {
   /// If [force] is true, overrides any previous manual selection.
   Future<bool> autoFetchGpsLocation({bool force = false}) async {
     // If user already manually selected location and we are not forcing, do not overwrite
-    if (state != null && state!.isManual && !force) {
+    if (state != null && (state!.isManual || state!.isCurrentLocation) && !force) {
       return false;
     }
 
@@ -143,7 +163,11 @@ class ActiveLocationNotifier extends Notifier<UserLocationInfo?> {
       final locationService = ref.read(locationServiceProvider);
       final catalogSource = ref.read(catalogRemoteDataSourceProvider);
 
-      final geoFuture = locationService.reverseGeocode(lat, lng);
+      // A failed address lookup must not fail the whole fetch: the coordinates
+      // are what the feed needs, and the title can fall back to the zone name.
+      final geoFuture = locationService
+          .reverseGeocode(lat, lng)
+          .catchError((_) => UserLocationResult(latitude: lat, longitude: lng));
       final zoneFuture = catalogSource
           .detectZone(lat: lat, lng: lng)
           .catchError((_) => ZoneModel.unknown);
@@ -200,6 +224,8 @@ class ActiveLocationNotifier extends Notifier<UserLocationInfo?> {
         latitude: lat,
         longitude: lng,
         isManual: false,
+        // `force` is only ever passed for an explicit "Use current location".
+        isCurrentLocation: force,
       );
 
       // Invalidate zone provider so products & restaurants update for new location

@@ -282,12 +282,17 @@ class CatalogRemoteDataSource {
     String id, {
     double? lat,
     double? lng,
+    bool forceRefresh = false,
   }) async {
     final data = await _client.get<Map<String, dynamic>>(
       ApiPaths.restaurantById(id),
-      query: {'lat': lat, 'lng': lng},
+      query: {
+        'lat': lat,
+        'lng': lng,
+        if (forceRefresh) '_t': DateTime.now().millisecondsSinceEpoch,
+      },
       auth: false,
-      cacheTtl: _cacheTtl,
+      cacheTtl: forceRefresh ? Duration.zero : _cacheTtl,
     );
     final r = data['restaurant'];
     return r is Map ? RestaurantModel.fromApi(r.cast<String, dynamic>()) : null;

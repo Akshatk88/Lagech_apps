@@ -3,7 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../data/models/food_model.dart';
 import '../../../data/models/food_variant.dart';
+import '../../../data/models/restaurant_model.dart';
+import '../../../di/catalog_providers.dart';
+import '../../../di/location_providers.dart';
 import '../../branding/app_colors.dart';
+import '../../common_widgets/app_snackbar.dart';
 import '../../restaurant/widgets/food_detail_sheet.dart';
 import '../../restaurant/widgets/variant_picker_sheet.dart';
 import '../viewmodels/cart_viewmodel.dart';
@@ -15,11 +19,37 @@ import '../viewmodels/cart_viewmodel.dart';
 Future<bool> ensureCartRestaurant(
   BuildContext context,
   WidgetRef ref,
-  String restaurantId,
-) async {
+  String restaurantId, {
+  bool forceCheck = true,
+}) async {
+  try {
+    RestaurantModel? restaurant;
+    if (forceCheck) {
+      final here = await ref.read(userLatLngProvider.future);
+      restaurant = await ref.read(catalogRemoteDataSourceProvider).getRestaurantById(
+        restaurantId,
+        lat: here?.lat,
+        lng: here?.lng,
+        forceRefresh: true,
+      );
+    } else {
+      restaurant = await ref.read(restaurantByIdProvider(restaurantId).future);
+    }
+    if (restaurant != null && !restaurant.isOpen) {
+      if (context.mounted) {
+        AppSnackbar.warning(
+          context,
+          '${restaurant.name} is currently closed and not accepting orders.',
+        );
+      }
+      return false;
+    }
+  } catch (_) {}
+
   final notifier = ref.read(cartViewModelProvider.notifier);
   if (!notifier.hasRestaurantConflict(restaurantId)) return true;
 
+  if (!context.mounted) return false;
   final replace = await showDialog<bool>(
     context: context,
     builder: (_) => const _ReplaceCartDialog(),
@@ -49,6 +79,10 @@ Future<void> addFoodToCart(
   List<FoodAddon> selectedAddonDetails = const [],
   bool fromBottomSheet = false,
 }) async {
+  // Check restaurant availability FIRST before opening any sheet or adding
+  final allowed = await ensureCartRestaurant(context, ref, food.restaurantId);
+  if (!allowed || !context.mounted) return;
+
   // Check if item has backend variants and hasn't been configured yet
   final hasVariants = food.variants.isNotEmpty;
 
@@ -72,9 +106,6 @@ Future<void> addFoodToCart(
     );
     return;
   }
-
-  final allowed = await ensureCartRestaurant(context, ref, food.restaurantId);
-  if (!allowed) return;
 
   var variant = selectedVariant;
   var variantPrice = selectedVariantPrice;

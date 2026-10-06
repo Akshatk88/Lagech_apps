@@ -365,6 +365,7 @@ class _LocationPickerSheetState extends ConsumerState<LocationPickerSheet>
                                     : Colors.grey.shade400,
                               ),
                               border: InputBorder.none,
+                              filled: false, // theme fills every field; the pill draws the background
                               isDense: true,
                               contentPadding: EdgeInsets.zero,
                             ),

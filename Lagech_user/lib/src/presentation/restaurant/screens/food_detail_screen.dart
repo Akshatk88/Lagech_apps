@@ -16,6 +16,7 @@ import '../../cart/utils/cart_restaurant_guard.dart';
 import '../../cart/animations/add_to_cart_animation.dart';
 import '../../cart/widgets/floating_view_cart_bar.dart';
 import '../../branding/app_colors.dart';
+import '../../common_widgets/app_snackbar.dart';
 import '../../common_widgets/smart_image.dart';
 import '../../favorites/viewmodels/favorites_viewmodel.dart';
 import '../../navigation/route_names.dart';
@@ -1003,108 +1004,125 @@ class _FoodDetailScreenState extends ConsumerState<FoodDetailScreen>
           const SizedBox(width: 12),
 
           // Add to Cart Button
-          Expanded(
-            child: ScaleTransition(
-              scale: _cartBounceAnimation,
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTapDown: (_) => _cartBounceController.forward(),
-                  onTapUp: (_) => _cartBounceController.reverse(),
-                  onTapCancel: () => _cartBounceController.reverse(),
-                  onTap: () async {
-                    final allowed = await ensureCartRestaurant(
-                      context,
-                      ref,
-                      widget.food.restaurantId,
-                    );
-                    if (!allowed || !mounted) return;
+          Builder(
+            builder: (context) {
+              final restaurant = ref.watch(restaurantByIdProvider(widget.food.restaurantId)).asData?.value;
+              final isClosed = restaurant != null && !restaurant.isOpen;
 
-                    Haptics.light();
-                    // Fly-to-cart animation whose flight target is this
-                    // screen's own floating "View Cart" bar; the item is only
-                    // added once the flight completes.
-                    final hasThumbs = widget.food.imageGallery.isNotEmpty;
-                    final startKey = hasThumbs
-                        ? _thumbKeys[_currentImageIndex.clamp(
-                            0,
-                            _thumbKeys.length - 1,
-                          )]
-                        : _imageKey;
-                    final anchorKey = _cartBarKey.currentState?.flightAnchorKey;
+              return Expanded(
+                child: ScaleTransition(
+                  scale: _cartBounceAnimation,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTapDown: isClosed ? null : (_) => _cartBounceController.forward(),
+                      onTapUp: isClosed ? null : (_) => _cartBounceController.reverse(),
+                      onTapCancel: isClosed ? null : () => _cartBounceController.reverse(),
+                      onTap: () async {
+                        if (isClosed) {
+                          AppSnackbar.warning(
+                            context,
+                            '${restaurant.name} is currently closed and not accepting orders.',
+                          );
+                          return;
+                        }
 
-                    void addAll() {
-                      final cartNotifier = ref.read(
-                        cartViewModelProvider.notifier,
-                      );
-                      for (int i = 0; i < _quantity; i++) {
-                        cartNotifier.addItem(
-                          widget.food,
-                          selectedVariant: _selectedVariant?.name,
-                          selectedVariantPrice: variantDelta,
-                          selectedAddons: selectedAddons
-                              .map((a) => a.id)
-                              .toList(),
-                          selectedAddonsPrice: addonsTotal,
-                          selectedAddonDetails: selectedAddons,
+                        final allowed = await ensureCartRestaurant(
+                          context,
+                          ref,
+                          widget.food.restaurantId,
                         );
-                      }
-                      Haptics.medium();
-                      _cartBarKey.currentState?.bump();
-                    }
+                        if (!allowed || !mounted) return;
 
-                    if (anchorKey == null) {
-                      addAll();
-                      return;
-                    }
+                        Haptics.light();
+                        // Fly-to-cart animation whose flight target is this
+                        // screen's own floating "View Cart" bar; the item is only
+                        // added once the flight completes.
+                        final hasThumbs = widget.food.imageGallery.isNotEmpty;
+                        final startKey = hasThumbs
+                            ? _thumbKeys[_currentImageIndex.clamp(
+                                0,
+                                _thumbKeys.length - 1,
+                              )]
+                            : _imageKey;
+                        final anchorKey = _cartBarKey.currentState?.flightAnchorKey;
 
-                    AddToCartAnimation.run(
-                      context: context,
-                      startKey: startKey,
-                      endKey: anchorKey,
-                      imageUrl: widget.food.imageUrl,
-                      onAnimationComplete: addAll,
-                    );
-                  },
-                  borderRadius: BorderRadius.circular(25),
-                  child: Ink(
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary,
+                        void addAll() {
+                          final cartNotifier = ref.read(
+                            cartViewModelProvider.notifier,
+                          );
+                          for (int i = 0; i < _quantity; i++) {
+                            cartNotifier.addItem(
+                              widget.food,
+                              selectedVariant: _selectedVariant?.name,
+                              selectedVariantPrice: variantDelta,
+                              selectedAddons: selectedAddons
+                                  .map((a) => a.id)
+                                  .toList(),
+                              selectedAddonsPrice: addonsTotal,
+                              selectedAddonDetails: selectedAddons,
+                            );
+                          }
+                          Haptics.medium();
+                          _cartBarKey.currentState?.bump();
+                        }
+
+                        if (anchorKey == null) {
+                          addAll();
+                          return;
+                        }
+
+                        AddToCartAnimation.run(
+                          context: context,
+                          startKey: startKey,
+                          endKey: anchorKey,
+                          imageUrl: widget.food.imageUrl,
+                          onAnimationComplete: addAll,
+                        );
+                      },
                       borderRadius: BorderRadius.circular(25),
-                    ),
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.shopping_cart_outlined,
-                                color: Colors.white,
-                                size: 19,
+                      child: Ink(
+                        height: 50,
+                        decoration: BoxDecoration(
+                          color: isClosed ? Colors.grey.shade400 : AppColors.primary,
+                          borderRadius: BorderRadius.circular(25),
+                        ),
+                        child: Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    isClosed ? Icons.lock_clock_rounded : Icons.shopping_cart_outlined,
+                                    color: Colors.white,
+                                    size: 19,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    isClosed
+                                        ? 'Restaurant Currently Closed'
+                                        : 'Add to Cart • ₹${(unitPrice * _quantity).toStringAsFixed(0)}',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Add to Cart • ₹${(unitPrice * _quantity).toStringAsFixed(0)}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
         ],
       ),

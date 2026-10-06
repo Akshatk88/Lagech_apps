@@ -14,6 +14,7 @@ import '../auth/viewmodels/auth_viewmodel.dart';
 import '../address/viewmodels/address_viewmodel.dart';
 import '../../data/models/address_model.dart';
 import '../../di/catalog_providers.dart';
+import '../../di/location_providers.dart';
 import 'viewmodels/cart_viewmodel.dart';
 import '../checkout/viewmodels/checkout_viewmodel.dart';
 import '../wallet/viewmodels/wallet_viewmodel.dart';
@@ -44,6 +45,19 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   // razorpay | razorpay_qr | card | wallet | cash -- so the COD button always failed.
   String _selectedPaymentMethod = 'razorpay'; // 'razorpay' | 'cash' | 'wallet'
   String? _selectedAddressId;
+
+  @override
+  void initState() {
+    super.initState();
+    // Freshly check restaurant availability when opening the cart screen
+    Future.microtask(() {
+      final items = ref.read(cartViewModelProvider).items;
+      if (items.isNotEmpty) {
+        final rid = items.first.food.restaurantId;
+        ref.invalidate(restaurantByIdProvider(rid));
+      }
+    });
+  }
 
   AddressModel? _resolveSelectedAddress() {
     final addresses = ref.read(addressViewModelProvider);
@@ -85,6 +99,27 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           '${RouteNames.login}?from=${Uri.encodeComponent(RouteNames.cart)}',
         );
         return;
+      }
+
+      // Guard against placing orders for closed / offline restaurants
+      final cartItems = ref.read(cartViewModelProvider).items;
+      if (cartItems.isNotEmpty) {
+        final restaurantId = cartItems.first.food.restaurantId;
+        final here = await ref.read(userLatLngProvider.future);
+        final restaurant = await ref.read(catalogRemoteDataSourceProvider).getRestaurantById(
+          restaurantId,
+          lat: here?.lat,
+          lng: here?.lng,
+          forceRefresh: true,
+        );
+        if (restaurant != null && !restaurant.isOpen) {
+          if (!mounted) return;
+          AppSnackbar.error(
+            context,
+            '${restaurant.name} is currently closed and not accepting orders.',
+          );
+          return;
+        }
       }
 
       var address = _resolveSelectedAddress();
@@ -173,7 +208,6 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         }
       }
 
-      final cartItems = ref.read(cartViewModelProvider).items;
       if (cartItems.isEmpty) return;
 
       final result = await ref
@@ -384,6 +418,62 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
         children: [
+          // Closed restaurant alert banner
+          if (cartRestaurant != null && !cartRestaurant.isOpen)
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF3B1E1E) : const Color(0xFFFEE2E2),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isDark ? const Color(0xFF7F1D1D) : const Color(0xFFFCA5A5),
+                  width: 1.2,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF5C2626) : const Color(0xFFFECACA),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.store_mall_directory_outlined,
+                      color: Color(0xFFDC2626),
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${cartRestaurant.name} is Currently Closed',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? const Color(0xFFFCA5A5) : const Color(0xFF991B1B),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'This restaurant is not accepting orders at the moment. You cannot place an order right now.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark ? const Color(0xFFE2E8F0) : const Color(0xFF7F1D1D),
+                            height: 1.3,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
           // Savings banner (Screenshot 1)
           if (otherAppsSaving > 0)
             _buildSavingsBanner(otherAppsSaving, isDark),
@@ -450,6 +540,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         billReady ? toPay : null,
         isDark,
         textColor,
+        cartRestaurant: cartRestaurant,
       ),
     );
   }
@@ -2375,8 +2466,9 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     BuildContext context,
     double? toPay,
     bool isDark,
-    Color textColor,
-  ) {
+    Color textColor, {
+    RestaurantModel? cartRestaurant,
+  }) {
     final walletState = ref.watch(walletViewModelProvider);
     final walletBalance = walletState.wallet.balance;
     final currentUser = ref.watch(authViewModelProvider).value;
@@ -2505,55 +2597,85 @@ class _CartScreenState extends ConsumerState<CartScreen> {
             const SizedBox(height: 10),
 
             // Proceed to Payment Button
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  elevation: 4,
-                  shadowColor: AppColors.primary.withValues(alpha: 0.6),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(28),
+            Builder(builder: (context) {
+              final isClosed = cartRestaurant != null && !cartRestaurant.isOpen;
+
+              return SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isClosed ? Colors.grey.shade500 : AppColors.primary,
+                    foregroundColor: Colors.white,
+                    elevation: isClosed ? 0 : 4,
+                    shadowColor: isClosed
+                        ? Colors.transparent
+                        : AppColors.primary.withValues(alpha: 0.6),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(28),
+                    ),
                   ),
-                ),
-                onPressed: _isProcessing ? null : _proceedToPayment,
-                child: _isProcessing
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 3,
-                        ),
-                      )
-                    : Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              _getPaymentButtonLabel(toPay),
-                              style: const TextStyle(
+                  onPressed: isClosed
+                      ? () {
+                          AppSnackbar.warning(
+                            context,
+                            '${cartRestaurant.name} is currently closed and not accepting orders.',
+                          );
+                        }
+                      : (_isProcessing ? null : _proceedToPayment),
+                  child: isClosed
+                      ? const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.store_mall_directory_outlined, color: Colors.white, size: 20),
+                            SizedBox(width: 8),
+                            Text(
+                              'Restaurant Currently Closed',
+                              style: TextStyle(
                                 color: Colors.white,
-                                fontSize: 16,
+                                fontSize: 15,
                                 fontWeight: FontWeight.bold,
                                 letterSpacing: 0.5,
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          const Icon(
-                            Icons.arrow_forward_rounded,
-                            color: Colors.white,
-                            size: 18,
-                          ),
-                        ],
-                      ),
-              ),
-            ),
+                          ],
+                        )
+                      : (_isProcessing
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 3,
+                              ),
+                            )
+                          : Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    _getPaymentButtonLabel(toPay),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                const Icon(
+                                  Icons.arrow_forward_rounded,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
+                              ],
+                            )),
+                ),
+              );
+            }),
           ],
         ),
       ),

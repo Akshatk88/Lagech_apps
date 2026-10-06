@@ -242,7 +242,7 @@ class HomeFilterScreen extends ConsumerWidget {
               child: ElevatedButton.icon(
                 onPressed: () {
                   Haptics.light();
-                  context.push(RouteNames.addAddress);
+                  context.push(RouteNames.selectLocation);
                 },
                 icon: Icon(Icons.location_on_rounded, size: 20.sp, color: Colors.white),
                 label: Text(

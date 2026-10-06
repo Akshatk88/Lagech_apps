@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/error/failures.dart';
 import '../../../data/models/order_model.dart';
 import '../../../data/models/order_pricing.dart';
+import '../../../di/catalog_providers.dart';
+import '../../../di/location_providers.dart';
 import '../../../di/order_providers.dart';
 import '../../../di/payment_providers.dart';
 import '../../../platform/payment/payment_gateway.dart';
@@ -191,6 +193,24 @@ class CheckoutViewModel extends Notifier<CheckoutState> {
     final pricing = state.pricing;
 
     if (cart.items.isEmpty) return (result: null, error: 'Your cart is empty.');
+
+    try {
+      final restaurantId = cart.items.first.food.restaurantId;
+      final here = await ref.read(userLatLngProvider.future);
+      final restaurant = await ref.read(catalogRemoteDataSourceProvider).getRestaurantById(
+            restaurantId,
+            lat: here?.lat,
+            lng: here?.lng,
+            forceRefresh: true,
+          );
+      if (restaurant != null && !restaurant.isOpen) {
+        return (
+          result: null,
+          error: '${restaurant.name} is currently closed and not accepting orders.',
+        );
+      }
+    } catch (_) {}
+
     if (pricing == null) return (result: null, error: 'Bill not ready. Please try again.');
     if (state.needsPriceConfirmation) {
       return (result: null, error: 'Item prices changed. Please review before ordering.');

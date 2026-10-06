@@ -6,12 +6,14 @@ import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/utils/haptics.dart';
 import '../../../data/models/food_model.dart';
+import '../../../di/catalog_providers.dart';
 import '../../../domain/model/store99_product.dart';
 import '../../branding/app_colors.dart';
 import '../../cart/utils/cart_restaurant_guard.dart';
 import '../../cart/viewmodels/cart_viewmodel.dart';
 import '../../cart/widgets/floating_view_cart_bar.dart';
 import '../../common_widgets/app_refresh_indicator.dart';
+import '../../common_widgets/app_snackbar.dart';
 import '../../common_widgets/smart_image.dart';
 import '../../navigation/route_names.dart';
 import '../viewmodels/store99_viewmodel.dart';
@@ -63,6 +65,14 @@ class _Store99ScreenState extends ConsumerState<Store99Screen> {
   }
 
   Future<void> _handleFirstAddToCart(FoodModel food) async {
+    final restaurant = ref.read(restaurantByIdProvider(food.restaurantId)).asData?.value;
+    if (restaurant != null && !restaurant.isOpen) {
+      AppSnackbar.warning(
+        context,
+        '${restaurant.name} is currently closed and not accepting orders.',
+      );
+      return;
+    }
     Haptics.light();
     await addFoodToCart(context, ref, food);
   }
@@ -571,6 +581,7 @@ class _Store99ScreenState extends ConsumerState<Store99Screen> {
                           errorBorder: InputBorder.none,
                           focusedErrorBorder: InputBorder.none,
                           disabledBorder: InputBorder.none,
+                          filled: false, // theme fills every field; the pill draws the background
                           isDense: true,
                           contentPadding: EdgeInsets.zero,
                         ),
@@ -1355,6 +1366,40 @@ class _Store99ScreenState extends ConsumerState<Store99Screen> {
     int quantity,
     String? cartItemId,
   ) {
+    final restaurant = ref.watch(restaurantByIdProvider(dish.restaurantId)).asData?.value;
+    final isClosed = restaurant != null && !restaurant.isOpen;
+
+    if (isClosed) {
+      return GestureDetector(
+        key: const ValueKey('closed_btn'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          AppSnackbar.warning(
+            context,
+            '${restaurant.name} is currently closed and not accepting orders.',
+          );
+        },
+        child: Container(
+          width: 96.w,
+          height: 34.h,
+          decoration: BoxDecoration(
+            color: Colors.grey.shade400,
+            borderRadius: BorderRadius.circular(8.r),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            'CLOSED',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 12.sp,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ),
+      );
+    }
+
     final hasQty = quantity > 0;
 
     return AnimatedSwitcher(
@@ -1449,7 +1494,6 @@ class _Store99ScreenState extends ConsumerState<Store99Screen> {
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 13.5.sp,
-                      fontWeight: FontWeight.w800,
                     ),
                   ),
                   GestureDetector(

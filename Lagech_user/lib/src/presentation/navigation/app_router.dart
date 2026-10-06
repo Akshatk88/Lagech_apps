@@ -21,6 +21,8 @@ import '../restaurant/screens/store99_screen.dart';
 import '../offers/screens/all_offers_screen.dart';
 import '../search/screens/search_screen.dart';
 import '../address/screens/add_address_screen.dart';
+import '../address/screens/select_location_screen.dart';
+import '../../data/models/address_model.dart';
 import '../favorites/favorites_screen.dart';
 import '../orders/screens/orders_screen.dart';
 import '../orders/screens/order_details_screen.dart';
@@ -325,7 +327,15 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: RouteNames.addAddress,
         parentNavigatorKey: rootNavigatorKey,
-        builder: (context, state) => const AddAddressScreen(),
+        // `extra` carries an address when this opens to edit one.
+        builder: (context, state) => AddAddressScreen(
+          editAddress: state.extra is AddressModel ? state.extra as AddressModel : null,
+        ),
+      ),
+      GoRoute(
+        path: RouteNames.selectLocation,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => const SelectLocationScreen(),
       ),
       GoRoute(
         path: RouteNames.allOffers,

@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/utils/haptics.dart';
 import '../../branding/app_colors.dart';
-import '../../../di/location_providers.dart';
 import '../../address/viewmodels/address_viewmodel.dart';
 import '../../home/viewmodels/home_viewmodel.dart';
 import '../../navigation/route_names.dart';
@@ -51,9 +50,8 @@ class OutOfServiceScreen extends ConsumerWidget {
                       // Same flow as the location in the home header.
                       onPressed: () async {
                         Haptics.light();
-                        await context.push(RouteNames.addAddress);
+                        await context.push(RouteNames.selectLocation);
                         if (context.mounted) {
-                          ref.invalidate(activeLocationProvider);
                           ref.invalidate(addressViewModelProvider);
                           ref.invalidate(homeViewModelProvider);
                         }

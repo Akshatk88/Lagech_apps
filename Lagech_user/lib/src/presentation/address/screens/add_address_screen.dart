@@ -26,7 +26,10 @@ import '../../home/viewmodels/zone_viewmodel.dart';
 import '../../home/viewmodels/home_viewmodel.dart';
 
 class AddAddressScreen extends ConsumerStatefulWidget {
-  const AddAddressScreen({super.key});
+  const AddAddressScreen({super.key, this.editAddress});
+
+  /// When set, the form opens pre-filled to edit this saved address.
+  final AddressModel? editAddress;
 
   @override
   ConsumerState<AddAddressScreen> createState() => _AddAddressScreenState();
@@ -107,7 +110,13 @@ class _AddAddressScreenState extends ConsumerState<AddAddressScreen> {
     _pincodeController.addListener(() => setState(() {}));
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initAutoLocation();
+      final editing = widget.editAddress;
+      if (editing != null) {
+        // Start from the address being edited, not from the user's GPS fix.
+        _populateFormFromAddress(editing);
+      } else {
+        _initAutoLocation();
+      }
     });
   }
 

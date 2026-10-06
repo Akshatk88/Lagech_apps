@@ -6,9 +6,11 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/utils/haptics.dart';
 import '../../../data/models/cart_item_model.dart';
 import '../../../data/models/food_model.dart';
+import '../../../di/catalog_providers.dart';
 import '../../branding/app_colors.dart';
 import '../../cart/utils/cart_restaurant_guard.dart';
 import '../../cart/viewmodels/cart_viewmodel.dart';
+import '../../common_widgets/app_snackbar.dart';
 import '../../common_widgets/smart_image.dart';
 import 'food_diet_info.dart';
 
@@ -69,6 +71,14 @@ class _FoodQuickDetailSheet extends ConsumerStatefulWidget {
 
 class _FoodQuickDetailSheetState extends ConsumerState<_FoodQuickDetailSheet> {
   Future<void> _handleAddToCart() async {
+    final restaurant = ref.read(restaurantByIdProvider(widget.food.restaurantId)).asData?.value;
+    if (restaurant != null && !restaurant.isOpen) {
+      AppSnackbar.warning(
+        context,
+        '${restaurant.name} is currently closed and not accepting orders.',
+      );
+      return;
+    }
     Haptics.light();
     await addFoodToCart(context, ref, widget.food);
     widget.onAdded?.call();
@@ -388,121 +398,156 @@ class _FoodQuickDetailSheetState extends ConsumerState<_FoodQuickDetailSheet> {
                       Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Container(
-                            height: 38.h,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF05151),
-                              borderRadius: BorderRadius.circular(10.r),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(0xFFF05151)
-                                      .withValues(alpha: 0.35),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 3),
+                          Builder(builder: (context) {
+                            final restaurant = ref.watch(restaurantByIdProvider(food.restaurantId)).asData?.value;
+                            final isClosed = restaurant != null && !restaurant.isOpen;
+
+                            if (isClosed) {
+                              return GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: () {
+                                  AppSnackbar.warning(
+                                    context,
+                                    '${restaurant.name} is currently closed and not accepting orders.',
+                                  );
+                                },
+                                child: Container(
+                                  height: 38.h,
+                                  padding: EdgeInsets.symmetric(horizontal: 16.w),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade400,
+                                    borderRadius: BorderRadius.circular(10.r),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    'CLOSED',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 13.sp,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
                                 ),
-                              ],
-                            ),
-                            child: !hasQty
-                                ? GestureDetector(
-                                    behavior: HitTestBehavior.opaque,
-                                    onTap: _handleAddToCart,
-                                    child: Padding(
-                                      padding: EdgeInsets.symmetric(
-                                          horizontal: 16.w),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.remove_rounded,
-                                            color: Colors.white70,
-                                            size: 16.sp,
+                              );
+                            }
+
+                            return Container(
+                              height: 38.h,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF05151),
+                                borderRadius: BorderRadius.circular(10.r),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFFF05151)
+                                        .withValues(alpha: 0.35),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ],
+                              ),
+                              child: !hasQty
+                                  ? GestureDetector(
+                                      behavior: HitTestBehavior.opaque,
+                                      onTap: _handleAddToCart,
+                                      child: Padding(
+                                        padding: EdgeInsets.symmetric(
+                                            horizontal: 16.w),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.remove_rounded,
+                                              color: Colors.white70,
+                                              size: 16.sp,
+                                            ),
+                                            SizedBox(width: 8.w),
+                                            Text(
+                                              'ADD',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 14.sp,
+                                                fontWeight: FontWeight.w800,
+                                                letterSpacing: 0.5,
+                                              ),
+                                            ),
+                                            SizedBox(width: 8.w),
+                                            Icon(
+                                              Icons.add_rounded,
+                                              color: Colors.white,
+                                              size: 16.sp,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    )
+                                  : Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        GestureDetector(
+                                          behavior: HitTestBehavior.opaque,
+                                          onTap: cartItemId == null
+                                              ? null
+                                              : () {
+                                                  Haptics.light();
+                                                  ref
+                                                      .read(cartViewModelProvider
+                                                          .notifier)
+                                                      .updateQuantity(
+                                                        cartItemId!,
+                                                        quantity - 1,
+                                                      );
+                                                },
+                                          child: Padding(
+                                            padding: EdgeInsets.symmetric(
+                                                horizontal: 10.w, vertical: 6.h),
+                                            child: Icon(
+                                              Icons.remove_rounded,
+                                              color: Colors.white,
+                                              size: 16.sp,
+                                            ),
                                           ),
-                                          SizedBox(width: 8.w),
-                                          Text(
-                                            'ADD',
+                                        ),
+                                        Padding(
+                                          padding: EdgeInsets.symmetric(
+                                              horizontal: 4.w),
+                                          child: Text(
+                                            '$quantity',
                                             style: TextStyle(
                                               color: Colors.white,
                                               fontSize: 14.sp,
                                               fontWeight: FontWeight.w800,
-                                              letterSpacing: 0.5,
                                             ),
                                           ),
-                                          SizedBox(width: 8.w),
-                                          Icon(
-                                            Icons.add_rounded,
-                                            color: Colors.white,
-                                            size: 16.sp,
+                                        ),
+                                        GestureDetector(
+                                          behavior: HitTestBehavior.opaque,
+                                          onTap: cartItemId == null
+                                              ? null
+                                              : () {
+                                                  Haptics.light();
+                                                  ref
+                                                      .read(cartViewModelProvider
+                                                          .notifier)
+                                                      .updateQuantity(
+                                                        cartItemId!,
+                                                        quantity + 1,
+                                                      );
+                                                },
+                                          child: Padding(
+                                            padding: EdgeInsets.symmetric(
+                                                horizontal: 10.w, vertical: 6.h),
+                                            child: Icon(
+                                              Icons.add_rounded,
+                                              color: Colors.white,
+                                              size: 16.sp,
+                                            ),
                                           ),
-                                        ],
-                                      ),
+                                        ),
+                                      ],
                                     ),
-                                  )
-                                : Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      GestureDetector(
-                                        behavior: HitTestBehavior.opaque,
-                                        onTap: cartItemId == null
-                                            ? null
-                                            : () {
-                                                Haptics.light();
-                                                ref
-                                                    .read(cartViewModelProvider
-                                                        .notifier)
-                                                    .updateQuantity(
-                                                      cartItemId!,
-                                                      quantity - 1,
-                                                    );
-                                              },
-                                        child: Padding(
-                                          padding: EdgeInsets.symmetric(
-                                              horizontal: 10.w, vertical: 6.h),
-                                          child: Icon(
-                                            Icons.remove_rounded,
-                                            color: Colors.white,
-                                            size: 16.sp,
-                                          ),
-                                        ),
-                                      ),
-                                      Padding(
-                                        padding: EdgeInsets.symmetric(
-                                            horizontal: 4.w),
-                                        child: Text(
-                                          '$quantity',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 14.sp,
-                                            fontWeight: FontWeight.w800,
-                                          ),
-                                        ),
-                                      ),
-                                      GestureDetector(
-                                        behavior: HitTestBehavior.opaque,
-                                        onTap: cartItemId == null
-                                            ? null
-                                            : () {
-                                                Haptics.light();
-                                                ref
-                                                    .read(cartViewModelProvider
-                                                        .notifier)
-                                                    .updateQuantity(
-                                                      cartItemId!,
-                                                      quantity + 1,
-                                                    );
-                                              },
-                                        child: Padding(
-                                          padding: EdgeInsets.symmetric(
-                                              horizontal: 10.w, vertical: 6.h),
-                                          child: Icon(
-                                            Icons.add_rounded,
-                                            color: Colors.white,
-                                            size: 16.sp,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                          ),
+                            );
+                          }),
                           if (food.variants.isNotEmpty) ...[
                             SizedBox(height: 3.h),
                             Text(

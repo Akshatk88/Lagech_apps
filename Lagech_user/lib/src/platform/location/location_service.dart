@@ -17,6 +17,22 @@ class PlaceSuggestion {
   final double longitude;
 }
 
+/// A named place for the location picker: a business, landmark or street, with
+/// the address line shown under it.
+class NearbyPlace {
+  const NearbyPlace({
+    required this.name,
+    required this.address,
+    required this.latitude,
+    required this.longitude,
+  });
+
+  final String name;
+  final String address;
+  final double latitude;
+  final double longitude;
+}
+
 class UserLocationResult {
   final double? latitude;
   final double? longitude;
@@ -128,6 +144,127 @@ class LocationService {
     } catch (_) {
       return null;
     }
+  }
+
+  static const _placesBase = 'https://places.googleapis.com/v1';
+
+  /// Only what the picker shows — Places bills by the fields requested.
+  static const _placeFields =
+      'places.displayName,places.formattedAddress,places.location';
+
+  Options _placesOptions() => Options(
+        headers: {
+          'X-Goog-Api-Key': AppConstants.mapKey,
+          'X-Goog-FieldMask': _placeFields,
+          'Content-Type': 'application/json',
+        },
+      );
+
+  List<NearbyPlace> _parsePlaces(Map<String, dynamic>? data) {
+    final raw = (data?['places'] as List?) ?? const [];
+    final seen = <String>{};
+    final out = <NearbyPlace>[];
+    for (final item in raw) {
+      if (item is! Map) continue;
+      final name = ((item['displayName'] as Map?)?['text'] ?? '').toString().trim();
+      final loc = item['location'] as Map?;
+      final lat = (loc?['latitude'] as num?)?.toDouble();
+      final lng = (loc?['longitude'] as num?)?.toDouble();
+      if (name.isEmpty || lat == null || lng == null) continue;
+      // The same business can come back twice (e.g. a branch listing).
+      if (!seen.add('${name.toLowerCase()}|${lat.toStringAsFixed(3)}|${lng.toStringAsFixed(3)}')) {
+        continue;
+      }
+      out.add(NearbyPlace(
+        name: name,
+        address: (item['formattedAddress'] ?? '').toString().trim(),
+        latitude: lat,
+        longitude: lng,
+      ));
+    }
+    return out;
+  }
+
+  /// Named places closest to [lat], [lng], nearest first.
+  ///
+  /// Empty on any failure — the picker simply hides the section rather than
+  /// showing an error for something optional.
+  Future<List<NearbyPlace>> nearbyPlaces(
+    double lat,
+    double lng, {
+    int radiusMeters = 1500,
+    int limit = 8,
+  }) async {
+    if (AppConstants.mapKey.isEmpty) return const [];
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '$_placesBase/places:searchNearby',
+        data: {
+          'maxResultCount': limit,
+          'rankPreference': 'DISTANCE',
+          'locationRestriction': {
+            'circle': {
+              'center': {'latitude': lat, 'longitude': lng},
+              'radius': radiusMeters.toDouble(),
+            },
+          },
+        },
+        options: _placesOptions(),
+      );
+      return _parsePlaces(response.data);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Finds places by name or area, biased toward [lat], [lng] when known.
+  ///
+  /// Places Text Search finds businesses and landmarks as well as streets, which
+  /// plain geocoding cannot ("Joshi Hospital"). If it is unavailable the search
+  /// falls back to [searchPlaces] so typing never just stops working.
+  Future<List<NearbyPlace>> searchPlacesNear(
+    String query, {
+    double? lat,
+    double? lng,
+  }) async {
+    final text = query.trim();
+    if (text.length < 3 || AppConstants.mapKey.isEmpty) return const [];
+
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '$_placesBase/places:searchText',
+        data: {
+          'textQuery': text,
+          'regionCode': 'IN',
+          'maxResultCount': 8,
+          if (lat != null && lng != null)
+            'locationBias': {
+              'circle': {
+                'center': {'latitude': lat, 'longitude': lng},
+                'radius': 30000.0,
+              },
+            },
+        },
+        options: _placesOptions(),
+      );
+      final places = _parsePlaces(response.data);
+      if (places.isNotEmpty) return places;
+    } catch (_) {
+      // Fall through to geocoding below.
+    }
+
+    final fallback = await searchPlaces(text);
+    return fallback
+        .map((p) {
+          final parts = p.description.split(',');
+          return NearbyPlace(
+            name: parts.first.trim(),
+            address: p.description,
+            latitude: p.latitude,
+            longitude: p.longitude,
+          );
+        })
+        .toList();
   }
 
   /// Free-text place search for the address picker.
