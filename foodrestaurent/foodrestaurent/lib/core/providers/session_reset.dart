@@ -8,6 +8,7 @@ import 'package:food_user_application/features/offers/presentation/controllers/o
 import 'package:food_user_application/features/orders/presentation/controllers/live_orders_controller.dart';
 import 'package:food_user_application/features/orders/presentation/controllers/order_history_controller.dart';
 import 'package:food_user_application/features/restaurant_profile/presentation/controllers/restaurant_profile_controller.dart';
+import 'package:food_user_application/features/reviews/presentation/controllers/reviews_controller.dart';
 import 'package:food_user_application/features/support/presentation/controllers/support_controller.dart';
 import 'package:food_user_application/features/zones/data/zone_repository.dart';
 
@@ -28,6 +29,7 @@ void resetSessionScopedProviders(Ref ref) {
   ref.invalidate(addonControllerProvider);
   ref.invalidate(offerControllerProvider);
   ref.invalidate(complaintControllerProvider);
+  ref.invalidate(reviewsControllerProvider);
   ref.invalidate(supportControllerProvider);
   ref.invalidate(financeControllerProvider);
   ref.invalidate(withdrawalsControllerProvider);

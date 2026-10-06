@@ -8,6 +8,7 @@ import 'package:food_user_application/features/complaints/domain/complaint_model
 import 'package:food_user_application/features/complaints/presentation/controllers/complaint_controller.dart';
 import 'package:food_user_application/features/restaurant_profile/presentation/controllers/restaurant_profile_controller.dart';
 import 'package:food_user_application/core/widgets/app_refresh_indicator.dart';
+import 'package:food_user_application/features/reviews/presentation/widgets/reviews_list.dart';
 
 class ComplaintsScreen extends ConsumerStatefulWidget {
   const ComplaintsScreen({super.key, this.initialTab = 'complaints'});
@@ -79,7 +80,7 @@ class _ComplaintsScreenState extends ConsumerState<ComplaintsScreen> {
             Expanded(
               child: _isComplaintsTab
                   ? _buildComplaintsList(context)
-                  : _buildReviewsEmptyState(context),
+                  : const ReviewsList(),
             ),
           ],
         ),
@@ -326,16 +327,6 @@ class _ComplaintsScreenState extends ConsumerState<ComplaintsScreen> {
           ],
         ],
       ),
-    );
-  }
-
-  Widget _buildReviewsEmptyState(BuildContext context) {
-    return _buildEmptyState(
-      context,
-      'Reviews appear per-order',
-      subtitle:
-          'Customer ratings are attached to individual orders — check Order History to see them.',
-      icon: Icons.chat_bubble_outline,
     );
   }
 
