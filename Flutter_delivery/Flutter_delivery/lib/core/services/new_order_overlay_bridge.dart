@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/services.dart';
 
@@ -11,6 +12,28 @@ class NewOrderOverlayBridge {
   static const MethodChannel _channel = MethodChannel(
     'com.lagech.delivery/new_order_overlay',
   );
+
+  static final StreamController<Map<String, dynamic>> _autoAcceptController =
+      StreamController<Map<String, dynamic>>.broadcast();
+
+  /// Stream emitting incoming auto-accept requests fired by the native activity
+  static Stream<Map<String, dynamic>> get onAutoAccept => _autoAcceptController.stream;
+
+  static bool _initialized = false;
+
+  /// Initializes the MethodChannel handler to receive calls from Kotlin
+  static void initialize() {
+    if (_initialized || !Platform.isAndroid) return;
+    _initialized = true;
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'onAutoAcceptOrder') {
+        try {
+          final data = (call.arguments as Map<dynamic, dynamic>).cast<String, dynamic>();
+          _autoAcceptController.add(data);
+        } catch (_) {}
+      }
+    });
+  }
 
   /// Consumes the order passed when the driver clicks ACCEPT on the native overlay.
   /// Returns a map with `orderId` and `autoAccept` if present, clearing it from the intent.

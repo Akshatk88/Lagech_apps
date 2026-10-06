@@ -17,7 +17,7 @@ class PocketScreen extends ConsumerStatefulWidget {
 }
 
 class _PocketScreenState extends ConsumerState<PocketScreen> {
-  static const Color _onlineGreen = Color(0xFF1EBE5D);
+  static const Color _onlineGreen = Color(0xFFF20D16); // brand red (was green)
 
   bool _loading = true;
   String? _error;
@@ -139,6 +139,8 @@ class _PocketScreenState extends ConsumerState<PocketScreen> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
+            // Dialog actions get unbounded width; the theme's infinite minimum fails there.
+            style: ElevatedButton.styleFrom(minimumSize: const Size(88, 40)),
             onPressed: () {
               if (formKey.currentState?.validate() ?? false) {
                 Navigator.of(ctx).pop(double.parse(controller.text));
@@ -203,6 +205,8 @@ class _PocketScreenState extends ConsumerState<PocketScreen> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
+            // Dialog actions get unbounded width; the theme's infinite minimum fails there.
+            style: ElevatedButton.styleFrom(minimumSize: const Size(88, 40)),
             onPressed: () {
               if (formKey.currentState?.validate() ?? false) {
                 Navigator.of(ctx).pop(double.parse(controller.text));
@@ -588,6 +592,9 @@ class _PocketScreenState extends ConsumerState<PocketScreen> {
                   backgroundColor: _onlineGreen,
                   foregroundColor: Colors.white,
                   elevation: 0,
+                  // The theme's minimum width is infinite; inside this Row that
+                  // squeezed the balance text to one character per line.
+                  minimumSize: Size(0, 40.h),
                   padding: EdgeInsets.symmetric(horizontal: 22.w, vertical: 12.h),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(20.r),
@@ -637,6 +644,7 @@ class _PocketScreenState extends ConsumerState<PocketScreen> {
                   style: OutlinedButton.styleFrom(
                     foregroundColor: theme.primaryColor,
                     side: BorderSide(color: theme.primaryColor),
+                    minimumSize: Size(0, 40.h),
                     padding: EdgeInsets.symmetric(horizontal: 22.w, vertical: 12.h),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20.r),

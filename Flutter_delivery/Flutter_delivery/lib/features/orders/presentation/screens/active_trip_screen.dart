@@ -32,7 +32,7 @@ import 'package:food_user_application/features/orders/data/orders_repository.dar
 import 'package:food_user_application/features/orders/presentation/widgets/collect_payment_sheet.dart';
 import 'package:food_user_application/features/support/data/support_repository.dart';
 
-const _tripOnlineGreen = Color(0xFF1EBE5D);
+const _tripOnlineGreen = Color(0xFFF20D16); // brand red (was green)
 
 /// Full-screen "active trip" map view, stacked over the app by [main.dart]'s
 /// overlay builder whenever there is an active order and the trip hasn't
@@ -92,12 +92,20 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
   List<double> _simCumulativeDistances = [];
   double _simDistanceCovered = 0;
 
+  static final Map<String, BitmapDescriptor> _restaurantMarkerCache = {};
+  Position? _currentPos;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadMarkerIcon();
+      final current = ref.read(ordersControllerProvider);
+      if (current is OrdersLoaded && current.hasActiveOrder) {
+        _maybeFetchRoute(current.currentOrder!);
+      }
     });
+    _currentPos = ref.read(locationServiceProvider).lastPosition;
     _positionSub = ref.read(locationServiceProvider).positionStream.listen(_onPositionUpdate);
   }
 
@@ -205,6 +213,17 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
   }
 
   Future<void> _loadRestaurantMarkerIcon(String imageUrl) async {
+    if (_restaurantMarkerCache.containsKey(imageUrl)) {
+      if (_restaurantMarkerIcon != _restaurantMarkerCache[imageUrl]) {
+        if (mounted) {
+          setState(() {
+            _restaurantMarkerIcon = _restaurantMarkerCache[imageUrl];
+            _restaurantMarkerUrl = imageUrl;
+          });
+        }
+      }
+      return;
+    }
     if (_restaurantMarkerUrl == imageUrl || _restaurantMarkerLoading) return;
     _restaurantMarkerLoading = true;
     try {
@@ -221,9 +240,11 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
       );
       final frame = await codec.getNextFrame();
       final markerBytes = await _framedMarkerBytes(frame.image, photoSize);
+      final descriptor = BitmapDescriptor.fromBytes(markerBytes);
+      _restaurantMarkerCache[imageUrl] = descriptor;
       if (!mounted) return;
       setState(() {
-        _restaurantMarkerIcon = BitmapDescriptor.fromBytes(markerBytes);
+        _restaurantMarkerIcon = descriptor;
         _restaurantMarkerUrl = imageUrl;
       });
     } catch (e) {
@@ -281,6 +302,7 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
   }
 
   void _onPositionUpdate(Position position) {
+    _currentPos = position;
     if (_routePoints.isEmpty && !_routeFetchInFlight && _lastOrder != null) {
       _fetchRoute(_lastOrder!, _targetFor(_lastOrder!));
     }
@@ -299,7 +321,7 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
         position.latitude,
         position.longitude,
       );
-      if (distance > 1.5) { // update heading if moved more than 1.5 meters
+      if (distance > 2.0) { // update heading if moved more than 2 meters
         nextHeading = Geolocator.bearingBetween(
           _previousPos!.latitude,
           _previousPos!.longitude,
@@ -309,7 +331,9 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
       }
     }
     if (nextHeading != null && mounted) {
-      setState(() => _currentHeading = nextHeading!);
+      if ((nextHeading - _currentHeading).abs() > 3.0) {
+        setState(() => _currentHeading = nextHeading!);
+      }
     }
     _previousPos = position;
   }
@@ -362,16 +386,19 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
     if (!mounted) return;
     result.when(
       success: (data) {
-        final encoded = data['polyline'] as String?;
-        final points = (encoded != null && encoded.isNotEmpty)
-            ? decodePolyline(encoded)
-            : <LatLng>[];
         final destLoc = target == 'restaurant'
             ? order.restaurant.location
             : order.deliveryAddress.location;
         final destination = destLoc != null
             ? LatLng(destLoc.lat, destLoc.lng)
-            : (points.isNotEmpty ? points.last : null);
+            : null;
+        final encoded = data['polyline'] as String?;
+        var points = (encoded != null && encoded.isNotEmpty)
+            ? decodePolyline(encoded)
+            : <LatLng>[];
+        if (points.isEmpty && destination != null) {
+          points = [LatLng(pos.latitude, pos.longitude), destination];
+        }
         setState(() {
           _routePoints = points;
           _routeDestination = destination;
@@ -585,66 +612,59 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
         (authState.user.vehicleType?.toLowerCase() == 'bike' ||
             authState.user.vehicleType?.toLowerCase() == 'two_wheeler');
     final useCustomMarker = isBike && _bikeMarkerIcon != null;
+    final pos = _currentPos ?? ref.read(locationServiceProvider).lastPosition;
+    final initialTarget = pos != null
+        ? LatLng(pos.latitude, pos.longitude)
+        : (_routeDestination ?? const LatLng(0, 0));
+    final isPickupPhase = _targetFor(order) == 'restaurant';
+    final hasGalleryImages = order.restaurant.allImages.isNotEmpty;
+    final useRestaurantMarker = isPickupPhase && _restaurantMarkerIcon != null;
 
-    return StreamBuilder<Position>(
-      stream: ref.read(locationServiceProvider).positionStream,
-      initialData: ref.read(locationServiceProvider).lastPosition,
-      builder: (context, snapshot) {
-        final pos = snapshot.data;
-        final initialTarget = pos != null
-            ? LatLng(pos.latitude, pos.longitude)
-            : (_routeDestination ?? const LatLng(0, 0));
-        final isPickupPhase = _targetFor(order) == 'restaurant';
-        final hasGalleryImages = order.restaurant.allImages.isNotEmpty;
-        final useRestaurantMarker = isPickupPhase && _restaurantMarkerIcon != null;
-
-        return GoogleMap(
-          onMapCreated: (controller) => _mapController = controller,
-          initialCameraPosition: CameraPosition(target: initialTarget, zoom: 15),
-          markers: {
-            if (_routeDestination != null)
-              Marker(
-                markerId: const MarkerId('trip_destination'),
-                position: _routeDestination!,
-                icon: useRestaurantMarker
-                    ? _restaurantMarkerIcon!
-                    : BitmapDescriptor.defaultMarkerWithHue(
-                        isPickupPhase ? BitmapDescriptor.hueOrange : BitmapDescriptor.hueViolet,
-                      ),
-                onTap: isPickupPhase && hasGalleryImages
-                    ? () {
-                        HapticService.light();
-                        _openRestaurantGallery(order);
-                      }
-                    : null,
-              ),
-            if (useCustomMarker && pos != null)
-              Marker(
-                markerId: const MarkerId('delivery_partner'),
-                position: LatLng(pos.latitude, pos.longitude),
-                icon: _bikeMarkerIcon!,
-                anchor: const Offset(0.5, 0.5),
-                rotation: _currentHeading,
-                flat: true,
-              ),
-          },
-          polylines: {
-            if (_routePoints.length > 1)
-              Polyline(
-                polylineId: const PolylineId('active_trip_route'),
-                points: _routePoints,
-                color: Theme.of(context).primaryColor,
-                width: 5,
-              ),
-          },
-          myLocationEnabled: true,
-          myLocationButtonEnabled: false,
-          zoomControlsEnabled: true,
-          compassEnabled: false,
-          mapToolbarEnabled: false,
-          style: MapStyles.mutedGrey,
-        );
+    return GoogleMap(
+      onMapCreated: (controller) => _mapController = controller,
+      initialCameraPosition: CameraPosition(target: initialTarget, zoom: 15),
+      markers: {
+        if (_routeDestination != null)
+          Marker(
+            markerId: const MarkerId('trip_destination'),
+            position: _routeDestination!,
+            icon: useRestaurantMarker
+                ? _restaurantMarkerIcon!
+                : BitmapDescriptor.defaultMarkerWithHue(
+                    isPickupPhase ? BitmapDescriptor.hueOrange : BitmapDescriptor.hueViolet,
+                  ),
+            onTap: isPickupPhase && hasGalleryImages
+                ? () {
+                    HapticService.light();
+                    _openRestaurantGallery(order);
+                  }
+                : null,
+          ),
+        if (useCustomMarker && pos != null)
+          Marker(
+            markerId: const MarkerId('delivery_partner'),
+            position: LatLng(pos.latitude, pos.longitude),
+            icon: _bikeMarkerIcon!,
+            anchor: const Offset(0.5, 0.5),
+            rotation: _currentHeading,
+            flat: true,
+          ),
       },
+      polylines: {
+        if (_routePoints.length > 1)
+          Polyline(
+            polylineId: const PolylineId('active_trip_route'),
+            points: _routePoints,
+            color: Theme.of(context).primaryColor,
+            width: 5,
+          ),
+      },
+      myLocationEnabled: true,
+      myLocationButtonEnabled: false,
+      zoomControlsEnabled: true,
+      compassEnabled: false,
+      mapToolbarEnabled: false,
+      style: MapStyles.mutedGrey,
     );
   }
 
@@ -654,7 +674,11 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
 
     ref.listen<OrdersState>(ordersControllerProvider, (previous, next) {
       if (next is OrdersLoaded && next.hasActiveOrder) {
-        _maybeFetchRoute(next.currentOrder!);
+        final prevOrder = previous is OrdersLoaded ? previous.currentOrder : null;
+        if (prevOrder?.id != next.currentOrder!.id ||
+            prevOrder?.currentPhase != next.currentOrder!.currentPhase) {
+          _maybeFetchRoute(next.currentOrder!);
+        }
       }
     });
 
@@ -662,8 +686,6 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
       return const SizedBox.shrink();
     }
     final order = ordersState.currentOrder!;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeFetchRoute(order));
 
     final theme = Theme.of(context);
     final isDarkMode = theme.brightness == Brightness.dark;

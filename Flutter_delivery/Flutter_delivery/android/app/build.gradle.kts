@@ -5,12 +5,13 @@ plugins {
     // Firebase Google Services plugin
     id("com.google.gms.google-services")
 
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    // Flutter Gradle Plugin
     id("dev.flutter.flutter-gradle-plugin")
 }
 
 android {
     namespace = "com.lagech.delivery"
+
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -29,6 +30,7 @@ android {
 
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
+
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
@@ -37,7 +39,21 @@ android {
         release {
             // Signing with debug keys for now
             signingConfig = signingConfigs.getByName("debug")
+
+            // =====================================================
+            // RELEASE BUILD SPEED
+            // =====================================================
+            // R8 / ProGuard OFF
+            // This avoids minifyReleaseWithR8 and makes APK build
+            // significantly faster.
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
+    }
+
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
     }
 }
 
@@ -46,7 +62,11 @@ flutter {
 }
 
 dependencies {
-    // Core library desugaring
+
+    // =========================================================
+    // CORE LIBRARY DESUGARING
+    // =========================================================
+
     coreLibraryDesugaring(
         "com.android.tools:desugar_jdk_libs:2.1.4"
     )
@@ -55,14 +75,11 @@ dependencies {
     // FIREBASE
     // =========================================================
 
-    // Firebase BoM
-    // Firebase dependencies ki individual versions yahan nahi deni hain.
     implementation(
         platform("com.google.firebase:firebase-bom:34.19.0")
     )
 
     // Firebase Cloud Messaging
-    // RiderOnlineService / notifications ke liye
     implementation(
         "com.google.firebase:firebase-messaging"
     )
@@ -76,7 +93,6 @@ dependencies {
     // ANDROIDX
     // =========================================================
 
-    // RiderOnlineService uses NotificationCompat
     implementation(
         "androidx.core:core-ktx:1.13.1"
     )

@@ -45,10 +45,21 @@ class FoodDeliveryApp extends ConsumerStatefulWidget {
 
 class _FoodDeliveryAppState extends ConsumerState<FoodDeliveryApp>
     with WidgetsBindingObserver {
+  StreamSubscription<Map<String, dynamic>>? _autoAcceptSub;
+  final Set<String> _processingAcceptOrderIds = {};
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    NewOrderOverlayBridge.initialize();
+    _autoAcceptSub = NewOrderOverlayBridge.onAutoAccept.listen((data) {
+      final orderId = data['orderId']?.toString();
+      if (orderId != null && orderId.isNotEmpty) {
+        _handleAutoAccept(orderId);
+      }
+    });
+
     Future.microtask(() {
       ref.read(fcmServiceProvider).initialize();
       ReferralTrackingService.initialize();
@@ -58,6 +69,7 @@ class _FoodDeliveryAppState extends ConsumerState<FoodDeliveryApp>
 
   @override
   void dispose() {
+    _autoAcceptSub?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -70,6 +82,19 @@ class _FoodDeliveryAppState extends ConsumerState<FoodDeliveryApp>
       // Re-register the push token on every resume.
       unawaited(ref.read(fcmServiceProvider).registerToken());
     }
+  }
+
+  Future<void> _handleAutoAccept(String orderId) async {
+    if (_processingAcceptOrderIds.contains(orderId)) return;
+    _processingAcceptOrderIds.add(orderId);
+    // Allow re-accepting after 15 seconds if failed or new order
+    Future.delayed(const Duration(seconds: 15), () => _processingAcceptOrderIds.remove(orderId));
+
+    debugPrint('[Handoff] Auto-accepting order directly: orderId=$orderId');
+    final incoming = ref.read(incomingOrderControllerProvider.notifier);
+    incoming.markResolved(orderId);
+    ref.read(activeTripVisibilityControllerProvider.notifier).show();
+    await ref.read(ordersControllerProvider.notifier).acceptOrder(orderId);
   }
 
   /// Consumes launch order handoff from the native overlay or fallback notification,
@@ -102,15 +127,12 @@ class _FoodDeliveryAppState extends ConsumerState<FoodDeliveryApp>
       final autoAccept = launchData['autoAccept'] == true;
       debugPrint('[Handoff] Consumed launch order: orderId=$orderId, autoAccept=$autoAccept');
 
-      final incoming = ref.read(incomingOrderControllerProvider.notifier);
-
       if (autoAccept) {
         // Accept must never ask twice: do not show the in-app card at all.
-        // Mark resolved, call accept directly, let the trip screen appear.
-        incoming.markResolved(orderId);
-        await ref.read(ordersControllerProvider.notifier).acceptOrder(orderId);
+        await _handleAutoAccept(orderId);
       } else {
         // If not autoAccept (e.g. rider tapped fallback notification body), load details and show card
+        final incoming = ref.read(incomingOrderControllerProvider.notifier);
         final repo = ref.read(ordersRepositoryProvider);
         final result = await repo.getOrderDetails(orderId);
         if (!mounted) return;
@@ -140,7 +162,7 @@ class _FoodDeliveryAppState extends ConsumerState<FoodDeliveryApp>
       splitScreenMode: true,
       builder: (context, child) {
         return MaterialApp.router(
-          title: 'Fodron Delivery',
+          title: 'Lagech Delivery',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,

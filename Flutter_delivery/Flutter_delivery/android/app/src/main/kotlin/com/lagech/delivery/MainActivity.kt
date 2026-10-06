@@ -24,11 +24,16 @@ class MainActivity : FlutterActivity() {
     private val CHANNEL = "app.fooddelivery/unlock"
     private val ONLINE_CHANNEL = "app.fooddelivery/rider_online"
     private val READINESS_CHANNEL = "app.fooddelivery/device_readiness"
+    private var overlayChannel: MethodChannel? = null
 
     override fun onResume() {
         super.onResume()
         AppForeground.isForeground = true
         Log.d(TAG, "AppForeground.isForeground = true")
+        if (intent?.getBooleanExtra("autoAccept", false) == true) {
+            unlockScreen()
+            dispatchAutoAcceptIfPresent(intent)
+        }
     }
 
     override fun onPause() {
@@ -41,23 +46,43 @@ class MainActivity : FlutterActivity() {
         super.onNewIntent(intent)
         // launchMode is singleTop: setIntent is essential so Flutter reads the latest launch extras
         setIntent(intent)
-        Log.d(TAG, "onNewIntent received with orderId=${intent.getStringExtra("orderId")}")
+        val orderId = intent.getStringExtra("orderId")
+        val autoAccept = intent.getBooleanExtra("autoAccept", false)
+        Log.d(TAG, "onNewIntent received with orderId=$orderId, autoAccept=$autoAccept")
+        if (autoAccept) {
+            unlockScreen()
+            dispatchAutoAcceptIfPresent(intent)
+        }
+    }
+
+    private fun dispatchAutoAcceptIfPresent(intent: Intent?) {
+        val orderId = intent?.getStringExtra("orderId")
+        val autoAccept = intent?.getBooleanExtra("autoAccept", false) ?: false
+        if (!orderId.isNullOrBlank() && autoAccept) {
+            val payload = mapOf(
+                "orderId" to orderId,
+                "autoAccept" to true
+            )
+            Log.d(TAG, "dispatchAutoAcceptIfPresent invoking onAutoAcceptOrder: $payload")
+            overlayChannel?.invokeMethod("onAutoAcceptOrder", payload)
+        }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
         // Native New Order Overlay Bridge Channel
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, OVERLAY_CHANNEL)
-            .setMethodCallHandler { call, result ->
-                when (call.method) {
-                    "consumeLaunchOrder" -> {
-                        val currentIntent = intent
-                        val orderId = currentIntent?.getStringExtra("orderId")
-                        if (!orderId.isNullOrBlank()) {
-                            val autoAccept = currentIntent.getBooleanExtra("autoAccept", false)
-                            // Clear from intent so a future resume does not re-raise this order
-                            currentIntent.removeExtra("orderId")
+        val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, OVERLAY_CHANNEL)
+        overlayChannel = channel
+        channel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "consumeLaunchOrder" -> {
+                    val currentIntent = intent
+                    val orderId = currentIntent?.getStringExtra("orderId")
+                    if (!orderId.isNullOrBlank()) {
+                        val autoAccept = currentIntent.getBooleanExtra("autoAccept", false)
+                        // Clear from intent so a future resume does not re-raise this order
+                        currentIntent.removeExtra("orderId")
                             currentIntent.removeExtra("autoAccept")
 
                             val payload = mapOf(

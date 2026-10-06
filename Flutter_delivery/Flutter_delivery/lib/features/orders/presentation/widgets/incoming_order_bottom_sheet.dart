@@ -169,10 +169,10 @@ class _IncomingOrderBottomSheetState
                             if (mounted) setState(() => _isAccepting = false);
                           },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1EBE5D),
+                      backgroundColor: const Color(0xFFF20D16),
                       foregroundColor: Colors.white,
                       disabledBackgroundColor:
-                          const Color(0xFF1EBE5D).withValues(alpha: 0.5),
+                          const Color(0xFFF20D16).withValues(alpha: 0.5),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16.r),
                       ),
@@ -231,7 +231,7 @@ class _IncomingOrderBottomSheetState
               child: Text(
                 'New order',
                 style: TextStyle(
-                  color: const Color(0xFF1EBE5D),
+                  color: const Color(0xFFF20D16),
                   fontSize: 14.sp,
                   fontWeight: FontWeight.w900,
                 ),

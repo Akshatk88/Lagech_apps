@@ -1,8 +1,10 @@
 package com.lagech.delivery
 
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.PowerManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.PixelFormat
@@ -250,16 +252,53 @@ object NewOrderOverlay {
             Log.d(TAG, "Rider clicked ACCEPT for order $orderId")
             dismissLocked(context)
 
-            val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-            if (launchIntent != null) {
-                launchIntent.putExtra("orderId", orderId)
-                launchIntent.putExtra("autoAccept", true)
-                launchIntent.addFlags(
+            // Wake screen if device is locked or display is off
+            try {
+                val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+                if (powerManager?.isInteractive == false) {
+                    @Suppress("DEPRECATION")
+                    val wakeLock = powerManager.newWakeLock(
+                        PowerManager.FULL_WAKE_LOCK or
+                                PowerManager.ACQUIRE_CAUSES_WAKEUP or
+                                PowerManager.ON_AFTER_RELEASE,
+                        "lagech:overlay_accept"
+                    )
+                    wakeLock.acquire(10_000L)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "WakeLock acquire failed: ${e.message}")
+            }
+
+            val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
+                putExtra("orderId", orderId)
+                putExtra("autoAccept", true)
+                addFlags(
                     Intent.FLAG_ACTIVITY_NEW_TASK or
                             Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                            Intent.FLAG_ACTIVITY_CLEAR_TOP
+                            Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                            Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
                 )
-                context.startActivity(launchIntent)
+            }
+
+            if (launchIntent != null) {
+                try {
+                    val notifId = (orderId.hashCode() and 0x7fffffff)
+                    val pendingIntent = PendingIntent.getActivity(
+                        context,
+                        notifId,
+                        launchIntent,
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    )
+                    pendingIntent.send()
+                    Log.i(TAG, "Successfully triggered PendingIntent to launch app for order $orderId")
+                } catch (e: Exception) {
+                    Log.w(TAG, "PendingIntent send failed, falling back to startActivity: ${e.message}")
+                    try {
+                        context.startActivity(launchIntent)
+                    } catch (e2: Exception) {
+                        Log.e(TAG, "startActivity failed: ${e2.message}", e2)
+                    }
+                }
             } else {
                 Log.e(TAG, "Launch intent for package ${context.packageName} was null")
             }

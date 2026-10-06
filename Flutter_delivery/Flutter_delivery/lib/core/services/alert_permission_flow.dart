@@ -139,7 +139,7 @@ class AlertPermissionFlow {
       // there is no resume to wait for.
       if (permission == AlertPermission.notifications) continue;
 
-      if (opened) await _waitForResume();
+      if (opened) await waitForResume();
     }
 
     return missing();
@@ -151,7 +151,7 @@ class AlertPermissionFlow {
   /// without producing a resume event — and some never open despite reporting that
   /// they did — and without a ceiling the whole sequence would stop there, leaving
   /// every later permission unasked with no error anywhere.
-  static Future<void> _waitForResume({
+  static Future<void> waitForResume({
     Duration timeout = const Duration(minutes: 2),
   }) async {
     final observer = _ResumeObserver();

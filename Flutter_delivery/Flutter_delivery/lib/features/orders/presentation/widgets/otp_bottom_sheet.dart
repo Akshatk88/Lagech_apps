@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../../../core/services/haptic_service.dart';
 
@@ -33,6 +34,17 @@ class _OtpBottomSheetContentState extends State<OtpBottomSheetContent> {
       _focusNode.requestFocus();
     });
     _controller.addListener(_onTextChanged);
+  }
+
+  /// The hidden field keeps focus after the rider closes the keyboard, so
+  /// requestFocus() alone is a no-op and tapping the boxes did nothing. Ask
+  /// for the keyboard explicitly when the field is already focused.
+  void _openKeyboard() {
+    if (_focusNode.hasFocus) {
+      SystemChannels.textInput.invokeMethod<void>('TextInput.show');
+    } else {
+      _focusNode.requestFocus();
+    }
   }
 
   void _onTextChanged() {
@@ -75,10 +87,10 @@ class _OtpBottomSheetContentState extends State<OtpBottomSheetContent> {
               Container(
                 padding: EdgeInsets.all(8.r),
                 decoration: const BoxDecoration(
-                  color: Color(0xFFE8F5E9),
+                  color: Color(0xFFFFEFF0),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(Icons.lock_outline_rounded, color: const Color(0xFF1EBE5D), size: 20.sp),
+                child: Icon(Icons.lock_outline_rounded, color: const Color(0xFFF20D16), size: 20.sp),
               ),
               SizedBox(width: 10.w),
               Expanded(
@@ -127,7 +139,7 @@ class _OtpBottomSheetContentState extends State<OtpBottomSheetContent> {
               ),
 
               GestureDetector(
-                onTap: () => _focusNode.requestFocus(),
+                onTap: _openKeyboard,
                 behavior: HitTestBehavior.opaque,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -140,18 +152,18 @@ class _OtpBottomSheetContentState extends State<OtpBottomSheetContent> {
                       width: 54.w,
                       height: 58.h,
                       decoration: BoxDecoration(
-                        color: char.isNotEmpty ? const Color(0xFFF0FDF4) : Colors.grey[50],
+                        color: char.isNotEmpty ? const Color(0xFFFFEFF0) : Colors.grey[50],
                         borderRadius: BorderRadius.circular(16.r),
                         border: Border.all(
                           color: isFocused
-                              ? const Color(0xFF1EBE5D)
-                              : (char.isNotEmpty ? const Color(0xFF86EFAC) : Colors.grey[300]!),
+                              ? const Color(0xFFF20D16)
+                              : (char.isNotEmpty ? const Color(0xFFFCA5A8) : Colors.grey[300]!),
                           width: isFocused ? 2.0 : 1.0,
                         ),
                         boxShadow: isFocused
                             ? [
                                 BoxShadow(
-                                  color: const Color(0xFF1EBE5D).withValues(alpha: 0.2),
+                                  color: const Color(0xFFF20D16).withValues(alpha: 0.2),
                                   blurRadius: 8,
                                   offset: const Offset(0, 2),
                                 )

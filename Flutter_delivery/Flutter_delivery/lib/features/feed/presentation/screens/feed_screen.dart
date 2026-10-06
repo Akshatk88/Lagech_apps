@@ -34,6 +34,7 @@ import 'package:food_user_application/features/wallet/data/wallet_repository.dar
 import 'package:food_user_application/core/services/fcm_service.dart';
 import 'package:food_user_application/features/refer_earn/application/referral_controller.dart';
 import 'package:food_user_application/features/chat/presentation/screens/chat_screen.dart';
+import 'package:food_user_application/features/permissions/presentation/permission_setup_screen.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -53,7 +54,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
   Map<String, dynamic>? _earningsSummary;
   bool _earningsLoading = true;
 
-  static const Color _onlineGreen = Color(0xFF1EBE5D);
+  static const Color _onlineGreen = Color(0xFFF20D16); // brand red (was green)
 
   BitmapDescriptor? _bikeMarkerIcon;
   GoogleMapController? _mapController;
@@ -64,7 +65,6 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
   LatLng? _routeDestination;
   String? _routeKey;
   Timer? _routeRefreshTimer;
-  late final AnimationController _pulseController;
   StreamSubscription<Map<String, dynamic>>? _fcmReceivedSub;
   int _unreadNotificationCount = 0;
 
@@ -80,10 +80,15 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
     _positionSub = ref.read(locationServiceProvider).positionStream.listen((pos) {
       if (mounted) setState(() => _currentPosition = pos);
     });
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2000),
-    )..repeat();
+
+    // Every permission is asked for up front when the app opens, rather than
+    // one by one the first time the rider presses "Go online".
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await PermissionSetupScreen.showIfNeeded(context);
+      // A location grant made on that screen lets the map preview get a fix.
+      if (mounted) _initMapPosition();
+    });
   }
 
   /// Offered when going online with something outstanding that will cost the
@@ -115,6 +120,8 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(ctx).pop(true),
+            // Dialog actions get unbounded width; the theme's infinite minimum fails there.
+            style: ElevatedButton.styleFrom(minimumSize: const Size(88, 40)),
             child: const Text('Fix now'),
           ),
         ],
@@ -240,7 +247,6 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
     _routeRefreshTimer?.cancel();
     _positionSub?.cancel();
     _fcmReceivedSub?.cancel();
-    _pulseController.dispose();
     super.dispose();
   }
 
@@ -455,18 +461,24 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
         }
       }
       if (next is OrdersLoaded && next.hasActiveOrder) {
-        _maybeFetchRoute(next.currentOrder!);
+        final prevOrder = previous is OrdersLoaded ? previous.currentOrder : null;
+        if (prevOrder?.id != next.currentOrder!.id ||
+            prevOrder?.currentPhase != next.currentOrder!.currentPhase) {
+          _maybeFetchRoute(next.currentOrder!);
+        }
       } else if (next is OrdersLoaded) {
         _clearRoute();
       }
     });
+
+    final hasActiveOrder = ordersState is OrdersLoaded && ordersState.hasActiveOrder;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       body: Stack(
         children: [
           Positioned.fill(
-            child: _buildMapPreview(isDarkMode, isOnline),
+            child: _buildMapPreview(isDarkMode, isOnline, hasActiveOrder),
           ),
           Align(
             alignment: Alignment.topCenter,
@@ -1187,7 +1199,15 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
   /// When OFFLINE — shows a cheap Static Maps API PNG so we don't burn
   /// a Dynamic Map load just to display a grey backdrop.
   /// When ONLINE — shows the live, interactive GoogleMap for GPS tracking.
-  Widget _buildMapPreview(bool isDarkMode, bool isOnline) {
+  Widget _buildMapPreview(bool isDarkMode, bool isOnline, bool hasActiveOrder) {
+    if (hasActiveOrder) {
+      // Trip is active: ActiveTripScreen is rendering full-screen on top.
+      // Do not instantiate a second GoogleMap underneath to avoid stutter and lag.
+      return Container(
+        color: isDarkMode ? const Color(0xFF1E222D) : const Color(0xFFF5F7FB),
+      );
+    }
+
     final pos = _currentPosition;
 
     // --- OFFLINE: Static image (costs ~$2/1000 vs $7/1000 for Dynamic map) ---
@@ -1240,83 +1260,78 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
     }
 
     // --- ONLINE: Full interactive GoogleMap for live GPS tracking ---
+    if (pos == null) {
+      return Container(
+        color: isDarkMode ? const Color(0xFF242f3e) : const Color(0xFFE8F2ED),
+        child: Center(
+          child: Icon(
+            Icons.two_wheeler_rounded,
+            size: 36.sp,
+            color: isDarkMode ? Colors.white38 : Colors.black38,
+          ),
+        ),
+      );
+    }
+
+    final authState = ref.read(authControllerProvider);
+    final bool isBike = authState is AuthAuthenticated &&
+                        (authState.user.vehicleType?.toLowerCase() == 'bike' ||
+                         authState.user.vehicleType?.toLowerCase() == 'two_wheeler');
+    final bool useCustomMarker = isBike && _bikeMarkerIcon != null;
+
     return SizedBox.expand(
       child: Stack(
         children: [
-            AnimatedBuilder(
-              animation: _pulseController,
-              builder: (context, child) {
-                final pos = _currentPosition;
-                if (pos == null) {
-                  return Container(
-                    color: isDarkMode ? const Color(0xFF242f3e) : const Color(0xFFE8F2ED),
-                    child: Center(
-                      child: Icon(
-                        Icons.two_wheeler_rounded,
-                        size: 36.sp,
-                        color: isDarkMode ? Colors.white38 : Colors.black38,
-                      ),
-                    ),
-                  );
-                }
-                final authState = ref.read(authControllerProvider);
-                final bool isBike = authState is AuthAuthenticated &&
-                                    (authState.user.vehicleType?.toLowerCase() == 'bike' ||
-                                     authState.user.vehicleType?.toLowerCase() == 'two_wheeler');
-                final bool useCustomMarker = isBike && _bikeMarkerIcon != null;
-
-                return GoogleMap(
-                  onMapCreated: (controller) => _mapController = controller,
-                  initialCameraPosition: CameraPosition(
-                    target: LatLng(pos.latitude, pos.longitude),
-                    zoom: 16,
-                  ),
-                  markers: {
-                    if (useCustomMarker)
-                      Marker(
-                        markerId: const MarkerId('delivery_boy'),
-                        position: LatLng(pos.latitude, pos.longitude),
-                        icon: _bikeMarkerIcon!,
-                        anchor: const Offset(0.5, 0.5),
-                        rotation: pos.heading,
-                      ),
-                    if (_routeDestination != null)
-                      Marker(
-                        markerId: const MarkerId('route_destination'),
-                        position: _routeDestination!,
-                        icon: BitmapDescriptor.defaultMarkerWithHue(
-                          BitmapDescriptor.hueRed,
-                        ),
-                      ),
-                  },
-                  circles: {
-                    Circle(
-                      circleId: const CircleId('live_location_pulse'),
-                      center: LatLng(pos.latitude, pos.longitude),
-                      radius: 50 + (_pulseController.value * 55),
-                      fillColor: const ui.Color.fromARGB(255, 250, 131, 57).withValues(alpha: (1 - _pulseController.value) * 0.11),
-                      strokeColor: const ui.Color.fromARGB(255, 41, 190, 30).withValues(alpha: (1 - _pulseController.value) * 0.55),
-                      strokeWidth: 3,
-                    ),
-                  },
-                  polylines: {
-                    if (_routePoints.length > 1)
-                      Polyline(
-                        polylineId: const PolylineId('active_route'),
-                        points: _routePoints,
-                        color: Theme.of(context).primaryColor,
-                        width: 5,
-                      ),
-                  },
-                  myLocationEnabled: !useCustomMarker,
-                  myLocationButtonEnabled: false,
-                  zoomControlsEnabled: false,
-                  compassEnabled: false,
-                  mapToolbarEnabled: false,
-                  style: MapStyles.mutedGrey,
-                );
-              },
+          GoogleMap(
+            onMapCreated: (controller) => _mapController = controller,
+            initialCameraPosition: CameraPosition(
+              target: LatLng(pos.latitude, pos.longitude),
+              zoom: 16,
             ),
+            markers: {
+              if (useCustomMarker)
+                Marker(
+                  markerId: const MarkerId('delivery_boy'),
+                  position: LatLng(pos.latitude, pos.longitude),
+                  icon: _bikeMarkerIcon!,
+                  anchor: const Offset(0.5, 0.5),
+                  rotation: pos.heading,
+                ),
+              if (_routeDestination != null)
+                Marker(
+                  markerId: const MarkerId('route_destination'),
+                  position: _routeDestination!,
+                  icon: BitmapDescriptor.defaultMarkerWithHue(
+                    BitmapDescriptor.hueRed,
+                  ),
+                ),
+            },
+            circles: {
+              Circle(
+                circleId: const CircleId('live_location_pulse'),
+                center: LatLng(pos.latitude, pos.longitude),
+                radius: 70,
+                fillColor: const ui.Color.fromARGB(35, 250, 131, 57),
+                strokeColor: const ui.Color.fromARGB(150, 41, 190, 30),
+                strokeWidth: 2,
+              ),
+            },
+            polylines: {
+              if (_routePoints.length > 1)
+                Polyline(
+                  polylineId: const PolylineId('active_route'),
+                  points: _routePoints,
+                  color: Theme.of(context).primaryColor,
+                  width: 5,
+                ),
+            },
+            myLocationEnabled: !useCustomMarker,
+            myLocationButtonEnabled: false,
+            zoomControlsEnabled: false,
+            compassEnabled: false,
+            mapToolbarEnabled: false,
+            style: MapStyles.mutedGrey,
+          ),
             Positioned(
               right: 16.w,
               bottom: 260.h,

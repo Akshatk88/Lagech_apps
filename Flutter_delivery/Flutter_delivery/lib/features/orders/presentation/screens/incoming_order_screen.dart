@@ -20,7 +20,7 @@ import 'package:food_user_application/features/orders/application/incoming_order
 import 'package:food_user_application/features/orders/data/models/delivery_order.dart';
 import 'package:food_user_application/features/orders/data/orders_repository.dart';
 
-const _incomingOnlineGreen = Color(0xFF1EBE5D);
+const _incomingOnlineGreen = Color(0xFFF20D16); // brand red (was green)
 
 /// Full-screen, Rapido/Uber-style incoming-order alert. Stacked over the
 /// entire app by [main.dart]'s overlay builder whenever

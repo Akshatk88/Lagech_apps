@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:food_user_application/features/language/domain/models/language_listing_model.dart';
 
 class AppConstants {
-  static const String title = 'Fudron Delivery';
+  static const String title = 'Lagech Delivery';
   static const String appFontFamily = 'Latin';
 
   /// Backend REST API host domain (staging/test server).

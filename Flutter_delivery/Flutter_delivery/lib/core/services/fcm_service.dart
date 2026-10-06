@@ -204,7 +204,7 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
       final title = (message.notification?.title ??
               message.data['title'] ??
-              'Fudron Delivery Update')
+              'Lagech Delivery Update')
           .toString();
       final body = (message.notification?.body ??
               message.data['body'] ??
@@ -325,7 +325,7 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
             channelDescription: _incomingOrdersChannel.description,
             importance: Importance.max,
             priority: Priority.high,
-            sound: const RawResourceAndroidNotificationSound('tujh_bin1'),
+            sound: const RawResourceAndroidNotificationSound('tujh_bin'),
             playSound: true,
           ),
         ),
