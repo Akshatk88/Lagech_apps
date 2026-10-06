@@ -49,7 +49,8 @@ object NewOrderNotifier {
         val restaurant = data["restaurantName"]?.takeIf { it.isNotBlank() } ?: "New Order"
         val earning = data["riderEarning"] ?: data["earnings"] ?: data["price"] ?: data["total"] ?: ""
         val distance = data["tripDistanceKm"] ?: data["distance"] ?: ""
-        val title = "New Order: ₹$earning ($restaurant)"
+        // Earnings only when the admin lets riders see them.
+        val title = if (RiderPrefs.showEarning(context)) "New Order: ₹$earning ($restaurant)" else "New Order ($restaurant)"
         val body = "Pickup at $restaurant • Distance: $distance km. Tap to view and accept."
 
         val smallIcon = getSmallIcon(context)

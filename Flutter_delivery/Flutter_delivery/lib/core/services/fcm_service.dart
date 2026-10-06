@@ -18,6 +18,7 @@ import '../network/dio_client.dart';
 import '../storage/token_storage.dart';
 import 'new_order_overlay_bridge.dart';
 import '../../features/settings/application/business_settings_controller.dart';
+import '../../features/orders/application/rider_capacity_cache.dart';
 
 /// Dedicated channel for incoming-order alerts — separate from
 /// [FcmService._channel] because it needs call-category / full-screen-intent
@@ -189,6 +190,12 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // Return immediately so Dart posts nothing and doesn't duplicate the alert.
   if (Platform.isAndroid && message.data['type'] == 'new_order') {
     print('[FCM Background] new_order received on Android — handled by native Kotlin overlay/notifier');
+    return;
+  }
+
+  // At the order limit: nothing to ring for (the server refuses the accept).
+  if (message.data['type'] == 'new_order' &&
+      !(await RiderCapacityCache.canAcceptMore())) {
     return;
   }
 
@@ -628,6 +635,9 @@ class FcmService {
     }
 
     if (message.data['type'] == 'new_order') {
+      // At the admin's order limit the server refuses the accept anyway, so
+      // don't ring; the in-app card is gated the same way by the controller.
+      if (RiderCapacityCache.current == false) return;
       final pickup = message.data['pickupAddress'] as String? ?? message.data['restaurantName'] as String? ?? 'Restaurant';
       final drop = message.data['dropAddress'] as String? ?? message.data['customerAddress'] as String? ?? 'Customer';
       final price = message.data['price'] as String? ?? message.data['earnings'] as String? ?? '';

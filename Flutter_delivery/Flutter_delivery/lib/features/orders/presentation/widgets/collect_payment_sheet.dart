@@ -77,12 +77,24 @@ class _CollectPaymentSheetState extends ConsumerState<CollectPaymentSheet> {
                   'Collect Payment',
                   style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.w900, color: textColor),
                 ),
+                // Only the cash part of a wallet + cash order (server
+                // `amountToCollect`); the order total for an older backend.
                 Text(
-                  '₹${order.total.toStringAsFixed(0)}',
+                  '₹${order.cashToCollect.toStringAsFixed(0)}',
                   style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.w900, color: theme.primaryColor),
                 ),
               ],
             ),
+            if (order.isPartiallyPrepaid) ...[
+              SizedBox(height: 6.h),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Bill ₹${order.total.toStringAsFixed(0)} · ₹${(order.total - order.cashToCollect).toStringAsFixed(0)} already paid from the customer\'s wallet',
+                  style: TextStyle(fontSize: 12.sp, color: subTextColor),
+                ),
+              ),
+            ],
             SizedBox(height: 16.h),
             if (_completed)
               Padding(

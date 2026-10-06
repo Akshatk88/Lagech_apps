@@ -208,6 +208,7 @@ class DeliveryOrder {
     this.tripDistanceKm,
     this.tripDurationMins,
     this.acceptanceDeadlineAt,
+    this.amountToCollect,
   });
 
   final String id;
@@ -237,6 +238,18 @@ class DeliveryOrder {
   final double? tripDistanceKm;
   final double? tripDurationMins;
   final DateTime? acceptanceDeadlineAt;
+
+  /// What to take at the door (server `amountToCollect`): for a partial
+  /// payment only the cash part, 0 once paid. Null from an older backend.
+  final double? amountToCollect;
+
+  /// The cash to collect from the customer: [amountToCollect] when the server
+  /// sends it, else the order total as before.
+  double get cashToCollect => amountToCollect ?? total;
+
+  /// Part of the bill the customer already paid from their wallet.
+  bool get isPartiallyPrepaid =>
+      amountToCollect != null && amountToCollect! > 0 && amountToCollect! < total;
 
   bool get isCashOnDelivery => paymentMethod == 'cash';
   bool get isPaid => paymentStatus == 'paid';
@@ -274,6 +287,7 @@ class DeliveryOrder {
       tripDistanceKm: tripDistanceKm,
       tripDurationMins: tripDurationMins,
       acceptanceDeadlineAt: acceptanceDeadlineAt,
+      amountToCollect: amountToCollect,
     );
   }
 
@@ -327,6 +341,7 @@ class DeliveryOrder {
       acceptanceDeadlineAt: json['acceptanceDeadlineAt'] != null
           ? DateTime.tryParse(json['acceptanceDeadlineAt'] as String)
           : null,
+      amountToCollect: json['amountToCollect'] == null ? null : n(json['amountToCollect']),
     );
   }
 
@@ -382,6 +397,7 @@ class DeliveryOrder {
       acceptanceDeadlineAt: data['acceptanceDeadlineAt'] != null
           ? DateTime.tryParse(data['acceptanceDeadlineAt'].toString())
           : null,
+      amountToCollect: nNullable(data['amountToCollect']),
     );
   }
 }

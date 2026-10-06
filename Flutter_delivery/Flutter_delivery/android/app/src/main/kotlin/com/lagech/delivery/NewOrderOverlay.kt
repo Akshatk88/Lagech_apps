@@ -219,6 +219,9 @@ object NewOrderOverlay {
         } else {
             formattedEarning
         }
+        // Admin's "show earning to rider" switch (Business Settings), as the
+        // Flutter screens already obey it.
+        tvEarnings.visibility = if (RiderPrefs.showEarning(context)) View.VISIBLE else View.GONE
 
         // Distance & Duration
         val distance = data["tripDistanceKm"]

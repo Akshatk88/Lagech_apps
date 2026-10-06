@@ -8,6 +8,7 @@ import '../data/models/delivery_order.dart';
 import '../data/orders_repository.dart';
 import 'orders_state.dart';
 import 'pending_customer_rating_controller.dart';
+import 'rider_capacity_cache.dart';
 
 class OrdersController extends Notifier<OrdersState> {
   late final OrdersRepository _repository;
@@ -33,6 +34,10 @@ class OrdersController extends Notifier<OrdersState> {
   /// would e.g. drop an order the rider just accepted — so it is discarded
   /// and re-fetched instead.
   int _mutationVersion = 0;
+
+  /// Whether this session has written its first `canAcceptMore` over
+  /// whatever a previous session left in [RiderCapacityCache].
+  bool _capacitySynced = false;
 
   /// Orders whose live-tracking room this rider has joined. Kept in sync with
   /// `activeOrders` by [_setLoaded] so every held delivery is tracked, and
@@ -85,6 +90,12 @@ class OrdersController extends Notifier<OrdersState> {
   /// made the active-trip flow jank. Also keeps tracking rooms in sync.
   void _setLoaded(OrdersLoaded next) {
     if (state == next) return;
+    if (!_capacitySynced || RiderCapacityCache.current != next.canAcceptMore) {
+      _capacitySynced = true;
+      // New-order alerts outside Riverpod (foreground notification, native
+      // overlay) stay quiet while the rider is at the order limit.
+      unawaited(RiderCapacityCache.write(next.canAcceptMore));
+    }
     state = next;
     _syncTracking(next.activeOrders);
   }

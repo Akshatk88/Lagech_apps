@@ -80,7 +80,9 @@ class OrderDetailScreen extends ConsumerWidget {
         title: 'Payment Collected',
         subtitle: paymentDone
             ? 'Payment received'
-            : (order.isCashOnDelivery ? 'Collect cash from customer' : 'Awaiting payment'),
+            : (order.isCashOnDelivery
+                ? 'Collect ₹${order.cashToCollect.toStringAsFixed(0)} cash from customer'
+                : 'Awaiting payment'),
         icon: Icons.payments_outlined,
         state: paymentDone
             ? _StepState.done
@@ -267,6 +269,17 @@ class OrderDetailScreen extends ConsumerWidget {
                             ),
                           ],
                         ),
+                        if (!order.isPaid && order.isPartiallyPrepaid)
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('Cash to collect', style: TextStyle(fontSize: 12.sp, color: subTextColor)),
+                              Text(
+                                '₹${order.cashToCollect.toStringAsFixed(0)}',
+                                style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w800, color: theme.primaryColor),
+                              ),
+                            ],
+                          ),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [

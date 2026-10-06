@@ -50,7 +50,8 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
     with SingleTickerProviderStateMixin {
   bool _isCurrentOrderVisible = true;
   bool _showReferEarn = true;
-  bool _isActionLoading = false;
+  // Per order: one delivery's pending call never disables another's buttons.
+  final Set<String> _actionLoadingIds = {};
 
   Map<String, dynamic>? _earningsSummary;
   bool _earningsLoading = true;
@@ -350,11 +351,11 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Future<void> _runAction(Future<Result<DeliveryOrder, AppError>> Function() call) async {
-    if (_isActionLoading) return;
-    setState(() => _isActionLoading = true);
+  Future<void> _runAction(String orderId, Future<Result<DeliveryOrder, AppError>> Function() call) async {
+    if (_actionLoadingIds.contains(orderId)) return;
+    setState(() => _actionLoadingIds.add(orderId));
     final result = await call();
-    if (mounted) setState(() => _isActionLoading = false);
+    if (mounted) setState(() => _actionLoadingIds.remove(orderId));
     result.when(success: (_) {}, failure: (error) => _showSnack(error.message));
   }
 
@@ -365,19 +366,19 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
         return (
           label: 'Reached Pickup',
           icon: Icons.storefront_outlined,
-          action: () => _runAction(() => controller.reachedPickup(order.id)),
+          action: () => _runAction(order.id, () => controller.reachedPickup(order.id)),
         );
       case 'at_pickup':
         return (
           label: 'Confirm Pickup',
           icon: Icons.check_circle_outline,
-          action: () => _runAction(() => controller.confirmPickup(order.id)),
+          action: () => _runAction(order.id, () => controller.confirmPickup(order.id)),
         );
       case 'en_route_to_delivery':
         return (
           label: 'Reached Drop',
           icon: Icons.flag_outlined,
-          action: () => _runAction(() => controller.reachedDrop(order.id)),
+          action: () => _runAction(order.id, () => controller.reachedDrop(order.id)),
         );
       case 'at_drop':
         if (order.dropOtpRequired && !order.dropOtpVerified) {
@@ -397,7 +398,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
         return (
           label: 'Complete Delivery',
           icon: Icons.done_all_rounded,
-          action: () => _runAction(() => controller.completeOrder(order.id)),
+          action: () => _runAction(order.id, () => controller.completeOrder(order.id)),
         );
       default:
         return null;
@@ -420,7 +421,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
       builder: (_) => CollectPaymentSheet(order: order),
     );
     if (collected == true) {
-      await _runAction(() => ref.read(ordersControllerProvider.notifier).completeOrder(order.id));
+      await _runAction(order.id, () => ref.read(ordersControllerProvider.notifier).completeOrder(order.id));
     }
   }
 
@@ -975,8 +976,10 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
     DeliveryOrder order,
   ) {
     final action = _actionFor(order);
+    final isActionLoading = _actionLoadingIds.contains(order.id);
+    // Cash to take at the door: only the cash part of a wallet + cash order.
     final paymentLabel = order.isCashOnDelivery
-        ? '₹${order.total.toStringAsFixed(0)} COD'
+        ? '₹${order.cashToCollect.toStringAsFixed(0)} COD'
         : '₹${order.total.toStringAsFixed(0)} Paid';
     final showTip = order.riderTip > 0 &&
         ref.watch(businessSettingsControllerProvider.select((s) => s.showEarning));
@@ -1095,7 +1098,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
             children: [
               Expanded(
                 child: ElevatedButton(
-                  onPressed: _isActionLoading
+                  onPressed: isActionLoading
                       ? null
                       : () {
                           HapticService.light();
@@ -1110,7 +1113,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                     padding: EdgeInsets.symmetric(horizontal: 4.w),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.r)),
                   ),
-                  child: _isActionLoading
+                  child: isActionLoading
                       ? SizedBox(
                           width: 20.r,
                           height: 20.r,

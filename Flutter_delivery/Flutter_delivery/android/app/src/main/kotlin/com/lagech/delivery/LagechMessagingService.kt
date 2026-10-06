@@ -26,6 +26,12 @@ class LagechMessagingService : FlutterFirebaseMessagingService() {
                     // App is active in foreground — let Flutter in-app dialog handle it
                     Log.d(TAG, "App is in foreground, passing new_order to Flutter")
                     super.onMessageReceived(message)
+                } else if (!RiderPrefs.canAcceptMore(applicationContext)) {
+                    // The rider already holds the admin's order limit; the server
+                    // would refuse the accept, so don't ring for this offer.
+                    val orderId = NewOrderOverlay.orderIdOf(data)
+                    Log.i(TAG, "Rider is at the order limit — not alerting for $orderId")
+                    NewOrderNotifier.cancel(applicationContext, orderId)
                 } else {
                     // App is backgrounded or killed — show native WindowManager overlay!
                     Log.i(TAG, "App is backgrounded, attempting native WindowManager overlay...")

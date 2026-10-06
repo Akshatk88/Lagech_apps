@@ -84,8 +84,10 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
   double _currentHeading = 0.0;
   Position? _previousPos;
   final ConfettiController _confettiController = ConfettiController(duration: const Duration(seconds: 2));
-  bool _isCompleting = false;
-  bool _isActionLoading = false;
+  // Per order, so one delivery's pending call never disables the buttons of
+  // another delivery the rider switches to meanwhile.
+  final Set<String> _completingIds = {};
+  final Set<String> _actionLoadingIds = {};
 
   // --- Debug-only route simulator (kDebugMode) -----------------------------
   // Walks a synthetic position along the last fetched polyline so testers can
@@ -444,12 +446,12 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Future<void> _runAction(Future<Result<DeliveryOrder, AppError>> Function() call) async {
+  Future<void> _runAction(String orderId, Future<Result<DeliveryOrder, AppError>> Function() call) async {
     _stopSimulation();
-    if (_isActionLoading) return;
-    setState(() => _isActionLoading = true);
+    if (_actionLoadingIds.contains(orderId)) return;
+    setState(() => _actionLoadingIds.add(orderId));
     final result = await call();
-    if (mounted) setState(() => _isActionLoading = false);
+    if (mounted) setState(() => _actionLoadingIds.remove(orderId));
     result.when(success: (_) {}, failure: (error) => _showSnack(error.message));
   }
 
@@ -460,19 +462,19 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
         return (
           label: 'Reached pickup',
           icon: Icons.storefront_outlined,
-          action: () => _runAction(() => controller.reachedPickup(order.id)),
+          action: () => _runAction(order.id, () => controller.reachedPickup(order.id)),
         );
       case 'at_pickup':
         return (
           label: 'Confirm pickup',
           icon: Icons.check_circle_outline,
-          action: () => _runAction(() => controller.confirmPickup(order.id)),
+          action: () => _runAction(order.id, () => controller.confirmPickup(order.id)),
         );
       case 'en_route_to_delivery':
         return (
           label: 'Reached drop',
           icon: Icons.flag_outlined,
-          action: () => _runAction(() => controller.reachedDrop(order.id)),
+          action: () => _runAction(order.id, () => controller.reachedDrop(order.id)),
         );
       case 'at_drop':
         if (order.dropOtpRequired && !order.dropOtpVerified) {
@@ -500,8 +502,8 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
   }
 
   Future<void> _completeDelivery(DeliveryOrder order) async {
-    if (_isCompleting) return;
-    setState(() => _isCompleting = true);
+    if (_completingIds.contains(order.id)) return;
+    setState(() => _completingIds.add(order.id));
     
     _confettiController.play();
     await Future.delayed(const Duration(seconds: 2));
@@ -509,10 +511,10 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
     if (!mounted) return;
     final result = await ref.read(ordersControllerProvider.notifier).completeOrder(order.id);
     result.when(
-      success: (_) => _afterDelivered(),
+      success: (_) => _afterDelivered(order.id),
       failure: (error) {
         _showSnack(error.message);
-        if (mounted) setState(() => _isCompleting = false);
+        if (mounted) setState(() => _completingIds.remove(order.id));
       },
     );
   }
@@ -520,10 +522,10 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
   /// After one delivery is completed: if the rider still holds another
   /// delivery, stay on the trip screen (now focused on that order — the
   /// controller already moved the selection); otherwise go home as before.
-  void _afterDelivered() {
+  void _afterDelivered(String deliveredId) {
     final ordersState = ref.read(ordersControllerProvider);
     if (ordersState is OrdersLoaded && ordersState.hasActiveOrder) {
-      if (mounted) setState(() => _isCompleting = false);
+      if (mounted) setState(() => _completingIds.remove(deliveredId));
       final next = ordersState.currentOrder!;
       _showSnack('Delivered. Next: order #${next.orderCode}');
       return;
@@ -568,8 +570,8 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
           if (mounted) await _showCollectPaymentSheet(updatedOrder);
           return;
         }
-        if (_isCompleting) return;
-        setState(() => _isCompleting = true);
+        if (_completingIds.contains(order.id)) return;
+        setState(() => _completingIds.add(order.id));
 
         _confettiController.play();
         await Future.delayed(const Duration(seconds: 2));
@@ -577,10 +579,10 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
         if (mounted) {
           final completeResult = await ref.read(ordersControllerProvider.notifier).completeOrder(order.id);
           completeResult.when(
-            success: (_) => _afterDelivered(),
+            success: (_) => _afterDelivered(order.id),
             failure: (error) {
               _showSnack(error.message);
-              if (mounted) setState(() => _isCompleting = false);
+              if (mounted) setState(() => _completingIds.remove(order.id));
             }
           );
         }
@@ -974,6 +976,8 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
     bool isPickupPhase,
   ) {
     final action = _actionFor(order);
+    final isActionLoading = _actionLoadingIds.contains(order.id);
+    final isCompleting = _completingIds.contains(order.id);
     final canCancelOrder = ref.watch(
       businessSettingsControllerProvider.select((s) => s.canCancelOrder),
     );
@@ -1181,7 +1185,7 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
               width: double.infinity,
               height: 54.h,
               child: ElevatedButton(
-                onPressed: _isActionLoading
+                onPressed: isActionLoading || isCompleting
                     ? null
                     : () {
                         HapticService.light();
@@ -1195,7 +1199,7 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
                   padding: EdgeInsets.symmetric(vertical: 14.h),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
                 ),
-                child: _isActionLoading
+                child: isActionLoading || isCompleting
                     ? SizedBox(
                         width: 24.r,
                         height: 24.r,
@@ -1217,7 +1221,7 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
             if (showCancel) ...[
               SizedBox(height: 8.h),
               TextButton.icon(
-                onPressed: _isActionLoading || _isCompleting
+                onPressed: isActionLoading || isCompleting
                     ? null
                     : () {
                         HapticService.light();
