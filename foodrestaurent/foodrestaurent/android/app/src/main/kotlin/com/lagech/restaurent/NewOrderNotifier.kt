@@ -30,6 +30,14 @@ object NewOrderNotifier {
     private const val CHANNEL_ID = "new_order_ringing_v6"
     private const val CHANNEL_NAME = "New order alerts"
 
+    /**
+     * Orders that arrive already confirmed (the delivery partner confirms them) are
+     * a plain heads-up with the system's normal notification sound: nothing to accept
+     * or reject, so no alarm loop and no full-screen takeover.
+     */
+    private const val CONFIRMED_CHANNEL_ID = "order_confirmed_v1"
+    private const val CONFIRMED_CHANNEL_NAME = "Confirmed orders"
+
     const val ACTION_ACCEPT = "com.lagech.restaurent.NEW_ORDER_ACCEPT"
     const val ACTION_REJECT = "com.lagech.restaurent.NEW_ORDER_REJECT"
     const val EXTRA_ORDER_ID = "orderId"
@@ -54,6 +62,13 @@ object NewOrderNotifier {
             ?: "new_order"
     }
 
+    /**
+     * False only when the push says `needsAcceptance` is "false" — the order arrived
+     * already confirmed. A missing field (older server) keeps the Accept/Reject alarm.
+     */
+    fun needsAcceptance(data: Map<String, String>): Boolean =
+        data["needsAcceptance"]?.trim()?.lowercase() != "false"
+
     fun show(context: Context, data: Map<String, String>) {
         val allIds = NewOrderMessagingService.allOrderIdsOf(data)
         val canonicalId = canonicalOrderId(allIds, data)
@@ -67,6 +82,13 @@ object NewOrderNotifier {
 
         // Record in FCM deduplication cache so subsequent FCM/Socket events don't duplicate
         NewOrderMessagingService.recordAlert(allIds)
+
+        // Already confirmed: no overlay (it carries Accept/Reject and starts the ring),
+        // no full-screen intent, no looping ringtone — just a normal notification.
+        if (!needsAcceptance(data)) {
+            postConfirmedNotification(context, manager, data, canonicalId)
+            return
+        }
 
         val ringMillis = expiryMillis(data)
 
@@ -134,6 +156,43 @@ object NewOrderNotifier {
         NewOrderRingtone.start(context, allIds.ifEmpty { listOf(canonicalId) }, ringMillis)
     }
 
+    /**
+     * Plain high-priority notification for an order that is already confirmed. Same
+     * notification id as the alarm alert, so dismiss() and the existing cancel paths
+     * still find it; tapping opens the app on the order with the same extras.
+     */
+    private fun postConfirmedNotification(
+        context: Context,
+        manager: NotificationManager,
+        data: Map<String, String>,
+        canonicalId: String,
+    ) {
+        createConfirmedChannel(manager)
+
+        val title = data["title"]?.takeIf { it.isNotBlank() } ?: "Order confirmed"
+        val body = data["body"]?.takeIf { it.isNotBlank() }
+            ?: "Order is confirmed. Please start preparing."
+        val notifId = notificationId(canonicalId)
+
+        val notification: Notification = NotificationCompat.Builder(context, CONFIRMED_CHANNEL_ID)
+            .setSmallIcon(R.mipmap.launcher_icon)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            // Pre-O devices: one normal sound (the channel covers O and up).
+            .setDefaults(NotificationCompat.DEFAULT_SOUND)
+            .setOnlyAlertOnce(true)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setAutoCancel(true)
+            .setContentIntent(openAppIntent(context, canonicalId))
+            .build()
+
+        manager.notify(notifId, notification)
+        Log.i(TAG, "Confirmed-order notification posted for canonicalId: $canonicalId (notifId: $notifId)")
+    }
+
     /** Take the alert down and stop the ring — order taken elsewhere, or cancelled. */
     fun dismiss(context: Context, orderId: String?) {
         NewOrderRingtone.stop(null)
@@ -151,6 +210,10 @@ object NewOrderNotifier {
         val allIds = NewOrderMessagingService.allOrderIdsOf(data)
         val canonicalId = canonicalOrderId(allIds, data)
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (!needsAcceptance(data)) {
+            postConfirmedNotification(context, manager, data, canonicalId)
+            return
+        }
         createChannel(context, manager)
 
         val notifId = notificationId(canonicalId)
@@ -237,6 +300,24 @@ object NewOrderNotifier {
             }
             manager.createNotificationChannel(channel)
         }
+    }
+
+    /** High-importance channel with the system's default notification sound. */
+    private fun createConfirmedChannel(manager: NotificationManager) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        if (manager.getNotificationChannel(CONFIRMED_CHANNEL_ID) != null) return
+        val channel = NotificationChannel(
+            CONFIRMED_CHANNEL_ID,
+            CONFIRMED_CHANNEL_NAME,
+            NotificationManager.IMPORTANCE_HIGH,
+        ).apply {
+            description = "Orders already confirmed by the delivery partner."
+            // No setSound(): the channel keeps the default notification sound, played once.
+            enableVibration(true)
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            setShowBadge(true)
+        }
+        manager.createNotificationChannel(channel)
     }
 
     private fun wakeScreen(context: Context) {

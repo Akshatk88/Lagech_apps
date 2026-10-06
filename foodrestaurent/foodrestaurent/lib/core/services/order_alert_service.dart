@@ -176,7 +176,15 @@ class OrderAlertService {
   /// deliveryman and this is a delivery order (takeaway orders still wait for
   /// the restaurant). Reads `orderStatus` when the payload carries it (the
   /// socket event sends the whole order), otherwise `orderType` (the push).
+  ///
+  /// The push's `needsAcceptance` ("true"/"false") is the server's own answer
+  /// and wins when present; without it (older server, socket event) this falls
+  /// back to the settings + status/type check.
   bool _arrivesConfirmed(Map<String, dynamic> data) {
+    final needsAcceptance =
+        data['needsAcceptance']?.toString().trim().toLowerCase();
+    if (needsAcceptance == 'false') return true;
+    if (needsAcceptance == 'true') return false;
     final settings = _ref.read(restaurantBusinessSettingsProvider).value;
     if (settings == null || !settings.confirmedByDeliveryman) return false;
     Map<String, dynamic>? asMap(dynamic val) {

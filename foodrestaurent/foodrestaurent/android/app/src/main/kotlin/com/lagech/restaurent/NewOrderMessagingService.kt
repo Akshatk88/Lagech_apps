@@ -11,6 +11,8 @@ import java.util.concurrent.ConcurrentHashMap
  * When app is in BACKGROUND or KILLED:
  *  - Native Kotlin shows the high-priority heads-up alert with Accept / Reject buttons.
  *  - Native Kotlin plays the looping ringtone (USAGE_ALARM).
+ *  - Exception: needsAcceptance == "false" (already confirmed by the delivery partner)
+ *    gets a plain notification instead — no Accept/Reject, no ring, no full-screen.
  *  - super.onMessageReceived is NOT called to prevent Flutter's background isolate from
  *    spawning and posting a duplicate notification with duplicate sound.
  *
@@ -28,7 +30,7 @@ class NewOrderMessagingService : FlutterFirebaseMessagingService() {
         val orderId = allIds.firstOrNull()
         val notifTitle = (notification?.title ?: data["title"] ?: "").lowercase()
 
-        Log.i(TAG, "FCM received: rawType=$rawType ids=$allIds notifTitle=$notifTitle foreground=${AppForeground.isForeground}")
+        Log.i(TAG, "FCM received: rawType=$rawType ids=$allIds notifTitle=$notifTitle needsAcceptance=${data["needsAcceptance"]} foreground=${AppForeground.isForeground}")
 
         val isNewOrder = rawType in NEW_ORDER_TYPES
         val statusVal = (data["orderStatus"] ?: data["status"] ?: "").lowercase()

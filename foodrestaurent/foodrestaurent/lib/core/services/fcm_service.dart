@@ -252,11 +252,16 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       onResponse: (_) {},
       requestPermission: false,
     );
+    // Already confirmed by the delivery partner: a plain alert, without the
+    // Accept/Reject actions and the ringing new-order sound. Missing = "true".
+    final needsAcceptance =
+        message.data['needsAcceptance']?.toString().trim().toLowerCase() != 'false';
     final shown = await LocalNotificationService.instance.show(
       title: _nonEmpty(message.notification?.title) ?? _nonEmpty(message.data['title']) ?? 'New order received',
       body: _nonEmpty(message.notification?.body) ?? buildOrderNotificationBody(message.data),
       payload: _encodeTapPayload(type: 'new_order', orderId: orderId),
-      isNewOrder: true,
+      isNewOrder: needsAcceptance,
+      fullScreenIntent: needsAcceptance,
     );
 
     if (kDebugMode) {
