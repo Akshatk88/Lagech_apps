@@ -17,6 +17,7 @@ import '../network/api_endpoints.dart';
 import '../network/dio_client.dart';
 import '../storage/token_storage.dart';
 import 'new_order_overlay_bridge.dart';
+import '../../features/settings/application/business_settings_controller.dart';
 
 /// Dedicated channel for incoming-order alerts — separate from
 /// [FcmService._channel] because it needs call-category / full-screen-intent
@@ -269,8 +270,12 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     final drop = message.data['dropAddress'] as String? ?? message.data['customerAddress'] as String? ?? 'Customer';
     final price = message.data['price'] as String? ?? message.data['earnings'] as String? ?? '';
     final distance = message.data['distance'] as String? ?? message.data['tripDistanceKm'] as String? ?? '';
-    final body =
-        'From: $pickup\nTo: $drop\nEarnings: ₹$price | Dist: ${distance}km';
+    // Background isolate: no ProviderScope, so read the persisted copy of
+    // the admin's "show earning" switch (defaults to showing it).
+    final showEarning = (await BusinessSettingsCache.read()).showEarning;
+    final body = showEarning
+        ? 'From: $pickup\nTo: $drop\nEarnings: ₹$price | Dist: ${distance}km'
+        : 'From: $pickup\nTo: $drop\nDist: ${distance}km';
 
     await localNotifications.show(
       incomingOrderNotificationId(_orderIdOf(message.data) ?? ''),
@@ -620,7 +625,9 @@ class FcmService {
       final drop = message.data['dropAddress'] as String? ?? message.data['customerAddress'] as String? ?? 'Customer';
       final price = message.data['price'] as String? ?? message.data['earnings'] as String? ?? '';
       final distance = message.data['distance'] as String? ?? message.data['tripDistanceKm'] as String? ?? '';
-      final body = 'From: $pickup\nTo: $drop\nEarnings: ₹$price | Dist: ${distance}km';
+      final body = BusinessSettingsCache.current.showEarning
+          ? 'From: $pickup\nTo: $drop\nEarnings: ₹$price | Dist: ${distance}km'
+          : 'From: $pickup\nTo: $drop\nDist: ${distance}km';
       final orderId = _orderIdOf(message.data) ?? '';
 
       _localNotifications.show(

@@ -165,16 +165,21 @@ class AvailabilityController extends Notifier<bool> {
       lng: position.longitude,
     );
 
+    // Every delivery the rider holds gets the live position — each order's
+    // customer tracks the rider through its own order id.
     final ordersState = ref.read(ordersControllerProvider);
-    if (ordersState is OrdersLoaded && ordersState.currentOrder != null) {
-      ref.read(socketServiceProvider).sendLocationUpdate(
-        orderId: ordersState.currentOrder!.id,
-        lat: position.latitude,
-        lng: position.longitude,
-        heading: position.heading,
-        speed: position.speed,
-        accuracy: position.accuracy,
-      );
+    if (ordersState is OrdersLoaded) {
+      final socket = ref.read(socketServiceProvider);
+      for (final order in ordersState.activeOrders) {
+        socket.sendLocationUpdate(
+          orderId: order.id,
+          lat: position.latitude,
+          lng: position.longitude,
+          heading: position.heading,
+          speed: position.speed,
+          accuracy: position.accuracy,
+        );
+      }
     }
   }
 }

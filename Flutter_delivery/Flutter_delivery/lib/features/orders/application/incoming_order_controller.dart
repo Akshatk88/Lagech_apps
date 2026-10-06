@@ -8,6 +8,7 @@ import '../../../core/services/new_order_overlay_bridge.dart';
 import '../../../core/services/socket_service.dart';
 import '../data/models/delivery_order.dart';
 import 'orders_controller.dart';
+import 'orders_state.dart';
 
 /// Single source of truth for the full-screen incoming-order alert.
 /// `null` means no active alert; non-null means "show it now" — regardless
@@ -84,6 +85,17 @@ class IncomingOrderController extends Notifier<DeliveryOrder?> {
     show(DeliveryOrder.fromRealtimePayload(data));
   }
 
+  /// Offers are only surfaced while the rider has room for another
+  /// delivery. `canAcceptMore` comes from `/orders/current`; when the
+  /// backend doesn't report it (null) offers show exactly as before.
+  /// An offer for an order the rider already holds is never shown.
+  bool _canShowOffer(String orderId) {
+    final orders = ref.read(ordersControllerProvider);
+    if (orders is! OrdersLoaded) return true;
+    if (orders.activeOrderById(orderId) != null) return false;
+    return orders.canAcceptMore != false;
+  }
+
   void _withdraw(Map<String, dynamic> data) {
     final orderId =
         (data['orderMongoId'] ?? data['id'] ?? data['orderId'] ?? data['_id'])
@@ -119,6 +131,10 @@ class IncomingOrderController extends Notifier<DeliveryOrder?> {
   void show(DeliveryOrder order) {
     if (_resolvedOrderIds.contains(order.id)) {
       debugPrint('[IncomingOrderController] Not showing card: order ${order.id} is already resolved');
+      return;
+    }
+    if (!_canShowOffer(order.id)) {
+      debugPrint('[IncomingOrderController] Not showing card: order ${order.id} — rider is at their order limit or already holds it');
       return;
     }
     state = order;

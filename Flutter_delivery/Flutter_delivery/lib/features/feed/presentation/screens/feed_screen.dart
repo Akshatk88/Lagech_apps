@@ -453,6 +453,9 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
           // Order was completed or cancelled
           _loadEarnings();
           _clearRoute();
+        } else if (next.activeOrders.length < previous.activeOrders.length) {
+          // One of several deliveries was completed/cancelled
+          _loadEarnings();
         } else if (previous.hasActiveOrder && next.hasActiveOrder &&
                    previous.currentOrder!.currentPhase != next.currentOrder!.currentPhase &&
                    next.currentOrder!.currentPhase == 'delivered') {
@@ -552,6 +555,25 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
     }
     if (ordersState is OrdersLoaded) {
       final order = ordersState.currentOrder;
+      if (order != null && ordersState.hasMultipleActiveOrders) {
+        // Rider holds several deliveries: one card per order, focused first.
+        // Each card's actions use its own order id; tapping opens that order.
+        final others = ordersState.activeOrders.where((o) => o.id != order.id);
+        return [
+          Row(
+            children: [
+              Text(
+                'Active Orders (${ordersState.activeOrders.length})',
+                style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w800, color: textColor),
+              ),
+            ],
+          ),
+          for (final o in [order, ...others]) ...[
+            SizedBox(height: 12.h),
+            _buildCurrentOrderCard(theme, isDarkMode, textColor, subTextColor, o),
+          ],
+        ];
+      }
       if (order != null) {
         return [
           _buildCurrentOrderHeader(textColor, order),
@@ -966,7 +988,10 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () => ref.read(activeTripVisibilityControllerProvider.notifier).show(),
+      onTap: () {
+        ref.read(ordersControllerProvider.notifier).selectOrder(order.id);
+        ref.read(activeTripVisibilityControllerProvider.notifier).show();
+      },
       child: Container(
       width: double.infinity,
       padding: EdgeInsets.all(20.r),

@@ -33,14 +33,43 @@ class OrdersRepository {
     }
   }
 
-  Future<Result<DeliveryOrder?, AppError>> getCurrentOrder() async {
+  /// `GET /orders/current`. Newer backends also return `activeOrders` (every
+  /// delivery the rider holds, most recently updated first), `orderLimit`
+  /// and `canAcceptMore`; older ones only `activeOrder`, in which case the
+  /// list falls back to `[activeOrder]` and the capacity fields stay null.
+  Future<Result<CurrentTrip, AppError>> getCurrentTrip() async {
     try {
       final res = await _dio.get(ApiEndpoints.ordersCurrent);
       final data = res.data['data'] as Map<String, dynamic>?;
-      final activeOrder = data?['activeOrder'];
-      if (activeOrder == null) return const Result.success(null);
+      final rawActive = data?['activeOrder'];
+      final activeOrder = rawActive is Map<String, dynamic>
+          ? DeliveryOrder.fromJson(rawActive)
+          : null;
+
+      final rawList = data?['activeOrders'];
+      final List<DeliveryOrder> activeOrders;
+      if (rawList is List) {
+        activeOrders = rawList
+            .whereType<Map<String, dynamic>>()
+            .map(DeliveryOrder.fromJson)
+            .toList();
+        // Defensive: never lose the order the old field reports.
+        if (activeOrder != null &&
+            !activeOrders.any((o) => o.id == activeOrder.id)) {
+          activeOrders.insert(0, activeOrder);
+        }
+      } else {
+        activeOrders = activeOrder != null ? [activeOrder] : <DeliveryOrder>[];
+      }
+
+      final canAcceptMore = data?['canAcceptMore'];
       return Result.success(
-        DeliveryOrder.fromJson(activeOrder as Map<String, dynamic>),
+        CurrentTrip(
+          activeOrder: activeOrder,
+          activeOrders: activeOrders,
+          orderLimit: (data?['orderLimit'] as num?)?.toInt(),
+          canAcceptMore: canAcceptMore is bool ? canAcceptMore : null,
+        ),
       );
     } on DioException catch (e) {
       return Result.failure(_mapError(e));
@@ -226,6 +255,28 @@ class OrdersRepository {
     }
     return NetworkError('Something went wrong. Please try again.');
   }
+}
+
+/// Parsed `GET /orders/current` response.
+class CurrentTrip {
+  const CurrentTrip({
+    required this.activeOrder,
+    required this.activeOrders,
+    this.orderLimit,
+    this.canAcceptMore,
+  });
+
+  /// Most recent active delivery (legacy single-order field).
+  final DeliveryOrder? activeOrder;
+
+  /// Every delivery the rider currently holds, most recently updated first.
+  final List<DeliveryOrder> activeOrders;
+
+  /// Admin's live "Maximum assigned order limit"; null on older backends.
+  final int? orderLimit;
+
+  /// Whether the rider may take another order; null on older backends.
+  final bool? canAcceptMore;
 }
 
 final ordersRepositoryProvider = Provider<OrdersRepository>((ref) {

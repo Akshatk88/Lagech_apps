@@ -19,6 +19,7 @@ import 'package:food_user_application/features/auth/application/auth_state.dart'
 import 'package:food_user_application/features/orders/application/incoming_order_controller.dart';
 import 'package:food_user_application/features/orders/data/models/delivery_order.dart';
 import 'package:food_user_application/features/orders/data/orders_repository.dart';
+import 'package:food_user_application/features/settings/application/business_settings_controller.dart';
 
 const _incomingOnlineGreen = Color(0xFFF20D16); // brand red (was green)
 
@@ -269,6 +270,9 @@ class _IncomingOrderScreenState extends ConsumerState<IncomingOrderScreen> {
     final textColor = isDarkMode ? Colors.white : const Color(0xFF1E1E1E);
     final subTextColor = isDarkMode ? Colors.grey[400] : Colors.grey[600];
     final order = widget.order;
+    final showEarning = ref.watch(
+      businessSettingsControllerProvider.select((s) => s.showEarning),
+    );
 
     final etaLabel = _etaMins != null
         ? '${_etaMins!.round()} mins away'
@@ -328,6 +332,7 @@ class _IncomingOrderScreenState extends ConsumerState<IncomingOrderScreen> {
                   secondsLeft: _secondsLeft,
                   onAccept: _accept,
                   onReject: _decline,
+                  showEarning: showEarning,
                 ),
               ),
             ),

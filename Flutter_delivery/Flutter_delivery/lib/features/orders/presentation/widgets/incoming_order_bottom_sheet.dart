@@ -10,12 +10,16 @@ class IncomingOrderBottomSheet extends StatefulWidget {
   final Future<void> Function() onAccept;
   final VoidCallback onReject;
 
+  /// Admin's "show earning" switch (business settings `rider.showEarning`).
+  final bool showEarning;
+
   const IncomingOrderBottomSheet({
     super.key,
     required this.order,
     required this.secondsLeft,
     required this.onAccept,
     required this.onReject,
+    this.showEarning = true,
   });
 
   @override
@@ -48,6 +52,7 @@ class _IncomingOrderBottomSheetState
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (widget.showEarning) ...[
                 Text(
                   'Estimated earnings',
                   style: TextStyle(
@@ -66,6 +71,7 @@ class _IncomingOrderBottomSheetState
                   ),
                 ),
                 SizedBox(height: 12.h),
+                ],
                 // Pickup / Drop distances
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,

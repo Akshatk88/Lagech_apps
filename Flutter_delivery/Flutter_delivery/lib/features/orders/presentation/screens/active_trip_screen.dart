@@ -74,7 +74,10 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
   String? _restaurantMarkerUrl;
   bool _restaurantMarkerLoading = false;
   StreamSubscription<Position>? _positionSub;
-  bool _routeFetchInFlight = false;
+  /// Route key (`orderId::target`) of the request in flight, if any. Keyed so
+  /// switching to another active order isn't blocked by — or overwritten
+  /// with — the previous order's route.
+  String? _inFlightRouteKey;
   DeliveryOrder? _lastOrder;
   double _currentHeading = 0.0;
   Position? _previousPos;
@@ -303,7 +306,7 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
 
   void _onPositionUpdate(Position position) {
     _currentPos = position;
-    if (_routePoints.isEmpty && !_routeFetchInFlight && _lastOrder != null) {
+    if (_routePoints.isEmpty && _inFlightRouteKey == null && _lastOrder != null) {
       _fetchRoute(_lastOrder!, _targetFor(_lastOrder!));
     }
 
@@ -374,16 +377,20 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
 
   Future<void> _fetchRoute(DeliveryOrder order, String target) async {
     final pos = ref.read(locationServiceProvider).lastPosition;
-    if (pos == null || _routeFetchInFlight) return;
-    _routeFetchInFlight = true;
+    final key = '${order.id}::$target';
+    if (pos == null || _inFlightRouteKey == key) return;
+    _inFlightRouteKey = key;
     final result = await ref.read(ordersRepositoryProvider).getRoute(
           order.id,
           lat: pos.latitude,
           lng: pos.longitude,
           target: target,
         );
-    _routeFetchInFlight = false;
+    if (_inFlightRouteKey == key) _inFlightRouteKey = null;
     if (!mounted) return;
+    // The rider switched to another active order (or the phase moved on)
+    // while this was in flight — don't paint a stale route.
+    if (_routeKey != null && key != _routeKey) return;
     result.when(
       success: (data) {
         final destLoc = target == 'restaurant'
@@ -500,18 +507,27 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
     if (!mounted) return;
     final result = await ref.read(ordersControllerProvider.notifier).completeOrder(order.id);
     result.when(
-      success: (_) {
-        ref.read(activeTripVisibilityControllerProvider.notifier).show();
-        if (mounted) {
-           ref.read(activeTripVisibilityControllerProvider.notifier).hide();
-           ref.read(goRouterProvider).go('/main');
-        }
-      },
+      success: (_) => _afterDelivered(),
       failure: (error) {
         _showSnack(error.message);
         if (mounted) setState(() => _isCompleting = false);
       },
     );
+  }
+
+  /// After one delivery is completed: if the rider still holds another
+  /// delivery, stay on the trip screen (now focused on that order — the
+  /// controller already moved the selection); otherwise go home as before.
+  void _afterDelivered() {
+    final ordersState = ref.read(ordersControllerProvider);
+    if (ordersState is OrdersLoaded && ordersState.hasActiveOrder) {
+      if (mounted) setState(() => _isCompleting = false);
+      final next = ordersState.currentOrder!;
+      _showSnack('Delivered. Next: order #${next.orderCode}');
+      return;
+    }
+    ref.read(activeTripVisibilityControllerProvider.notifier).hide();
+    ref.read(goRouterProvider).go('/main');
   }
 
   Future<void> _promptDropOtp(DeliveryOrder order) async {
@@ -536,10 +552,7 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
         if (mounted) {
           final completeResult = await ref.read(ordersControllerProvider.notifier).completeOrder(order.id);
           completeResult.when(
-            success: (_) {
-              ref.read(activeTripVisibilityControllerProvider.notifier).hide();
-              ref.read(goRouterProvider).go('/main');
-            },
+            success: (_) => _afterDelivered(),
             failure: (error) {
               _showSnack(error.message);
               if (mounted) setState(() => _isCompleting = false);
@@ -712,7 +725,11 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
             SafeArea(
               child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
-                child: Row(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Row(
                   children: [
                     _circleIconButton(
                       Icons.menu_rounded,
@@ -783,11 +800,17 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
                     ),
                   ],
                 ),
+                if (ordersState.hasMultipleActiveOrders) ...[
+                  SizedBox(height: 10.h),
+                  _buildOrderSwitcher(theme, ordersState, order),
+                ],
+                  ],
+                ),
               ),
             ),
             if (_isSimulating)
               Positioned(
-                top: 70.h,
+                top: ordersState.hasMultipleActiveOrders ? 120.h : 70.h,
                 left: 16.w,
                 right: 16.w,
                 child: Center(
@@ -847,6 +870,50 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// One chip per delivery the rider holds; tapping focuses that order so the
+  /// screen (and every status action on it) works on that order's id.
+  Widget _buildOrderSwitcher(ThemeData theme, OrdersLoaded ordersState, DeliveryOrder focused) {
+    return SizedBox(
+      height: 36.h,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: ordersState.activeOrders.length,
+        separatorBuilder: (_, _) => SizedBox(width: 8.w),
+        itemBuilder: (context, index) {
+          final o = ordersState.activeOrders[index];
+          final selected = o.id == focused.id;
+          final stage = _targetFor(o) == 'restaurant' ? 'Pickup' : 'Drop';
+          return GestureDetector(
+            onTap: () {
+              if (selected) return;
+              HapticService.light();
+              ref.read(ordersControllerProvider.notifier).selectOrder(o.id);
+            },
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 12.w),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: selected ? theme.primaryColor : Colors.white,
+                borderRadius: BorderRadius.circular(18.r),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 10, offset: const Offset(0, 2)),
+                ],
+              ),
+              child: Text(
+                '#${o.orderCode} · $stage',
+                style: TextStyle(
+                  color: selected ? Colors.white : Colors.black87,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12.sp,
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }

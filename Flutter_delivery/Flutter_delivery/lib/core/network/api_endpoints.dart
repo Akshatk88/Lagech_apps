@@ -22,6 +22,9 @@ class ApiEndpoints {
   static const String deleteAccount = '/food/delivery/profile/account';
   static const String reverify = '/food/delivery/reverify';
 
+  // Admin business settings (public, no auth needed)
+  static const String businessSettings = '/food/public/business-settings';
+
   // Availability
   static const String availability = '/food/delivery/availability';
 

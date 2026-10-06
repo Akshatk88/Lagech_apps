@@ -22,6 +22,7 @@ import 'package:food_user_application/features/orders/presentation/screens/incom
 import 'package:food_user_application/core/presentation/widgets/no_network_overlay.dart';
 import 'package:food_user_application/core/services/network_controller.dart';
 import 'package:food_user_application/features/orders/presentation/screens/rate_customer_screen.dart';
+import 'package:food_user_application/features/settings/application/business_settings_controller.dart';
 
 import 'package:firebase_core/firebase_core.dart';
 
@@ -62,6 +63,9 @@ class _FoodDeliveryAppState extends ConsumerState<FoodDeliveryApp>
 
     Future.microtask(() {
       ref.read(fcmServiceProvider).initialize();
+      // Admin business settings (show earning, cancel permission, ...):
+      // cached copy applies immediately, a failed fetch keeps it.
+      unawaited(ref.read(businessSettingsControllerProvider.notifier).load());
       ReferralTrackingService.initialize();
       _consumeOverlayHandoff();
     });
@@ -78,6 +82,9 @@ class _FoodDeliveryAppState extends ConsumerState<FoodDeliveryApp>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _consumeOverlayHandoff();
+
+      // Pick up admin setting changes made while the app was backgrounded.
+      unawaited(ref.read(businessSettingsControllerProvider.notifier).load());
 
       // Re-register the push token on every resume.
       unawaited(ref.read(fcmServiceProvider).registerToken());
