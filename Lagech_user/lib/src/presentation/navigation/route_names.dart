@@ -24,6 +24,7 @@ class RouteNames {
   static const String referralTicket = '/refer-earn/ticket';
   static const String favorites = '/favorites';
   static const String wallet = '/wallet';
+  static const String loyaltyPoints = '/loyalty-points';
   static const String payLater = '/pay-later';
   static const String chat = '/chat';
   static const String homeFilter = '/home-filter';

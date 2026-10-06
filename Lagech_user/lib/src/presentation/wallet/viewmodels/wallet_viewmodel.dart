@@ -4,6 +4,7 @@ import 'dart:developer' as developer;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/error/failures.dart';
 import '../../../di/payment_providers.dart';
 import '../../../di/wallet_providers.dart';
 import '../../auth/viewmodels/auth_viewmodel.dart';
@@ -29,6 +30,8 @@ class WalletViewModel extends Notifier<WalletState> {
       _loadCashbackSummary(),
       _loadRefundSummary(),
       _loadCashbackSettings(),
+      _loadBonusOffers(),
+      loadLoyaltyPoints(),
     ]);
   }
 
@@ -85,6 +88,65 @@ class WalletViewModel extends Notifier<WalletState> {
     } catch (e) {
       // Banner just doesn't show.
       _log('_loadCashbackSettings() failed: $e');
+    }
+  }
+
+  Future<void> _loadBonusOffers() async {
+    try {
+      final offers = await ref.read(walletServiceProvider).fetchWalletBonuses();
+      state = state.copyWith(bonusOffers: offers);
+    } catch (e) {
+      // No offers shown — never a guessed one.
+      _log('_loadBonusOffers() failed: $e');
+    }
+  }
+
+  Future<void> loadLoyaltyPoints() async {
+    try {
+      final loyalty = await ref.read(walletServiceProvider).fetchLoyaltyPoints();
+      state = state.copyWith(loyalty: loyalty);
+    } catch (e) {
+      // Card just doesn't show.
+      _log('loadLoyaltyPoints() failed: $e');
+    }
+  }
+
+  /// Converts [points] to wallet balance. [requestId] must be generated once
+  /// per user tap so a retried request is not converted twice. Returns the
+  /// message to show and whether it succeeded.
+  Future<({bool ok, String message})> convertLoyaltyPoints({
+    required int points,
+    required String requestId,
+  }) async {
+    final service = ref.read(walletServiceProvider);
+    final loyalty = state.loyalty;
+    if (loyalty == null || !loyalty.enabled) {
+      return (ok: false, message: 'Loyalty points are not available right now.');
+    }
+    final invalid = service.validateConversion(loyalty, points);
+    if (invalid != null) return (ok: false, message: invalid);
+
+    state = state.copyWith(isConvertingPoints: true);
+    try {
+      final result = await service.convertLoyaltyPoints(points: points, requestId: requestId);
+      state = state.copyWith(loyalty: result.loyalty);
+      // Re-read the wallet so balance and ledger come from the server, even
+      // when the convert response already carried a wallet.
+      await loadWallet(isRefresh: true);
+      final credited = loyalty.worthOf(points);
+      return (
+        ok: true,
+        message: credited > 0
+            ? '$points points converted. ₹${credited.toStringAsFixed(2)} added to your wallet.'
+            : '$points points converted.',
+      );
+    } on Failure catch (f) {
+      return (ok: false, message: f.message);
+    } catch (e) {
+      _log('convertLoyaltyPoints() failed: $e');
+      return (ok: false, message: 'Could not convert points. Please try again.');
+    } finally {
+      state = state.copyWith(isConvertingPoints: false);
     }
   }
 

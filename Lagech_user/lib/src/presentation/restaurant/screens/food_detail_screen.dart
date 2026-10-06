@@ -19,6 +19,7 @@ import '../../branding/app_colors.dart';
 import '../../common_widgets/smart_image.dart';
 import '../../favorites/viewmodels/favorites_viewmodel.dart';
 import '../../navigation/route_names.dart';
+import '../widgets/food_diet_info.dart';
 
 class FoodDetailScreen extends ConsumerStatefulWidget {
   final FoodModel food;
@@ -652,6 +653,7 @@ class _FoodDetailScreenState extends ConsumerState<FoodDetailScreen>
               height: 1.5,
             ),
           ),
+          FoodDietInfo(food: widget.food, padding: const EdgeInsets.only(top: 14)),
         ],
       ),
     );

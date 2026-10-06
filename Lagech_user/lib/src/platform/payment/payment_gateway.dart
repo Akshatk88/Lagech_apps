@@ -215,13 +215,21 @@ class PaymentGateway {
       }
 
       if (topUp != null) {
-        await _account.verifyTopup(
+        final verified = await _account.verifyTopup(
           razorpayOrderId: response.orderId ?? '',
           razorpayPaymentId: response.paymentId ?? '',
           razorpaySignature: response.signature ?? '',
           amount: topUp,
         );
-        _settle(const PaymentResult(PaymentOutcome.success, 'Wallet topped up successfully.'));
+        // The server credits the best running top-up offer itself and reports
+        // it here; a replayed verify reports `bonus: null`.
+        final bonus = verified.bonus;
+        _settle(PaymentResult(
+          PaymentOutcome.success,
+          bonus == null
+              ? 'Wallet topped up successfully.'
+              : 'Wallet topped up successfully. ${bonus.amountText} bonus added.',
+        ));
         return;
       }
 

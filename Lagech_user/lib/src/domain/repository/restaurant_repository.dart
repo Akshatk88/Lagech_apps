@@ -15,6 +15,12 @@ abstract class RestaurantRepository {
   Future<ApiResponse<List<RestaurantModel>>> getPopularRestaurants({
     void Function(List<RestaurantModel>)? onCache,
   });
+
+  /// Admin-picked recommended restaurants serving the current zone/location,
+  /// in the admin's order. Empty when none are picked for the area.
+  Future<ApiResponse<List<RestaurantModel>>> getRecommendedRestaurants({
+    void Function(List<RestaurantModel>)? onCache,
+  });
   Future<ApiResponse<List<FoodModel>>> getRestaurantMenu(String restaurantId);
   Future<ApiResponse<List<FoodModel>>> getPopularFoods({
     void Function(List<FoodModel>)? onCache,

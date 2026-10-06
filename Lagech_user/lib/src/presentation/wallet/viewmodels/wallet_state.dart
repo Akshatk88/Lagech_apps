@@ -23,6 +23,16 @@ class WalletState {
 
   final bool isToppingUp;
 
+  /// From `GET /food/user/wallet/bonuses`. Empty while loading/on failure —
+  /// the add-money sheet then simply shows no offers.
+  final List<WalletBonusOffer> bonusOffers;
+
+  /// From `GET /food/user/loyalty-points`. Null while loading/on failure; the
+  /// card is also hidden when the programme is switched off.
+  final LoyaltyPoints? loyalty;
+
+  final bool isConvertingPoints;
+
   const WalletState({
     this.status = WalletStatus.initial,
     this.wallet = const WalletModel(),
@@ -32,6 +42,9 @@ class WalletState {
     this.totalRefunded = 0,
     this.cashbackSettings,
     this.isToppingUp = false,
+    this.bonusOffers = const [],
+    this.loyalty,
+    this.isConvertingPoints = false,
   });
 
   List<WalletTransaction> get filteredTransactions {
@@ -54,6 +67,9 @@ class WalletState {
     double? totalRefunded,
     CashbackSettings? cashbackSettings,
     bool? isToppingUp,
+    List<WalletBonusOffer>? bonusOffers,
+    LoyaltyPoints? loyalty,
+    bool? isConvertingPoints,
   }) {
     return WalletState(
       status: status ?? this.status,
@@ -64,6 +80,9 @@ class WalletState {
       totalRefunded: totalRefunded ?? this.totalRefunded,
       cashbackSettings: cashbackSettings ?? this.cashbackSettings,
       isToppingUp: isToppingUp ?? this.isToppingUp,
+      bonusOffers: bonusOffers ?? this.bonusOffers,
+      loyalty: loyalty ?? this.loyalty,
+      isConvertingPoints: isConvertingPoints ?? this.isConvertingPoints,
     );
   }
 }

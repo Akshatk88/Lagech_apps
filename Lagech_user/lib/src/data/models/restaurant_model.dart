@@ -31,6 +31,12 @@ class RestaurantModel {
   final double? latitude;
   final double? longitude;
 
+  /// Admin-picked for the home "Recommended" row.
+  final bool isRecommended;
+
+  /// Admin ordering within the recommended row, lowest first.
+  final int recommendedSortOrder;
+
   const RestaurantModel({
     required this.id,
     required this.name,
@@ -56,6 +62,8 @@ class RestaurantModel {
     this.area = '',
     this.latitude,
     this.longitude,
+    this.isRecommended = false,
+    this.recommendedSortOrder = 0,
   });
 
   /// Pulls lat/lng out of whichever shape the backend used: a `location` map
@@ -555,6 +563,9 @@ class RestaurantModel {
       isPureVeg: isPureVeg,
       isFreeDelivery: isFreeDeliv,
       area: areaName,
+      isRecommended: json['isRecommended'] == true ||
+          json['isRecommended']?.toString().toLowerCase() == 'true',
+      recommendedSortOrder: parseInt(json['recommendedSortOrder']),
     );
   }
 
@@ -625,6 +636,8 @@ class RestaurantModel {
           json['free_delivery']?.toString().toLowerCase() == 'true' ||
           json['hasFreeDelivery'] == true,
       area: areaVal,
+      isRecommended: json['isRecommended'] == true,
+      recommendedSortOrder: (json['recommendedSortOrder'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -653,6 +666,8 @@ class RestaurantModel {
     String? area,
     double? latitude,
     double? longitude,
+    bool? isRecommended,
+    int? recommendedSortOrder,
   }) {
     return RestaurantModel(
       id: id ?? this.id,
@@ -679,6 +694,8 @@ class RestaurantModel {
       area: area ?? this.area,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
+      isRecommended: isRecommended ?? this.isRecommended,
+      recommendedSortOrder: recommendedSortOrder ?? this.recommendedSortOrder,
     );
   }
 
@@ -708,6 +725,8 @@ class RestaurantModel {
       'isPureVeg': isPureVeg,
       'isFreeDelivery': isFreeDelivery,
       'area': area,
+      'isRecommended': isRecommended,
+      'recommendedSortOrder': recommendedSortOrder,
     };
   }
 }

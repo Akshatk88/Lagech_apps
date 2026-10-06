@@ -29,6 +29,7 @@ import 'widgets/home_filter_chips_row.dart';
 import 'widgets/home_filter_bottom_sheet.dart';
 import 'widgets/recommended_grid_section.dart';
 import 'widgets/spotlight_carousel.dart';
+import 'widgets/campaign_strip.dart';
 import '../restaurant/viewmodels/restaurant_detail_viewmodel.dart';
 import 'screens/category_details_screen.dart';
 
@@ -207,6 +208,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     // touch them — without this a banner the admin just published
                     // would not appear until the app was restarted.
                     ref.invalidate(promoBannersProvider);
+                    ref.invalidate(campaignsProvider);
                   },
                   child: CustomScrollView(
                     controller: _scrollController,
@@ -427,18 +429,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             // 3.5. RECOMMENDED FOR YOU — filtered by selected category
                             homeState.nearbyRestaurants.maybeWhen(
                               data: (allRestaurants) {
-                                if (allRestaurants.isEmpty) return const SizedBox.shrink();
+                                // Admin-picked list (`?recommended=true`) drives the
+                                // "All" row in the admin's order; when none are picked
+                                // for this area, fall back to the nearby list + the
+                                // existing ordering.
+                                final adminPicked = homeState.recommendedRestaurants;
+                                final useAdminPicked =
+                                    _selectedCategory == 'All' && adminPicked.isNotEmpty;
+                                final source = useAdminPicked ? adminPicked : allRestaurants;
+                                if (source.isEmpty) return const SizedBox.shrink();
                                 final filtered = _filterRestaurants(
-                                  allRestaurants,
+                                  source,
                                   matchingDishes: matchingDishes,
                                   categoryRestaurants: categoryRests,
                                 );
                                 final displayList = _selectedCategory == 'All'
-                                    ? (filtered.isNotEmpty ? filtered : allRestaurants)
+                                    ? (filtered.isNotEmpty ? filtered : source)
                                     : filtered;
                                 if (displayList.isEmpty) return const SizedBox.shrink();
 
-                                final reorderedRecommended = _reorderRecommendedList(displayList);
+                                final reorderedRecommended = useAdminPicked
+                                    ? displayList
+                                    : _reorderRecommendedList(displayList);
 
                                 return Column(
                                   children: [
@@ -488,6 +500,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 matches: (r) => r.rating >= 3.8 || r.offerBadges.isNotEmpty,
                               ),
                               onSeeAllTap: () => context.push(RouteNames.allOffers),
+                            ),
+
+                            // 4.4. Ongoing campaigns — hidden when none are running.
+                            ref.watch(campaignsProvider).maybeWhen(
+                              data: (campaigns) {
+                                if (campaigns.isEmpty) return const SizedBox.shrink();
+                                return Padding(
+                                  padding: EdgeInsets.only(top: 12.h, bottom: 6.h),
+                                  child: CampaignStrip(campaigns: campaigns),
+                                );
+                              },
+                              orElse: () => const SizedBox.shrink(),
                             ),
 
                             // 4.5. IN THE SPOTLIGHT (Screenshot 3: spotlight carousel with indicator dots)

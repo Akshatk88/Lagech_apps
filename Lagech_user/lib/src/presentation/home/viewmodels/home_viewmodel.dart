@@ -14,11 +14,16 @@ class HomeState {
   final AsyncValue<List<FoodModel>> bestOffers;
   final AsyncValue<List<RestaurantModel>> nearbyRestaurants;
 
+  /// Admin-picked restaurants from `?recommended=true`. An empty list (or a
+  /// failed call) means the home row falls back to [nearbyRestaurants].
+  final List<RestaurantModel> recommendedRestaurants;
+
   HomeState({
     required this.categories,
     required this.popularFoods,
     required this.bestOffers,
     required this.nearbyRestaurants,
+    this.recommendedRestaurants = const [],
   });
 
   HomeState copyWith({
@@ -26,12 +31,14 @@ class HomeState {
     AsyncValue<List<FoodModel>>? popularFoods,
     AsyncValue<List<FoodModel>>? bestOffers,
     AsyncValue<List<RestaurantModel>>? nearbyRestaurants,
+    List<RestaurantModel>? recommendedRestaurants,
   }) {
     return HomeState(
       categories: categories ?? this.categories,
       popularFoods: popularFoods ?? this.popularFoods,
       bestOffers: bestOffers ?? this.bestOffers,
       nearbyRestaurants: nearbyRestaurants ?? this.nearbyRestaurants,
+      recommendedRestaurants: recommendedRestaurants ?? this.recommendedRestaurants,
     );
   }
 }
@@ -112,12 +119,16 @@ class HomeViewModel extends Notifier<HomeState> {
         onCache: (r) =>
             state = state.copyWith(nearbyRestaurants: AsyncValue.data(r)),
       ), // mapping popular to nearby
+      _repository.getRecommendedRestaurants(
+        onCache: (r) => state = state.copyWith(recommendedRestaurants: r),
+      ),
     ]);
 
     final categoriesRes = responses[0] as dynamic;
     final popularFoodsRes = responses[1] as dynamic;
     final bestOffersRes = responses[2] as dynamic;
     final nearbyRes = responses[3] as dynamic;
+    final recommendedRes = responses[4] as dynamic;
 
     state = state.copyWith(
       categories: categoriesRes.isSuccess
@@ -144,6 +155,10 @@ class HomeViewModel extends Notifier<HomeState> {
               nearbyRes.message ?? 'Unknown error',
               StackTrace.current,
             ),
+      // Failure is treated as "none picked" so the row falls back silently.
+      recommendedRestaurants: recommendedRes.isSuccess
+          ? List<RestaurantModel>.from((recommendedRes.data as List?) ?? const [])
+          : const <RestaurantModel>[],
     );
   }
 

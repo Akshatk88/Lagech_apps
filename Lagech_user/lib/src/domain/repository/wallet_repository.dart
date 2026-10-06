@@ -9,11 +9,23 @@ abstract class WalletRepository {
   Future<Map<String, dynamic>> createTopupOrder(double amount);
 
   /// Verifies a Razorpay payment after a wallet top-up.
-  Future<WalletModel> verifyTopup({
+  Future<TopupVerification> verifyTopup({
     required String razorpayOrderId,
     required String razorpayPaymentId,
     required String razorpaySignature,
     required double amount,
+  });
+
+  /// Top-up bonus offers running now.
+  Future<List<WalletBonusOffer>> getWalletBonuses();
+
+  /// Loyalty points balance, rules and history.
+  Future<LoyaltyPoints> getLoyaltyPoints({int page = 1});
+
+  /// Converts points into wallet balance; idempotent per [requestId].
+  Future<({LoyaltyPoints loyalty, WalletModel? wallet})> convertLoyaltyPoints({
+    required int points,
+    required String requestId,
   });
 
   Future<CashbackHistory> getCashbackHistory();

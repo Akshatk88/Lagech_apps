@@ -54,6 +54,9 @@ class ApiPaths {
   static const String addresses = '/food/user/addresses';
   static const String cart = '/food/user/cart';
   static const String wallet = '/food/user/wallet';
+  static const String walletBonuses = '/food/user/wallet/bonuses';
+  static const String loyaltyPoints = '/food/user/loyalty-points';
+  static const String loyaltyPointsConvert = '/food/user/loyalty-points/convert';
   static const String payLater = '/food/user/pay-later';
   static const String payLaterRepayWallet = '/food/user/pay-later/repay/wallet';
   static const String payLaterRepayRazorpayStart = '/food/user/pay-later/repay/razorpay/start';
@@ -97,6 +100,9 @@ class ApiPaths {
   static const String topBanners = '/food/top-banners/public';
   static const String exploreIcons = '/food/explore-icons/public';
   static const String landingSettings = '/food/landing/settings/public';
+
+  /// Running campaigns (`{ basic, food }`) — public.
+  static const String campaigns = '/food/public/campaigns';
 
   // ---- Zones ----
   static const String zoneDetect = '/food/zones/detect';

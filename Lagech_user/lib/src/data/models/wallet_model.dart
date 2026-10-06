@@ -72,6 +72,214 @@ class WalletModel {
   }
 }
 
+/// Formats a rupee figure without trailing `.00` for whole amounts.
+String _rupees(double value) =>
+    value == value.roundToDouble() ? '₹${value.toStringAsFixed(0)}' : '₹${value.toStringAsFixed(2)}';
+
+/// One running offer from `GET /food/user/wallet/bonuses`.
+class WalletBonusOffer {
+  final String id;
+  final String title;
+  final String description;
+
+  /// `percentage` | `amount`.
+  final String bonusType;
+  final double bonusAmount;
+  final double minimumAddAmount;
+
+  /// 0 means uncapped (always 0 for `amount` offers).
+  final double maximumBonus;
+
+  const WalletBonusOffer({
+    required this.id,
+    this.title = '',
+    this.description = '',
+    this.bonusType = 'percentage',
+    this.bonusAmount = 0,
+    this.minimumAddAmount = 0,
+    this.maximumBonus = 0,
+  });
+
+  bool get isPercentage => bonusType.toLowerCase() == 'percentage';
+
+  /// "Add ₹500 or more, get 10% extra (up to ₹50)" — built only from the
+  /// offer's own fields.
+  String get summary {
+    final extra = isPercentage
+        ? '${bonusAmount == bonusAmount.roundToDouble() ? bonusAmount.toStringAsFixed(0) : bonusAmount.toStringAsFixed(1)}% extra'
+        : '${_rupees(bonusAmount)} extra';
+    final cap = isPercentage && maximumBonus > 0 ? ' (up to ${_rupees(maximumBonus)})' : '';
+    if (minimumAddAmount <= 0) return 'Get $extra on every top-up$cap';
+    return 'Add ${_rupees(minimumAddAmount)} or more, get $extra$cap';
+  }
+
+  /// What this offer would pay on a top-up of [amount], or 0 if it doesn't
+  /// apply. Display-only — the server decides and credits the real bonus.
+  double bonusFor(double amount) {
+    if (amount <= 0 || amount < minimumAddAmount) return 0;
+    if (!isPercentage) return bonusAmount;
+    final raw = amount * bonusAmount / 100;
+    final capped = maximumBonus > 0 && raw > maximumBonus ? maximumBonus : raw;
+    return (capped * 100).floorToDouble() / 100;
+  }
+
+  factory WalletBonusOffer.fromApi(Map<String, dynamic> json) {
+    return WalletBonusOffer(
+      id: (json['id'] ?? json['_id'] ?? '').toString(),
+      title: (json['title'] ?? '').toString(),
+      description: (json['description'] ?? '').toString(),
+      bonusType: (json['bonusType'] ?? 'percentage').toString(),
+      bonusAmount: (json['bonusAmount'] as num?)?.toDouble() ?? 0.0,
+      minimumAddAmount: (json['minimumAddAmount'] as num?)?.toDouble() ?? 0.0,
+      maximumBonus: (json['maximumBonus'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+
+  /// `GET /food/user/wallet/bonuses` → `{ bonuses }`. Offers that would pay
+  /// nothing are dropped so the sheet never advertises a ₹0 bonus.
+  static List<WalletBonusOffer> listFromApi(Map<String, dynamic> json) {
+    return ((json['bonuses'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((e) => WalletBonusOffer.fromApi(e.cast<String, dynamic>()))
+        .where((b) => b.bonusAmount > 0)
+        .toList();
+  }
+}
+
+/// The `bonus` credited by `POST /food/user/wallet/topup/verify`, or null.
+class TopupBonus {
+  final String title;
+  final double amount;
+
+  const TopupBonus({this.title = '', this.amount = 0});
+
+  static TopupBonus? fromApi(Object? raw) {
+    if (raw is! Map) return null;
+    final amount = (raw['amount'] as num?)?.toDouble() ?? 0.0;
+    if (amount <= 0) return null;
+    return TopupBonus(title: (raw['title'] ?? '').toString(), amount: amount);
+  }
+
+  String get amountText => _rupees(amount);
+}
+
+/// Result of a verified top-up: the refreshed wallet plus any bonus paid.
+class TopupVerification {
+  final WalletModel wallet;
+  final TopupBonus? bonus;
+
+  const TopupVerification({required this.wallet, this.bonus});
+}
+
+/// One row of the loyalty points ledger.
+class LoyaltyPointsTransaction {
+  final String id;
+
+  /// `credit` | `debit`.
+  final String type;
+  final int points;
+  final int balanceAfter;
+
+  /// `order` | `conversion`.
+  final String source;
+  final String orderId;
+  final double walletAmount;
+  final String note;
+  final DateTime? createdAt;
+
+  const LoyaltyPointsTransaction({
+    required this.id,
+    this.type = '',
+    this.points = 0,
+    this.balanceAfter = 0,
+    this.source = '',
+    this.orderId = '',
+    this.walletAmount = 0,
+    this.note = '',
+    this.createdAt,
+  });
+
+  bool get isCredit => type.toLowerCase() == 'credit';
+
+  factory LoyaltyPointsTransaction.fromApi(Map<String, dynamic> json) {
+    final raw = json['createdAt']?.toString();
+    return LoyaltyPointsTransaction(
+      id: (json['id'] ?? json['_id'] ?? '').toString(),
+      type: (json['type'] ?? '').toString(),
+      points: (json['points'] as num?)?.toInt() ?? 0,
+      balanceAfter: (json['balanceAfter'] as num?)?.toInt() ?? 0,
+      source: (json['source'] ?? '').toString(),
+      orderId: (json['orderId'] ?? '').toString(),
+      walletAmount: (json['walletAmount'] as num?)?.toDouble() ?? 0.0,
+      note: (json['note'] ?? '').toString(),
+      createdAt: raw == null ? null : DateTime.tryParse(raw),
+    );
+  }
+}
+
+/// `GET /food/user/loyalty-points` (also the body of a convert response).
+class LoyaltyPoints {
+  final bool enabled;
+  final int points;
+
+  /// What [points] convert into right now, in rupees.
+  final double worth;
+  final int totalEarned;
+  final int totalConverted;
+  final int pointsPerHundred;
+  final int pointsPerRupee;
+  final int minimumConvertPoints;
+  final List<LoyaltyPointsTransaction> transactions;
+  final int page;
+  final int totalPages;
+
+  const LoyaltyPoints({
+    this.enabled = false,
+    this.points = 0,
+    this.worth = 0,
+    this.totalEarned = 0,
+    this.totalConverted = 0,
+    this.pointsPerHundred = 0,
+    this.pointsPerRupee = 0,
+    this.minimumConvertPoints = 0,
+    this.transactions = const [],
+    this.page = 1,
+    this.totalPages = 1,
+  });
+
+  String get worthText => _rupees(worth);
+
+  bool get canConvert => enabled && points > 0 && points >= minimumConvertPoints;
+
+  /// Rupees [count] points convert into — display-only, rounded down to paise
+  /// the same way the server does.
+  double worthOf(int count) {
+    if (pointsPerRupee <= 0 || count <= 0) return 0;
+    return (count * 100 / pointsPerRupee).floorToDouble() / 100;
+  }
+
+  factory LoyaltyPoints.fromApi(Map<String, dynamic> json) {
+    final settings = (json['settings'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final pagination = (json['pagination'] as Map?)?.cast<String, dynamic>() ?? const {};
+    return LoyaltyPoints(
+      enabled: json['enabled'] == true,
+      points: (json['points'] as num?)?.toInt() ?? 0,
+      worth: (json['worth'] as num?)?.toDouble() ?? 0.0,
+      totalEarned: (json['totalEarned'] as num?)?.toInt() ?? 0,
+      totalConverted: (json['totalConverted'] as num?)?.toInt() ?? 0,
+      pointsPerHundred: (settings['pointsPerHundred'] as num?)?.toInt() ?? 0,
+      pointsPerRupee: (settings['pointsPerRupee'] as num?)?.toInt() ?? 0,
+      minimumConvertPoints: (settings['minimumConvertPoints'] as num?)?.toInt() ?? 0,
+      transactions: ((json['transactions'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => LoyaltyPointsTransaction.fromApi(e.cast<String, dynamic>()))
+          .toList(),
+      page: (pagination['page'] as num?)?.toInt() ?? 1,
+      totalPages: (pagination['pages'] as num?)?.toInt() ?? 1,
+    );
+  }
+}
+
 /// `GET /food/user/pay-later`. Credit extended directly against the account —
 /// deliberately separate from [WalletModel] since the wallet ledger never
 /// allows a negative balance for a regular user.

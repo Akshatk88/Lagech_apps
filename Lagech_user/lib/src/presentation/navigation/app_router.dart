@@ -30,6 +30,7 @@ import '../orders/screens/order_delivered_screen.dart';
 import '../referral/screens/referral_screen.dart';
 import '../referral/screens/referral_ticket_result_screen.dart';
 import '../wallet/screens/wallet_screen.dart';
+import '../wallet/screens/loyalty_points_screen.dart';
 import '../wallet/screens/pay_later_screen.dart';
 import '../chat/screens/chat_screen.dart';
 import '../home/screens/home_filter_screen.dart';
@@ -335,6 +336,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: RouteNames.wallet,
         parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const WalletScreen(),
+      ),
+      GoRoute(
+        path: RouteNames.loyaltyPoints,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => const LoyaltyPointsScreen(),
       ),
       GoRoute(
         path: RouteNames.payLater,

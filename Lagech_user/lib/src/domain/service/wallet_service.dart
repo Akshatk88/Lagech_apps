@@ -17,6 +17,28 @@ class WalletService {
 
   Future<CashbackSettings> fetchCashbackSettings() => _repository.getCashbackSettings();
 
+  Future<List<WalletBonusOffer>> fetchWalletBonuses() => _repository.getWalletBonuses();
+
+  Future<LoyaltyPoints> fetchLoyaltyPoints({int page = 1}) =>
+      _repository.getLoyaltyPoints(page: page);
+
+  Future<({LoyaltyPoints loyalty, WalletModel? wallet})> convertLoyaltyPoints({
+    required int points,
+    required String requestId,
+  }) =>
+      _repository.convertLoyaltyPoints(points: points, requestId: requestId);
+
+  /// Client-side check before calling convert; the server re-validates and
+  /// its 400 message is what the user ultimately sees. Null when valid.
+  String? validateConversion(LoyaltyPoints loyalty, int points) {
+    if (points <= 0) return 'Enter the number of points to convert.';
+    if (points < loyalty.minimumConvertPoints) {
+      return 'Convert at least ${loyalty.minimumConvertPoints} points.';
+    }
+    if (points > loyalty.points) return 'You have only ${loyalty.points} points.';
+    return null;
+  }
+
   /// Business validation for top up amount.
   bool isValidTopupAmount(double amount) {
     return amount >= 10 && amount <= 10000;

@@ -10,6 +10,7 @@ import '../../branding/app_colors.dart';
 import '../../cart/utils/cart_restaurant_guard.dart';
 import '../../cart/viewmodels/cart_viewmodel.dart';
 import '../../common_widgets/smart_image.dart';
+import 'food_diet_info.dart';
 
 /// Quick preview bottom sheet for food items matching Screenshot 2.
 ///
@@ -310,6 +311,8 @@ class _FoodQuickDetailSheetState extends ConsumerState<_FoodQuickDetailSheet> {
                       ),
                     ),
                   ],
+
+                  FoodDietInfo(food: food),
 
                   // "━━━━ highly reordered" indicator
                   SizedBox(height: 12.h),

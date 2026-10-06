@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../data/models/campaign_model.dart';
 import '../../../data/models/promo_banner_model.dart';
 import '../../../di/catalog_providers.dart';
 
@@ -23,6 +24,16 @@ final heroBannersProvider = FutureProvider<List<String>>((ref) async {
 final promoBannersProvider = FutureProvider<List<PromoBannerModel>>((ref) async {
   try {
     return await ref.watch(catalogRemoteDataSourceProvider).getPromoBanners();
+  } catch (_) {
+    return const [];
+  }
+});
+
+/// Running campaigns for the home strip. Empty on failure or when nothing is
+/// running — the strip hides itself, never showing placeholders.
+final campaignsProvider = FutureProvider<List<CampaignModel>>((ref) async {
+  try {
+    return await ref.watch(catalogRemoteDataSourceProvider).getCampaigns();
   } catch (_) {
     return const [];
   }

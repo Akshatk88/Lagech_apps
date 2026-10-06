@@ -1,6 +1,7 @@
 import 'package:geolocator/geolocator.dart';
 import '../../core/config/api_config.dart';
 import '../../core/network/api_client.dart';
+import '../models/campaign_model.dart';
 import '../models/category_model.dart';
 import '../models/food_model.dart';
 import '../models/food_variant.dart';
@@ -95,6 +96,16 @@ class CatalogRemoteDataSource {
         .map((b) => PromoBannerModel.fromApi(b.cast<String, dynamic>()))
         .where((b) => b.imageUrl.isNotEmpty)
         .toList();
+  }
+
+  /// Campaigns running now (`{ basic, food }`), flattened.
+  Future<List<CampaignModel>> getCampaigns() async {
+    final data = await _client.get<Map<String, dynamic>>(
+      ApiPaths.campaigns,
+      auth: false,
+      cacheTtl: _cacheTtl,
+    );
+    return CampaignModel.listFromApi(data);
   }
 
   List<CategoryModel> _orderCategories(List<CategoryModel> list) {
@@ -195,6 +206,7 @@ class CatalogRemoteDataSource {
     double? radiusKm,
     String? cuisine,
     String? sortBy,
+    bool recommended = false,
     int page = 1,
     int limit = 50,
     void Function(List<RestaurantModel>)? onCache,
@@ -228,6 +240,7 @@ class CatalogRemoteDataSource {
         'radiusKm': radiusKm,
         'cuisine': cuisine,
         'sortBy': sortBy,
+        if (recommended) 'recommended': true,
       },
       auth: false,
       cacheTtl: _cacheTtl,
@@ -235,6 +248,10 @@ class CatalogRemoteDataSource {
     );
     final results = parse(data);
     if (results.isNotEmpty) return results;
+
+    // An empty recommended list means none are picked for this area — widening
+    // the query would surface recommendations that don't serve the customer.
+    if (recommended) return results;
 
     // Fallback: If zoneId or lat/lng returned 0 restaurants because MongoDB records
     // do not have zoneId field assigned, query without zoneId and coordinates:

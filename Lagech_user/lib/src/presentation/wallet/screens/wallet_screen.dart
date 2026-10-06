@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../core/utils/haptics.dart';
 import '../../../data/models/wallet_model.dart';
 import '../../branding/app_colors.dart';
 import '../../common_widgets/app_snackbar.dart';
+import '../../navigation/route_names.dart';
 import '../viewmodels/wallet_state.dart';
 import '../viewmodels/wallet_viewmodel.dart';
 
@@ -80,7 +82,12 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
       ),
       body: SafeArea(
         child: AppRefreshIndicator(
-          onRefresh: () async => viewModel.loadWallet(isRefresh: true),
+          onRefresh: () async {
+            await Future.wait([
+              viewModel.loadWallet(isRefresh: true),
+              viewModel.loadLoyaltyPoints(),
+            ]);
+          },
           child: _buildBody(
             context,
             walletState,
@@ -121,6 +128,21 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
         if (state.cashbackSettings?.isEnabled == true) ...[
           const SizedBox(height: 14),
           _buildCashbackBanner(state.cashbackSettings!, isDark),
+        ],
+
+        // Hidden entirely when the programme is off or the call failed.
+        if (state.loyalty?.enabled == true) ...[
+          const SizedBox(height: 14),
+          _buildLoyaltyCard(
+            context,
+            state.loyalty!,
+            state.isConvertingPoints,
+            viewModel,
+            isDark,
+            cardColor,
+            textColor,
+            secondaryColor,
+          ),
         ],
 
         const SizedBox(height: 20),
@@ -337,6 +359,223 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
         ],
       ),
     );
+  }
+
+  /// Loyalty points card — built only from `GET /food/user/loyalty-points`.
+  Widget _buildLoyaltyCard(
+    BuildContext context,
+    LoyaltyPoints loyalty,
+    bool isConverting,
+    WalletViewModel viewModel,
+    bool isDark,
+    Color cardColor,
+    Color textColor,
+    Color secondaryColor,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: isDark
+            ? []
+            : [
+                const BoxShadow(
+                  color: AppColors.shadow1,
+                  blurRadius: 12,
+                  offset: Offset(0, 4),
+                ),
+              ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.stars_rounded, color: AppColors.primary, size: 20),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Loyalty Points',
+                  style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold, color: textColor),
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  Haptics.light();
+                  context.push(RouteNames.loyaltyPoints);
+                },
+                child: Text(
+                  'History',
+                  style: TextStyle(color: AppColors.primary, fontSize: 12.5, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${loyalty.points} pts',
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: textColor),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Worth ${loyalty.worthText}',
+                      style: TextStyle(fontSize: 12.5, color: secondaryColor, fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: isConverting || !loyalty.canConvert
+                    ? null
+                    : () {
+                        Haptics.light();
+                        _showConvertDialog(context, loyalty, viewModel, isDark);
+                      },
+                child: isConverting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text(
+                        'Convert',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+              ),
+            ],
+          ),
+          if (loyalty.minimumConvertPoints > 0 || loyalty.pointsPerHundred > 0) ...[
+            const SizedBox(height: 10),
+            Text(
+              [
+                if (loyalty.pointsPerHundred > 0)
+                  'Earn ${loyalty.pointsPerHundred} pts per ₹100 on delivered orders',
+                if (loyalty.minimumConvertPoints > 0)
+                  'Convert from ${loyalty.minimumConvertPoints} pts',
+              ].join(' • '),
+              style: TextStyle(fontSize: 11.5, color: secondaryColor),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Asks how many points to convert, validated against the live minimum and
+  /// balance. A fresh requestId is generated per confirming tap so a retried
+  /// request can never convert twice.
+  Future<void> _showConvertDialog(
+    BuildContext context,
+    LoyaltyPoints loyalty,
+    WalletViewModel viewModel,
+    bool isDark,
+  ) async {
+    final controller = TextEditingController(text: '${loyalty.points}');
+    final points = await showDialog<int>(
+      context: context,
+      builder: (dialogCtx) {
+        String? error;
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            final entered = int.tryParse(controller.text) ?? 0;
+            final worth = loyalty.worthOf(entered);
+            return AlertDialog(
+              backgroundColor: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: const Text('Convert points'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(9),
+                    ],
+                    decoration: InputDecoration(
+                      labelText: 'Points',
+                      helperText: 'You have ${loyalty.points} pts'
+                          '${loyalty.minimumConvertPoints > 0 ? ' • minimum ${loyalty.minimumConvertPoints}' : ''}',
+                      errorText: error,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onChanged: (_) => setDialogState(() => error = null),
+                  ),
+                  if (worth > 0) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      '₹${worth.toStringAsFixed(2)} will be added to your wallet',
+                      style: const TextStyle(color: AppColors.success, fontSize: 12.5, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+                  onPressed: () {
+                    final value = int.tryParse(controller.text) ?? 0;
+                    String? invalid;
+                    if (value <= 0) {
+                      invalid = 'Enter the number of points';
+                    } else if (value < loyalty.minimumConvertPoints) {
+                      invalid = 'Minimum ${loyalty.minimumConvertPoints} points';
+                    } else if (value > loyalty.points) {
+                      invalid = 'You have only ${loyalty.points} points';
+                    }
+                    if (invalid != null) {
+                      setDialogState(() => error = invalid);
+                      return;
+                    }
+                    Navigator.pop(dialogCtx, value);
+                  },
+                  child: const Text('Convert', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    controller.dispose();
+    if (points == null) return;
+
+    final requestId = const Uuid().v4();
+    final result = await viewModel.convertLoyaltyPoints(points: points, requestId: requestId);
+    if (!context.mounted) return;
+    if (result.ok) {
+      Haptics.success();
+      AppSnackbar.success(context, result.message, duration: const Duration(seconds: 3));
+    } else {
+      AppSnackbar.error(context, result.message, duration: const Duration(seconds: 3));
+    }
   }
 
   /// Small real total shown above the active tab's list — sourced from the
@@ -883,6 +1122,16 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                       );
                     }).toList(),
                   ),
+                  // Running top-up bonus offers — live from the server; the
+                  // whole block is absent when there are none.
+                  Consumer(
+                    builder: (consumerCtx, sheetRef, child) {
+                      final offers = sheetRef.watch(
+                        walletViewModelProvider.select((s) => s.bonusOffers),
+                      );
+                      return _buildBonusOffers(offers, selectedAmount, isDark, modalSecondaryColor);
+                    },
+                  ),
                   const SizedBox(height: 24),
 
                   // Submit Button
@@ -926,6 +1175,70 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
           },
         );
       },
+    );
+  }
+
+  Widget _buildBonusOffers(
+    List<WalletBonusOffer> offers,
+    double amount,
+    bool isDark,
+    Color secondaryColor,
+  ) {
+    if (offers.isEmpty) return const SizedBox.shrink();
+
+    // The server credits the single offer that pays the most; mirror that for
+    // the preview line only.
+    var best = 0.0;
+    for (final o in offers) {
+      final b = o.bonusFor(amount);
+      if (b > best) best = b;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.success.withValues(alpha: isDark ? 0.16 : 0.1),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ...offers.map(
+              (o) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(top: 1),
+                      child: Icon(Icons.card_giftcard_rounded, color: AppColors.success, size: 16),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        o.title.trim().isEmpty ? o.summary : '${o.title.trim()}: ${o.summary}',
+                        style: const TextStyle(color: AppColors.success, fontSize: 12.5, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (best > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  'You get ₹${best.toStringAsFixed(best == best.roundToDouble() ? 0 : 2)} extra on this top-up',
+                  style: TextStyle(color: secondaryColor, fontSize: 11.5, fontWeight: FontWeight.w600),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 

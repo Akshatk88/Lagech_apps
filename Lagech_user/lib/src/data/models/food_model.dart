@@ -25,6 +25,12 @@ class FoodModel {
   /// Size/portion choices. Empty when the item has a single price.
   final List<FoodVariant> variants;
 
+  /// Free-text nutrition facts, e.g. "Calories 250 kcal". Empty when unset.
+  final List<String> nutrition;
+
+  /// Free-text allergens, e.g. "Peanuts". Empty when unset.
+  final List<String> allergens;
+
   const FoodModel({
     required this.id,
     required this.restaurantId,
@@ -46,6 +52,8 @@ class FoodModel {
     this.categoryId = '',
     this.restaurantName = '',
     this.variants = const [],
+    this.nutrition = const [],
+    this.allergens = const [],
   });
 
   /// "X% OFF" badge value, or null when there's no genuine [originalPrice] to
@@ -102,6 +110,18 @@ class FoodModel {
     return value > price ? value : null;
   }
 
+  /// Tolerant string-list parse: accepts a list (non-string entries are
+  /// stringified), a comma-separated string, or anything else as empty.
+  static List<String> _stringList(Object? raw) {
+    final Iterable<Object?> items = raw is List
+        ? raw
+        : (raw is String ? raw.split(',') : const <Object?>[]);
+    return items
+        .map((e) => e?.toString().trim() ?? '')
+        .where((e) => e.isNotEmpty)
+        .toList();
+  }
+
   /// Maps a backend food/menu item. Used by the cross-restaurant feed
   /// (`/public/foods`) and by each menu section's `items[]` — same shape.
   factory FoodModel.fromApi(Map<String, dynamic> json, {String? restaurantId}) {
@@ -152,6 +172,8 @@ class FoodModel {
       categoryId: (json['categoryId'] ?? json['category'] ?? '').toString(),
       restaurantName: (json['restaurantName'] ?? '').toString(),
       variants: FoodVariant.listFrom(json),
+      nutrition: _stringList(json['nutrition']),
+      allergens: _stringList(json['allergens']),
     );
   }
 
@@ -191,6 +213,8 @@ class FoodModel {
       categoryId: json['categoryId'] as String? ?? '',
       restaurantName: json['restaurantName'] as String? ?? '',
       variants: FoodVariant.listFrom(json),
+      nutrition: _stringList(json['nutrition']),
+      allergens: _stringList(json['allergens']),
     );
   }
 
@@ -216,6 +240,8 @@ class FoodModel {
       'categoryId': categoryId,
       'restaurantName': restaurantName,
       'variants': variants.map((v) => v.toJson()).toList(),
+      'nutrition': nutrition,
+      'allergens': allergens,
     };
   }
 }

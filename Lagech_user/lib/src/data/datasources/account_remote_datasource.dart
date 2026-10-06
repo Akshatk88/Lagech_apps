@@ -39,8 +39,9 @@ class AccountRemoteDataSource {
   }
 
   /// Idempotent — re-verifying a completed top-up returns the wallet unchanged
-  /// rather than double-crediting.
-  Future<WalletModel> verifyTopup({
+  /// rather than double-crediting. `bonus` is the running top-up offer the
+  /// server credited alongside it, or null (always null on a replay).
+  Future<TopupVerification> verifyTopup({
     required String razorpayOrderId,
     required String razorpayPaymentId,
     required String razorpaySignature,
@@ -56,8 +57,44 @@ class AccountRemoteDataSource {
       },
     );
     final wallet = data['wallet'];
-    return WalletModel.fromApi(
-      wallet is Map ? wallet.cast<String, dynamic>() : data,
+    return TopupVerification(
+      wallet: WalletModel.fromApi(
+        wallet is Map ? wallet.cast<String, dynamic>() : data,
+      ),
+      bonus: TopupBonus.fromApi(data['bonus']),
+    );
+  }
+
+  /// Top-up bonus offers running now — shown on the add-money sheet.
+  Future<List<WalletBonusOffer>> getWalletBonuses() async {
+    final data = await _client.get<Map<String, dynamic>>(ApiPaths.walletBonuses);
+    return WalletBonusOffer.listFromApi(data);
+  }
+
+  // -------------------------------------------------------- loyalty points
+
+  Future<LoyaltyPoints> getLoyaltyPoints({int page = 1, int limit = 20}) async {
+    final data = await _client.get<Map<String, dynamic>>(
+      ApiPaths.loyaltyPoints,
+      query: {'page': page, 'limit': limit},
+    );
+    return LoyaltyPoints.fromApi(data);
+  }
+
+  /// Converts [points] into wallet balance. [requestId] makes the call
+  /// idempotent — a retry with the same id converts nothing more.
+  Future<({LoyaltyPoints loyalty, WalletModel? wallet})> convertLoyaltyPoints({
+    required int points,
+    required String requestId,
+  }) async {
+    final data = await _client.post<Map<String, dynamic>>(
+      ApiPaths.loyaltyPointsConvert,
+      body: {'points': points, 'requestId': requestId},
+    );
+    final wallet = data['wallet'];
+    return (
+      loyalty: LoyaltyPoints.fromApi(data),
+      wallet: wallet is Map ? WalletModel.fromApi(wallet.cast<String, dynamic>()) : null,
     );
   }
 

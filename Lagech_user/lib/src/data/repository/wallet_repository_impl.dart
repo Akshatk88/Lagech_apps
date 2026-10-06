@@ -18,7 +18,7 @@ class WalletRepositoryImpl implements WalletRepository {
   }
 
   @override
-  Future<WalletModel> verifyTopup({
+  Future<TopupVerification> verifyTopup({
     required String razorpayOrderId,
     required String razorpayPaymentId,
     required String razorpaySignature,
@@ -31,6 +31,20 @@ class WalletRepositoryImpl implements WalletRepository {
       amount: amount,
     );
   }
+
+  @override
+  Future<List<WalletBonusOffer>> getWalletBonuses() => _remoteDataSource.getWalletBonuses();
+
+  @override
+  Future<LoyaltyPoints> getLoyaltyPoints({int page = 1}) =>
+      _remoteDataSource.getLoyaltyPoints(page: page);
+
+  @override
+  Future<({LoyaltyPoints loyalty, WalletModel? wallet})> convertLoyaltyPoints({
+    required int points,
+    required String requestId,
+  }) =>
+      _remoteDataSource.convertLoyaltyPoints(points: points, requestId: requestId);
 
   @override
   Future<CashbackHistory> getCashbackHistory() => _remoteDataSource.getCashbackHistory();
