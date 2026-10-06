@@ -15,6 +15,7 @@ class RiderBusinessSettings {
     this.showEarning = true,
     this.canCancelOrder = false,
     this.maxAssignedOrders,
+    this.selfRegistration = true,
   });
 
   /// Show the rider's earning on incoming offers.
@@ -28,6 +29,11 @@ class RiderBusinessSettings {
   /// the app acts on comes from `/orders/current` (`orderLimit`).
   final int? maxAssignedOrders;
 
+  /// `rider.selfRegistration` — new riders may sign up from the app. When
+  /// false `POST /food/delivery/register` answers 403 and the app sends a new
+  /// number back to login instead of the sign-up form.
+  final bool selfRegistration;
+
   static const defaults = RiderBusinessSettings();
 
   factory RiderBusinessSettings.fromJson(Map<String, dynamic>? json) {
@@ -40,6 +46,9 @@ class RiderBusinessSettings {
           ? json['canCancelOrder'] as bool
           : defaults.canCancelOrder,
       maxAssignedOrders: (json['maxAssignedOrders'] as num?)?.toInt(),
+      selfRegistration: json['selfRegistration'] is bool
+          ? json['selfRegistration'] as bool
+          : defaults.selfRegistration,
     );
   }
 
@@ -47,6 +56,7 @@ class RiderBusinessSettings {
         'showEarning': showEarning,
         'canCancelOrder': canCancelOrder,
         'maxAssignedOrders': ?maxAssignedOrders,
+        'selfRegistration': selfRegistration,
       };
 
   @override
@@ -54,10 +64,16 @@ class RiderBusinessSettings {
       other is RiderBusinessSettings &&
       other.showEarning == showEarning &&
       other.canCancelOrder == canCancelOrder &&
-      other.maxAssignedOrders == maxAssignedOrders;
+      other.maxAssignedOrders == maxAssignedOrders &&
+      other.selfRegistration == selfRegistration;
 
   @override
-  int get hashCode => Object.hash(showEarning, canCancelOrder, maxAssignedOrders);
+  int get hashCode => Object.hash(
+        showEarning,
+        canCancelOrder,
+        maxAssignedOrders,
+        selfRegistration,
+      );
 }
 
 class BusinessSettingsRepository {

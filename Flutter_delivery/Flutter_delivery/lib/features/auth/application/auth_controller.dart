@@ -8,9 +8,16 @@ import '../../../core/network/auth_event_bus.dart';
 import '../../../core/services/fcm_service.dart';
 import '../../../core/services/socket_service.dart';
 import '../../../core/storage/token_storage.dart';
+import '../../settings/application/business_settings_controller.dart';
 import '../data/auth_repository.dart';
 import '../data/models/delivery_partner.dart';
 import 'auth_state.dart';
+
+/// Shown when a new number verifies while rider self registration is off —
+/// the same text the server's 403 on `POST /food/delivery/register` carries.
+const signUpClosedMessage =
+    'Delivery partner sign-up is closed right now. Please contact Lagech to '
+    'join as a delivery partner.';
 
 class AuthController extends Notifier<AuthState> {
   late final AuthRepository _repository;
@@ -78,6 +85,25 @@ class AuthController extends Notifier<AuthState> {
       otp: otp,
       fcmToken: fcmToken,
     );
+    // A new number goes to the sign-up form only while riders may sign up
+    // themselves. Settings are refreshed first; if that fails the last known
+    // value (or the default: open) applies, as before.
+    final needsRegistration = result.maybeWhen(
+      success: (verifyResult) => verifyResult.needsRegistration,
+      orElse: () => false,
+    );
+    if (needsRegistration) {
+      try {
+        await ref
+            .read(businessSettingsControllerProvider.notifier)
+            .load()
+            .timeout(const Duration(seconds: 5));
+      } catch (_) {}
+      if (!ref.read(businessSettingsControllerProvider).selfRegistration) {
+        state = const AuthUnauthenticated();
+        return const AuthFailure(signUpClosedMessage);
+      }
+    }
     return result.when(
       success: (verifyResult) {
         if (verifyResult.needsRegistration) {
