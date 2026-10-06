@@ -13,6 +13,7 @@ import 'package:food_user_application/core/services/fcm_service.dart';
 import 'package:food_user_application/features/orders/data/order_repository.dart';
 import 'package:food_user_application/features/orders/domain/order_model.dart';
 import 'package:food_user_application/features/orders/presentation/controllers/live_orders_controller.dart';
+import 'package:food_user_application/features/orders/presentation/widgets/order_type_badges.dart';
 
 // A push can arrive more than once in a burst (e.g. connectivity blip causing
 // a redundant FCM deliver) — this guards against stacking duplicate dialogs
@@ -119,6 +120,14 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
     final isNewOrPending = order != null &&
         !order.isCancelled &&
         const {'created', 'placed', 'pending'}.contains(order.orderStatus);
+
+    // A scheduled order before its release time must not ring; it is not
+    // resolved either, so it is offered normally once released.
+    if (order != null && order.isAwaitingRelease) {
+      NewOrderActionChannel.stopSound(widget.orderId);
+      _close();
+      return;
+    }
 
     if (order != null && !isNewOrPending) {
       OrderResolutionTracker.markResolved(widget.orderId);
@@ -628,6 +637,11 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (OrderTypeBadges.hasAny(order))
+                  OrderTypeBadges(
+                    order: order,
+                    padding: const EdgeInsets.only(bottom: 12),
+                  ),
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -696,7 +710,8 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
                     ],
                   ),
                 ),
-                if (order.deliveryAddress.fullAddress.isNotEmpty) ...[
+                if (!order.isTakeaway &&
+                    order.deliveryAddress.fullAddress.isNotEmpty) ...[
                   const SizedBox(height: 16),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -875,6 +890,11 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
                             order.pricing.platformFee,
                           ),
                           _buildBillRow('Tax', order.pricing.tax),
+                          if (order.pricing.riderTip > 0)
+                            _buildBillRow(
+                            'Rider tip (for delivery partner)',
+                            order.pricing.riderTip,
+                          ),
                         ],
                       ),
                     ),

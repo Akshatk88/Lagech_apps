@@ -46,6 +46,15 @@ class OrderAlertService {
       return;
     }
 
+    // A scheduled order is held until its release time (~40 min before the
+    // slot); the server only alerts from then on. Never ring for one early.
+    if (_isHeldScheduledOrder(rawData)) {
+      if (kDebugMode) {
+        debugPrint('[OrderAlertService] Skipped: scheduled order not released yet');
+      }
+      return;
+    }
+
     final allIds = _extractAllOrderIds(rawData);
     if (allIds.isEmpty) {
       if (kDebugMode) {
@@ -146,6 +155,30 @@ class OrderAlertService {
     if (orderId != null && orderId.isNotEmpty) {
       await NewOrderActionChannel.dismiss(orderId);
     }
+  }
+
+  /// True when the payload (or its nested `order`/`data` map) carries a
+  /// `releaseAt` that is still clearly in the future.
+  bool _isHeldScheduledOrder(Map<String, dynamic> data) {
+    Map<String, dynamic>? asMap(dynamic val) {
+      if (val is Map) return Map<String, dynamic>.from(val);
+      if (val is String && val.trim().startsWith('{')) {
+        try {
+          final decoded = jsonDecode(val);
+          if (decoded is Map) return Map<String, dynamic>.from(decoded);
+        } catch (_) {}
+      }
+      return null;
+    }
+
+    // A little slack for a device clock running behind the server's, so the
+    // push sent right at release time is never mistaken for an early one.
+    final now = DateTime.now().add(const Duration(minutes: 2));
+    for (final map in [data, asMap(data['order']), asMap(data['data'])]) {
+      final releaseAt = DateTime.tryParse((map?['releaseAt'] ?? '').toString());
+      if (releaseAt != null && releaseAt.isAfter(now)) return true;
+    }
+    return false;
   }
 
   void _cleanOldAlerts() {

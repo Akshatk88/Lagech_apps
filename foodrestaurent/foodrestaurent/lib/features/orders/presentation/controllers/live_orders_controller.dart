@@ -107,6 +107,14 @@ class LiveOrdersController extends AsyncNotifier<List<OrderModel>> {
   Future<void> resendNotification(String orderId) async {
     await ref.read(orderRepositoryProvider).resendNotification(orderId);
   }
+
+  Future<OrderModel> handOverTakeaway(String orderId, String code) async {
+    final order = await ref
+        .read(orderRepositoryProvider)
+        .handOverTakeaway(orderId, code);
+    await refresh();
+    return order;
+  }
 }
 
 final liveOrdersControllerProvider =

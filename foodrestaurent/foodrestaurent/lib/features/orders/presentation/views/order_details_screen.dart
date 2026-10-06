@@ -12,6 +12,8 @@ import 'package:food_user_application/features/orders/data/order_repository.dart
 import 'package:food_user_application/features/orders/domain/order_model.dart';
 import 'package:food_user_application/features/orders/presentation/controllers/live_orders_controller.dart';
 import 'package:food_user_application/features/orders/presentation/widgets/cancel_accepted_order_button.dart';
+import 'package:food_user_application/features/orders/presentation/widgets/order_type_badges.dart';
+import 'package:food_user_application/features/orders/presentation/widgets/takeaway_handover_button.dart';
 import 'package:food_user_application/features/business_settings/data/business_settings_repository.dart';
 import 'package:food_user_application/core/widgets/app_refresh_indicator.dart';
 
@@ -211,7 +213,7 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
           icon: Icons.person_outline,
           child: CustomerInfo(order: order),
         ),
-        if (!order.deliveryAddress.isEmpty) ...[
+        if (!order.isTakeaway && !order.deliveryAddress.isEmpty) ...[
           const SizedBox(height: 16),
           _SectionCard(
             cardColor: cardColor,
@@ -220,7 +222,7 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
             child: AddressInfo(order: order),
           ),
         ],
-        if (order.hasRider) ...[
+        if (!order.isTakeaway && order.hasRider) ...[
           const SizedBox(height: 16),
           _SectionCard(
             cardColor: cardColor,
@@ -278,6 +280,18 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildStatusActions(context, order),
+        TakeawayHandoverButton(
+          order: order,
+          onHandedOver: (updated) {
+            if (!mounted) return;
+            if (updated.items.isNotEmpty) {
+              setState(() => _order = updated);
+            } else {
+              setState(() => _order = order.copyWith(orderStatus: updated.orderStatus));
+              _fetchFresh(widget.orderId);
+            }
+          },
+        ),
         CancelAcceptedOrderButton(
           order: order,
           onCancel: () => _updateStatus('cancelled_by_restaurant'),
@@ -506,7 +520,11 @@ class _StatusHeaderCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  _statusLabel(order.orderStatus),
+                  order.isTakeaway && order.orderStatus == 'ready_for_pickup'
+                      ? 'Ready for collection'
+                      : order.isTakeaway && order.orderStatus == 'delivered'
+                      ? 'Collected'
+                      : _statusLabel(order.orderStatus),
                   style: TextStyle(
                     color: color,
                     fontSize: 12,
@@ -542,7 +560,15 @@ class _StatusHeaderCard extends StatelessWidget {
               ),
             ],
           ),
+          if (OrderTypeBadges.hasAny(order))
+            OrderTypeBadges(
+              order: order,
+              padding: const EdgeInsets.only(top: 12),
+            ),
+          // A scheduled order's deadline runs from its release time, so no
+          // countdown until it is released.
           if (order.orderStatus == 'created' &&
+              !order.isAwaitingRelease &&
               order.acceptanceDeadlineAt != null) ...[
             const SizedBox(height: 12),
             AcceptanceCountdown(deadline: order.acceptanceDeadlineAt!),
@@ -901,6 +927,7 @@ class BillDetails extends StatelessWidget {
         row('Delivery fee', pricing.deliveryFee),
         row('Platform fee', pricing.platformFee),
         row('Tax', pricing.tax),
+        row('Rider tip (passed to delivery partner)', pricing.riderTip),
         if (pricing.discount > 0)
           row(
             pricing.couponCode.isNotEmpty

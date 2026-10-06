@@ -86,6 +86,7 @@ class OrderPricingModel {
     required this.discount,
     required this.couponCode,
     required this.total,
+    this.riderTip = 0,
   });
 
   factory OrderPricingModel.fromJson(Map<String, dynamic> json) {
@@ -99,6 +100,7 @@ class OrderPricingModel {
       discount: asNum(json['discount'])?.toDouble() ?? 0,
       couponCode: (json['couponCode'] ?? '').toString(),
       total: asNum(json['total'])?.toDouble() ?? 0,
+      riderTip: asNum(json['riderTip'])?.toDouble() ?? 0,
     );
   }
 
@@ -110,6 +112,10 @@ class OrderPricingModel {
   final double discount;
   final String couponCode;
   final double total;
+
+  /// The customer's tip for the delivery partner. Part of [total], but it is
+  /// passed on to the rider — it is not restaurant money.
+  final double riderTip;
 }
 
 class OrderModel {
@@ -137,6 +143,10 @@ class OrderModel {
     required this.acceptanceDeadlineAt,
     required this.createdAt,
     this.statusTimes = const {},
+    this.orderType = 'delivery',
+    this.isScheduled = false,
+    this.scheduledAt,
+    this.releaseAt,
   });
 
   factory OrderModel.fromJson(Map<String, dynamic> rawJson) {
@@ -202,6 +212,10 @@ class OrderModel {
           DateTime.tryParse((json['createdAt'] ?? '').toString()) ??
           DateTime.now(),
       statusTimes: _parseStatusTimes(json['statusHistory']),
+      orderType: (json['orderType'] ?? 'delivery').toString(),
+      isScheduled: json['isScheduled'] == true,
+      scheduledAt: DateTime.tryParse((json['scheduledAt'] ?? '').toString()),
+      releaseAt: DateTime.tryParse((json['releaseAt'] ?? '').toString()),
     );
   }
 
@@ -227,6 +241,35 @@ class OrderModel {
   final String deliveryInstructions;
   final DateTime? acceptanceDeadlineAt;
   final DateTime createdAt;
+
+  /// `delivery` or `takeaway` (the customer collects; no rider is involved).
+  final String orderType;
+
+  /// Placed and paid in advance for the customer's chosen slot ([scheduledAt]).
+  final bool isScheduled;
+  final DateTime? scheduledAt;
+
+  /// When a scheduled order starts ringing as a new order (~40 min before the
+  /// slot). Until then the server sends no `new_order` alert for it.
+  final DateTime? releaseAt;
+
+  bool get isTakeaway => orderType == 'takeaway';
+
+  /// A scheduled order still waiting for its release time. It is listed but
+  /// must not ring, pop the incoming-order dialog or show an acceptance
+  /// countdown yet; it may still be accepted early.
+  bool get isAwaitingRelease =>
+      isScheduled &&
+      orderStatus == 'created' &&
+      releaseAt != null &&
+      // Slack for a device clock running behind the server's.
+      releaseAt!.isAfter(DateTime.now().add(const Duration(minutes: 2)));
+
+  /// Takeaway orders are handed over at the counter against the customer's
+  /// pickup code — possible from acceptance until the order is collected.
+  bool get canHandOver =>
+      isTakeaway &&
+      const {'confirmed', 'preparing', 'ready_for_pickup'}.contains(orderStatus);
 
   String get formattedDisplayId {
     final clean = displayId.trim();
@@ -284,6 +327,10 @@ class OrderModel {
       acceptanceDeadlineAt: acceptanceDeadlineAt ?? this.acceptanceDeadlineAt,
       createdAt: createdAt ?? this.createdAt,
       statusTimes: statusTimes ?? this.statusTimes,
+      orderType: orderType,
+      isScheduled: isScheduled,
+      scheduledAt: scheduledAt,
+      releaseAt: releaseAt,
     );
   }
 
@@ -295,6 +342,7 @@ class OrderModel {
   /// the restaurant accepts and before a rider does. Mirrors the statuses the
   /// backend's resend-notification endpoint accepts.
   bool get canResendToRiders =>
+      !isTakeaway &&
       const {'confirmed', 'preparing', 'ready_for_pickup', 'ready'}
           .contains(orderStatus) &&
       dispatchStatus != 'accepted';

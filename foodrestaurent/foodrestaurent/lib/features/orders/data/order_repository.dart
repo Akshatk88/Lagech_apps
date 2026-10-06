@@ -81,6 +81,18 @@ class OrderRepository {
   Future<void> resendNotification(String orderId) async {
     await _dio.post('/food/restaurant/orders/$orderId/resend-notification');
   }
+
+  /// Hands a takeaway order to the customer once the pickup code they show
+  /// matches. The order comes back `delivered`; a wrong code is a 400 whose
+  /// message explains it.
+  Future<OrderModel> handOverTakeaway(String orderId, String code) async {
+    final response = await _dio.post(
+      '/food/restaurant/orders/$orderId/handover',
+      data: {'code': code},
+    );
+    final data = Map<String, dynamic>.from(response.data as Map);
+    return OrderModel.fromJson(Map<String, dynamic>.from(data['order'] as Map));
+  }
 }
 
 final orderRepositoryProvider = Provider<OrderRepository>((ref) {

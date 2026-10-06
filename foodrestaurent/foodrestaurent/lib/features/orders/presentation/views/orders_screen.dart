@@ -13,6 +13,8 @@ import 'package:food_user_application/features/orders/domain/order_model.dart';
 import 'package:food_user_application/features/orders/presentation/controllers/live_orders_controller.dart';
 import 'package:food_user_application/features/orders/presentation/widgets/live_order_card.dart'; // NEW
 import 'package:food_user_application/features/orders/presentation/widgets/resend_rider_button.dart';
+import 'package:food_user_application/features/orders/presentation/widgets/order_type_badges.dart';
+import 'package:food_user_application/features/orders/presentation/widgets/takeaway_handover_button.dart';
 import 'package:food_user_application/features/business_settings/data/business_settings_repository.dart';
 import 'package:food_user_application/features/orders/presentation/widgets/cancel_accepted_order_button.dart';
 import 'package:food_user_application/features/restaurant_profile/presentation/controllers/restaurant_profile_controller.dart';
@@ -83,8 +85,16 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
     final restaurant = ref.watch(restaurantProfileControllerProvider).value;
     final isOffline = restaurant?.isAcceptingOrders == false;
 
-    final newOrders = orders.where((o) => ['new', 'preparing', 'ready', 'out_for_delivery'].contains(o.restaurantBucket)).toList()
+    final newOrders = orders.where((o) => !o.isAwaitingRelease && ['new', 'preparing', 'ready', 'out_for_delivery'].contains(o.restaurantBucket)).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    // Scheduled orders not yet released: listed in their own group, soonest
+    // slot first, so the kitchen can plan; they ring only at release time.
+    final upcomingScheduled = orders.where((o) => o.isAwaitingRelease).toList()
+      ..sort(
+        (a, b) => (a.scheduledAt ?? a.createdAt).compareTo(
+          b.scheduledAt ?? b.createdAt,
+        ),
+      );
     final all = [...orders]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     final preparing = orders
         .where((o) => o.restaurantBucket == 'preparing')
@@ -105,6 +115,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
         _buildLiveOrderList(
           context,
           newOrders,
+          scheduled: upcomingScheduled,
           emptyIcon: isOffline
               ? Icons.storefront_outlined
               : Icons.notifications_active_outlined,
@@ -143,13 +154,14 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
     List<OrderModel> orders, {
     required String emptyText,
     IconData? emptyIcon,
+    List<OrderModel> scheduled = const [],
   }) {
     return AppRefreshIndicator(
       onRefresh: () {
         ref.invalidate(restaurantBusinessSettingsProvider);
         return ref.read(liveOrdersControllerProvider.notifier).refresh();
       },
-      child: orders.isEmpty
+      child: orders.isEmpty && scheduled.isEmpty
           ? ListView(
               children: [
                 Padding(
@@ -184,13 +196,22 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
               // and always scrollable so even one tall card can be scrolled fully.
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
-              itemCount: orders.length + 1, // +1 for header
+              // +1 for header, +1 for the scheduled group's heading when shown
+              itemCount:
+                  orders.length + 1 + (scheduled.isEmpty ? 0 : scheduled.length + 1),
               separatorBuilder: (context, index) => const SizedBox(height: 16),
               itemBuilder: (context, index) {
                 if (index == 0) {
                   return const _LiveOrderHeader();
                 }
-                return LiveOrderCard(order: orders[index - 1]);
+                if (index <= orders.length) {
+                  return LiveOrderCard(order: orders[index - 1]);
+                }
+                final scheduledIndex = index - orders.length - 2;
+                if (scheduledIndex < 0) {
+                  return _ScheduledGroupHeader(count: scheduled.length);
+                }
+                return _OrderCard(order: scheduled[scheduledIndex]);
               },
             ),
     );
@@ -636,6 +657,11 @@ class _OrderCard extends ConsumerWidget {
                       ),
                     ],
                   ),
+                  if (OrderTypeBadges.hasAny(order))
+                    OrderTypeBadges(
+                      order: order,
+                      padding: const EdgeInsets.only(top: 12),
+                    ),
                   const SizedBox(height: 16),
 
                   // Row 2: Customer info
@@ -788,6 +814,7 @@ class _OrderCard extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildStatusActions(context, order, updateStatus),
+        TakeawayHandoverButton(order: order),
         CancelAcceptedOrderButton(
           order: order,
           onCancel: () => updateStatus('cancelled_by_restaurant'),
@@ -929,6 +956,19 @@ class _OrderCard extends ConsumerWidget {
             ),
           ),
         );
+      case 'ready_for_pickup' when order.isTakeaway:
+        return const Row(
+          children: [
+            Icon(Icons.storefront_outlined, size: 20, color: Colors.grey),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Ready — waiting for the customer to collect',
+                style: TextStyle(fontSize: 14, color: Colors.grey),
+              ),
+            ),
+          ],
+        );
       case 'ready_for_pickup':
         return Row(
           children: [
@@ -966,12 +1006,12 @@ class _OrderCard extends ConsumerWidget {
           style: const TextStyle(fontSize: 14, color: Colors.grey),
         );
       case 'delivered':
-        return const Row(
+        return Row(
           children: [
-            Icon(Icons.check_circle, size: 20, color: Colors.green),
-            SizedBox(width: 8),
+            const Icon(Icons.check_circle, size: 20, color: Colors.green),
+            const SizedBox(width: 8),
             Text(
-              'Delivered',
+              order.isTakeaway ? 'Collected' : 'Delivered',
               style: TextStyle(
                 color: Colors.green,
                 fontWeight: FontWeight.bold,
@@ -1187,6 +1227,47 @@ class _DeliveryBanner extends StatelessWidget {
             child: const Text(
               'Learn More',
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ScheduledGroupHeader extends StatelessWidget {
+  const _ScheduledGroupHeader({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.event_outlined, color: AppColors.warning, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Upcoming scheduled orders ($count)',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Paid in advance. They ring about 40 minutes before the slot; '
+                  'you can also accept them now.',
+                  style: TextStyle(fontSize: 12.5, color: Colors.grey.shade600),
+                ),
+              ],
             ),
           ),
         ],

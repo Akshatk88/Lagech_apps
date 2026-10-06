@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:food_user_application/config/theme/app_colors.dart';
 import 'package:food_user_application/core/network/api_exception.dart';
+import 'package:food_user_application/features/business_settings/data/business_settings_repository.dart';
 import 'package:food_user_application/features/restaurant_profile/presentation/controllers/restaurant_profile_controller.dart';
 
 class DeliverySettingsScreen extends ConsumerWidget {
@@ -11,6 +12,9 @@ class DeliverySettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final restaurantAsync = ref.watch(restaurantProfileControllerProvider);
+    final takeawayAvailable =
+        ref.watch(restaurantBusinessSettingsProvider).value?.takeawayAvailable ??
+        false;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -63,6 +67,10 @@ class DeliverySettingsScreen extends ConsumerWidget {
             children: [
               _buildStatusCard(context, ref, restaurant.isAcceptingOrders),
               const SizedBox(height: 16),
+              if (takeawayAvailable) ...[
+                _TakeawayCard(enabled: restaurant.takeawayEnabled),
+                const SizedBox(height: 16),
+              ],
               _buildNoteCard(context),
             ],
           ),
@@ -245,6 +253,123 @@ class DeliverySettingsScreen extends ConsumerWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Lets the outlet opt in or out of takeaway orders (customer collects at the
+/// counter). Only shown when the platform offers takeaway at all.
+class _TakeawayCard extends ConsumerStatefulWidget {
+  const _TakeawayCard({required this.enabled});
+
+  final bool enabled;
+
+  @override
+  ConsumerState<_TakeawayCard> createState() => _TakeawayCardState();
+}
+
+class _TakeawayCardState extends ConsumerState<_TakeawayCard> {
+  bool _saving = false;
+
+  Future<void> _toggle(bool value) async {
+    setState(() => _saving = true);
+    try {
+      await ref
+          .read(restaurantProfileControllerProvider.notifier)
+          .updateTakeawayEnabled(value);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              apiErrorMessage(e, 'Failed to update. Please try again.'),
+            ),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? AppColors.surfaceVariantDark
+                  : const Color(0xFFF5F6FA),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              Icons.shopping_bag_outlined,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Takeaway orders',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Customers order ahead and collect at your counter with a '
+                  'pickup code',
+                  style: TextStyle(
+                    color: isDark
+                        ? AppColors.textSecondaryDark
+                        : AppColors.textSecondaryLight,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_saving)
+            const Padding(
+              padding: EdgeInsets.all(12),
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            )
+          else
+            Switch(
+              value: widget.enabled,
+              activeThumbColor: Colors.green,
+              onChanged: _toggle,
+            ),
+        ],
       ),
     );
   }

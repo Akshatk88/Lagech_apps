@@ -72,6 +72,7 @@ class RestaurantModel {
     required this.rating,
     required this.totalRatings,
     required this.restaurantId,
+    this.takeawayEnabled = false,
   });
 
   factory RestaurantModel.fromJson(Map<String, dynamic> json) {
@@ -158,6 +159,7 @@ class RestaurantModel {
       totalRatings: (json['totalRatings'] is num)
           ? (json['totalRatings'] as num).toInt()
           : 0,
+      takeawayEnabled: json['takeawayEnabled'] == true,
     );
   }
 
@@ -218,6 +220,9 @@ class RestaurantModel {
 
   final double rating;
   final int totalRatings;
+
+  /// This outlet accepts takeaway orders (customer collects at the counter).
+  final bool takeawayEnabled;
 
   bool get isApproved => status == 'approved';
   bool get isPending => status == 'pending';

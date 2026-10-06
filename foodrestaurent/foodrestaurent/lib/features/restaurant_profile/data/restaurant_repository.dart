@@ -40,6 +40,17 @@ class RestaurantRepository {
     );
   }
 
+  Future<RestaurantModel> updateTakeawaySettings(bool takeawayEnabled) async {
+    final response = await _dio.patch(
+      '/food/restaurant/takeaway-settings',
+      data: {'takeawayEnabled': takeawayEnabled},
+    );
+    final data = Map<String, dynamic>.from(response.data as Map);
+    return RestaurantModel.fromJson(
+      Map<String, dynamic>.from(data['restaurant'] as Map),
+    );
+  }
+
   /// `{ "Monday": { "isOpen": true, "openingTime": "09:00", "closingTime": "22:00" }, ... }`
   Future<Map<String, dynamic>> getOutletTimings() async {
     final response = await _dio.get('/food/restaurant/outlet-timings');

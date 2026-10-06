@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:food_user_application/config/theme/app_colors.dart';
 import 'package:food_user_application/features/orders/domain/order_model.dart';
+import 'package:food_user_application/features/orders/presentation/widgets/order_type_badges.dart';
 import 'package:food_user_application/features/orders/presentation/widgets/resend_rider_button.dart';
+import 'package:food_user_application/features/orders/presentation/widgets/takeaway_handover_button.dart';
 
 class LiveOrderCard extends ConsumerStatefulWidget {
   const LiveOrderCard({super.key, required this.order});
@@ -53,6 +55,11 @@ class _LiveOrderCardState extends ConsumerState<LiveOrderCard> {
             const SizedBox(height: 16),
             if (widget.order.canResendToRiders)
               ResendRiderButton(order: widget.order),
+            if (widget.order.canHandOver)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: TakeawayHandoverButton(order: widget.order),
+              ),
             _buildActionButtons(context),
           ] else
             const SizedBox(height: 16),
@@ -110,7 +117,7 @@ class _LiveOrderCardState extends ConsumerState<LiveOrderCard> {
         pillColor = AppColors.successLight;
         pillTextColor = AppColors.primaryDeep;
         pillIcon = Icons.check_circle;
-        pillText = 'Delivered';
+        pillText = widget.order.isTakeaway ? 'Collected' : 'Delivered';
         break;
       default:
         pillColor = Colors.grey.shade100;
@@ -198,6 +205,11 @@ class _LiveOrderCardState extends ConsumerState<LiveOrderCard> {
               ),
             ],
           ),
+          if (OrderTypeBadges.hasAny(widget.order))
+            OrderTypeBadges(
+              order: widget.order,
+              padding: const EdgeInsets.only(top: 8),
+            ),
           if (widget.order.orderStatus == 'preparing' || widget.order.orderStatus == 'ready_for_pickup')
             Padding(
               padding: const EdgeInsets.only(top: 8.0),
@@ -292,18 +304,21 @@ class _LiveOrderCardState extends ConsumerState<LiveOrderCard> {
             isCurrent: currentStep == 2,
             color: Colors.green,
           ),
-          _TimelineLine(isActive: currentStep >= 3),
-          _TimelineStep(
-            title: 'Picked Up',
-            time: timeFor(3, 'picked_up'),
-            icon: Icons.two_wheeler,
-            isActive: currentStep >= 3,
-            isCurrent: currentStep == 3,
-            color: AppColors.primaryDark,
-          ),
+          // Takeaway has no rider leg: the customer collects straight from Ready.
+          if (!widget.order.isTakeaway) ...[
+            _TimelineLine(isActive: currentStep >= 3),
+            _TimelineStep(
+              title: 'Picked Up',
+              time: timeFor(3, 'picked_up'),
+              icon: Icons.two_wheeler,
+              isActive: currentStep >= 3,
+              isCurrent: currentStep == 3,
+              color: AppColors.primaryDark,
+            ),
+          ],
           _TimelineLine(isActive: currentStep >= 4),
           _TimelineStep(
-            title: 'Delivered',
+            title: widget.order.isTakeaway ? 'Collected' : 'Delivered',
             time: timeFor(4, 'delivered'),
             icon: Icons.check_circle_outline,
             isActive: currentStep >= 4,
@@ -436,7 +451,38 @@ class _LiveOrderCardState extends ConsumerState<LiveOrderCard> {
           const SizedBox(width: 6),
           Container(width: 1, height: 48, color: Colors.grey.shade200),
           const SizedBox(width: 6),
-          // Delivery Partner
+          // Delivery Partner (takeaway: the customer collects, no rider)
+          if (widget.order.isTakeaway)
+            Expanded(
+              flex: 5,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.shopping_bag_outlined, size: 14, color: Colors.grey.shade600),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          'Takeaway',
+                          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Customer collects',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: isDarkMode ? Colors.white : Colors.black87),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            )
+          else
           Expanded(
             flex: 5,
             child: Column(
