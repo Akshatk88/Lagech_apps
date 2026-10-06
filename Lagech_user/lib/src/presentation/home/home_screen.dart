@@ -480,6 +480,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               orElse: () => const SizedBox.shrink(),
                             ),
 
+                            // 3.6. FEATURED RESTAURANTS — the admin's featured ones in
+                            // this zone; hidden when none are featured here.
+                            if (homeState.featuredRestaurants.isNotEmpty) ...[
+                              RecommendedGridSection(
+                                key: ValueKey('featured-${homeState.featuredRestaurants.length}'),
+                                restaurants: homeState.featuredRestaurants,
+                                title: 'FEATURED RESTAURANTS',
+                                onRestaurantTap: (rest) {
+                                  context.push(RouteNames.restaurantDetail, extra: rest);
+                                },
+                              ),
+                              SizedBox(height: 10.h),
+                            ],
+
                             // 4. Explore More Section: Offers, Gourmet, Top 10, Collections
                             ExploreMoreSection(
                               // Offers → Opens the full Offers/Store99 deals screen

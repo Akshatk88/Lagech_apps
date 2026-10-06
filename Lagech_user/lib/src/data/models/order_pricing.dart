@@ -45,6 +45,9 @@ class OrderPricing {
   /// The part of [discount] that is the first-order discount for new customers.
   final double newCustomerDiscount;
 
+  /// The part of [discount] that food campaign dishes took off their price.
+  final double campaignDiscount;
+
   /// Why the coupon that was sent did not apply, worded for the customer.
   final String? couponError;
 
@@ -73,6 +76,7 @@ class OrderPricing {
     this.freeDeliveryWaived = 0,
     this.freeDeliveryOver,
     this.newCustomerDiscount = 0,
+    this.campaignDiscount = 0,
     this.couponError,
     this.raw = const {},
   });
@@ -80,9 +84,10 @@ class OrderPricing {
   /// Any delivery fee taken off, by a coupon or by "free delivery over".
   bool get deliveryWaived => deliveryFeeWaived > 0 || freeDeliveryWaived > 0;
 
-  /// [discount] without the new-customer part — what the coupon/offer gave.
+  /// [discount] without the new-customer and campaign parts — what the
+  /// coupon/offer gave.
   double get discountExcludingNewCustomer =>
-      (discount - newCustomerDiscount).clamp(0, double.infinity).toDouble();
+      (discount - newCustomerDiscount - campaignDiscount).clamp(0, double.infinity).toDouble();
 
   /// What a coupon saved in all: its discount plus any delivery fee it waived.
   /// Read from `appliedCoupon.savings` when the server sends it.
@@ -136,6 +141,7 @@ class OrderPricing {
       freeDeliveryWaived: _d(json['freeDeliveryWaived']),
       freeDeliveryOver: (json['freeDeliveryOver'] as num?)?.toDouble(),
       newCustomerDiscount: _d(json['newCustomerDiscount']),
+      campaignDiscount: _d(json['campaignDiscount']),
       couponError: (json['couponError'] as String?)?.trim().isNotEmpty == true
           ? (json['couponError'] as String).trim()
           : null,

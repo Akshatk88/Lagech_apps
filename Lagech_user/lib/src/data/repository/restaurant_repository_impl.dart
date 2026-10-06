@@ -75,6 +75,21 @@ class RestaurantRepositoryImpl implements RestaurantRepository {
   });
 
   @override
+  Future<ApiResponse<List<RestaurantModel>>> getAdminFeaturedRestaurants({
+    void Function(List<RestaurantModel>)? onCache,
+  }) => _guard(() {
+    final here = _latLng();
+    return _remote.getRestaurants(
+      zoneId: _zoneId(),
+      featured: true,
+      limit: 50,
+      onCache: onCache,
+      lat: here?.lat,
+      lng: here?.lng,
+    );
+  });
+
+  @override
   Future<ApiResponse<List<FoodModel>>> getRestaurantMenu(String restaurantId) =>
       _guard(() => _remote.getRestaurantMenu(restaurantId));
 

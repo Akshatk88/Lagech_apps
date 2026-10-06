@@ -1,4 +1,5 @@
 import '../../core/config/api_config.dart';
+import 'food_model.dart';
 
 /// Restaurant summary embedded in a campaign.
 class CampaignRestaurant {
@@ -46,8 +47,9 @@ class CampaignRestaurant {
 ///
 /// `basic` campaigns are a banner with participating [restaurants] (possibly
 /// none); `food` campaigns promote one dish of one restaurant, priced
-/// [price] → [finalPrice]. Food campaigns aren't orderable through checkout
-/// yet, so tapping either kind opens a restaurant.
+/// [price] → [finalPrice]. A food campaign dish is orderable: [toFoodModel]
+/// makes the cart line, which checkout sends with its `campaignId` so the
+/// server charges the campaign price.
 class CampaignModel {
   final String id;
   final bool isFood;
@@ -61,6 +63,7 @@ class CampaignModel {
   final double finalPrice;
   final String discountType;
   final double discount;
+  final bool isVeg;
 
   const CampaignModel({
     required this.id,
@@ -73,6 +76,7 @@ class CampaignModel {
     this.finalPrice = 0,
     this.discountType = '',
     this.discount = 0,
+    this.isVeg = false,
   });
 
   bool get hasDiscount => isFood && price > 0 && finalPrice > 0 && finalPrice < price;
@@ -95,6 +99,28 @@ class CampaignModel {
       finalPrice: (json['finalPrice'] as num?)?.toDouble() ?? 0.0,
       discountType: (json['discountType'] ?? '').toString(),
       discount: (json['discount'] as num?)?.toDouble() ?? 0.0,
+      isVeg: (json['foodType'] ?? '').toString().toLowerCase() == 'veg',
+    );
+  }
+
+  /// The food campaign dish as a cart line: the campaign id doubles as the
+  /// item id, and [finalPrice] is what the customer pays (the server prices
+  /// it again from the campaign). Null for a basic campaign.
+  FoodModel? toFoodModel() {
+    if (!isFood || restaurants.isEmpty || finalPrice <= 0) return null;
+    final restaurant = restaurants.first;
+    return FoodModel(
+      id: id,
+      campaignId: id,
+      restaurantId: restaurant.id,
+      restaurantName: restaurant.name,
+      name: title,
+      description: description,
+      price: finalPrice,
+      originalPrice: hasDiscount ? price : null,
+      imageUrl: image,
+      imageGallery: image.isEmpty ? const [] : [image],
+      isVeg: isVeg,
     );
   }
 

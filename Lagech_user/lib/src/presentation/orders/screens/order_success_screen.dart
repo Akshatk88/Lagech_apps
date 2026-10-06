@@ -599,8 +599,10 @@ class _ItemsCard extends StatelessWidget {
             ),
           if (order.rewardDiscount > 0)
             _billRow('Discount', '-${_fmt(order.rewardDiscount)}', AppColors.success, secondary),
-          if (order.couponDiscount - order.newCustomerDiscount > 0)
-            _billRow('Coupon Discount', '-${_fmt(order.couponDiscount - order.newCustomerDiscount)}', AppColors.success, secondary),
+          if (order.couponDiscount - order.newCustomerDiscount - order.campaignDiscount > 0)
+            _billRow('Coupon Discount', '-${_fmt(order.couponDiscount - order.newCustomerDiscount - order.campaignDiscount)}', AppColors.success, secondary),
+          if (order.campaignDiscount > 0)
+            _billRow('Campaign discount', '-${_fmt(order.campaignDiscount)}', AppColors.success, secondary),
           if (order.newCustomerDiscount > 0)
             _billRow('New customer discount', '-${_fmt(order.newCustomerDiscount)}', AppColors.success, secondary),
           if (order.walletUsed > 0)

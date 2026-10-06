@@ -31,6 +31,12 @@ class FoodModel {
   /// Free-text allergens, e.g. "Peanuts". Empty when unset.
   final List<String> allergens;
 
+  /// Set when this is a food campaign dish rather than a menu item ([id] is
+  /// then the campaign id too). The server prices it from the campaign.
+  final String? campaignId;
+
+  bool get isCampaign => campaignId != null && campaignId!.isNotEmpty;
+
   const FoodModel({
     required this.id,
     required this.restaurantId,
@@ -54,6 +60,7 @@ class FoodModel {
     this.variants = const [],
     this.nutrition = const [],
     this.allergens = const [],
+    this.campaignId,
   });
 
   /// "X% OFF" badge value, or null when there's no genuine [originalPrice] to
@@ -215,6 +222,9 @@ class FoodModel {
       variants: FoodVariant.listFrom(json),
       nutrition: _stringList(json['nutrition']),
       allergens: _stringList(json['allergens']),
+      campaignId: (json['campaignId'] as String?)?.trim().isNotEmpty == true
+          ? (json['campaignId'] as String).trim()
+          : null,
     );
   }
 
@@ -242,6 +252,7 @@ class FoodModel {
       'variants': variants.map((v) => v.toJson()).toList(),
       'nutrition': nutrition,
       'allergens': allergens,
+      'campaignId': ?campaignId,
     };
   }
 }

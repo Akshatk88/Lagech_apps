@@ -27,6 +27,9 @@ class OrderItem {
   final String cookingInstructions;
   final String specialNotes;
 
+  /// Set when the line was a food campaign dish ([itemId] is then the campaign id).
+  final String? campaignId;
+
   const OrderItem({
     required this.itemId,
     required this.name,
@@ -38,6 +41,7 @@ class OrderItem {
     this.addons = const [],
     this.cookingInstructions = '',
     this.specialNotes = '',
+    this.campaignId,
   });
 
   /// This line's contribution to the bill — never re-derive `price * quantity`
@@ -82,6 +86,9 @@ class OrderItem {
           const [],
       cookingInstructions: (json['cookingInstructions'] ?? '').toString(),
       specialNotes: (json['specialNotes'] ?? '').toString(),
+      campaignId: (json['itemCampaignId'] as String?)?.trim().isNotEmpty == true
+          ? (json['itemCampaignId'] as String).trim()
+          : null,
     );
   }
 }
@@ -272,6 +279,9 @@ class OrderModel {
   /// The part of [couponDiscount] that is the new-customer discount.
   final double newCustomerDiscount;
 
+  /// The part of [couponDiscount] that food campaign dishes took off.
+  final double campaignDiscount;
+
   /// Offline payment review: `pending`, `verified` or `rejected`; empty when
   /// the order was not paid offline.
   final String offlinePaymentStatus;
@@ -365,6 +375,7 @@ class OrderModel {
     this.deliveryFeeWaived = 0,
     this.freeDeliveryWaived = 0,
     this.newCustomerDiscount = 0,
+    this.campaignDiscount = 0,
     this.offlinePaymentStatus = '',
     this.offlinePaymentAdminNote = '',
     this.paymentMethod = '',
@@ -817,6 +828,7 @@ class OrderModel {
       deliveryFeeWaived: _money(pricing['deliveryFeeWaived']),
       freeDeliveryWaived: _money(pricing['freeDeliveryWaived']),
       newCustomerDiscount: _money(pricing['newCustomerDiscount']),
+      campaignDiscount: _money(pricing['campaignDiscount']),
       offlinePaymentStatus:
           ((json['offlinePayment'] as Map?)?['status'] ?? '').toString(),
       offlinePaymentAdminNote:

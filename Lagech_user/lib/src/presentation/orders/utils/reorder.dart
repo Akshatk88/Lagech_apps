@@ -41,6 +41,8 @@ Future<List<CartItemModel>> resolveReorderItems(
           price: item.price,
           imageUrl: item.imageUrl,
           isVeg: item.isVeg,
+          // A campaign dish is re-priced from its campaign, if still running.
+          campaignId: item.campaignId,
         );
 
     final variant = (liveFood == null || item.variants.isEmpty)

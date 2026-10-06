@@ -1763,6 +1763,15 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                       const Color(0xFF059669),
                     ),
                   ],
+                  if ((pricing?.campaignDiscount ?? 0) > 0) ...[
+                    const SizedBox(height: 10),
+                    _buildBillRow(
+                      'Campaign discount',
+                      '−₹${pricing!.campaignDiscount.toStringAsFixed(0)}',
+                      const Color(0xFF059669),
+                      const Color(0xFF059669),
+                    ),
+                  ],
                   if ((pricing?.newCustomerDiscount ?? 0) > 0) ...[
                     const SizedBox(height: 10),
                     _buildBillRow(

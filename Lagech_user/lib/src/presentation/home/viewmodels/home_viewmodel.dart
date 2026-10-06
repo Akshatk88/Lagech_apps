@@ -18,12 +18,17 @@ class HomeState {
   /// failed call) means the home row falls back to [nearbyRestaurants].
   final List<RestaurantModel> recommendedRestaurants;
 
+  /// Admin-featured restaurants for the zone (`?featured=true`). Empty (or a
+  /// failed call) hides the "Featured restaurants" row.
+  final List<RestaurantModel> featuredRestaurants;
+
   HomeState({
     required this.categories,
     required this.popularFoods,
     required this.bestOffers,
     required this.nearbyRestaurants,
     this.recommendedRestaurants = const [],
+    this.featuredRestaurants = const [],
   });
 
   HomeState copyWith({
@@ -32,6 +37,7 @@ class HomeState {
     AsyncValue<List<FoodModel>>? bestOffers,
     AsyncValue<List<RestaurantModel>>? nearbyRestaurants,
     List<RestaurantModel>? recommendedRestaurants,
+    List<RestaurantModel>? featuredRestaurants,
   }) {
     return HomeState(
       categories: categories ?? this.categories,
@@ -39,6 +45,7 @@ class HomeState {
       bestOffers: bestOffers ?? this.bestOffers,
       nearbyRestaurants: nearbyRestaurants ?? this.nearbyRestaurants,
       recommendedRestaurants: recommendedRestaurants ?? this.recommendedRestaurants,
+      featuredRestaurants: featuredRestaurants ?? this.featuredRestaurants,
     );
   }
 }
@@ -122,6 +129,9 @@ class HomeViewModel extends Notifier<HomeState> {
       _repository.getRecommendedRestaurants(
         onCache: (r) => state = state.copyWith(recommendedRestaurants: r),
       ),
+      _repository.getAdminFeaturedRestaurants(
+        onCache: (r) => state = state.copyWith(featuredRestaurants: r),
+      ),
     ]);
 
     final categoriesRes = responses[0] as dynamic;
@@ -129,6 +139,7 @@ class HomeViewModel extends Notifier<HomeState> {
     final bestOffersRes = responses[2] as dynamic;
     final nearbyRes = responses[3] as dynamic;
     final recommendedRes = responses[4] as dynamic;
+    final featuredRes = responses[5] as dynamic;
 
     state = state.copyWith(
       categories: categoriesRes.isSuccess
@@ -158,6 +169,9 @@ class HomeViewModel extends Notifier<HomeState> {
       // Failure is treated as "none picked" so the row falls back silently.
       recommendedRestaurants: recommendedRes.isSuccess
           ? List<RestaurantModel>.from((recommendedRes.data as List?) ?? const [])
+          : const <RestaurantModel>[],
+      featuredRestaurants: featuredRes.isSuccess
+          ? List<RestaurantModel>.from((featuredRes.data as List?) ?? const [])
           : const <RestaurantModel>[],
     );
   }

@@ -24,8 +24,10 @@ class PriceDetailsCard extends StatelessWidget {
     // The new-customer discount is part of the order's `discount`; it gets its
     // own row so the itemised rows still add up to the total.
     final newCustomerDiscount = order.newCustomerDiscount;
+    // Food campaign dishes' discount is part of `discount` too, with its own row.
+    final campaignDiscount = order.campaignDiscount;
     final totalDiscounts =
-        (order.couponDiscount - newCustomerDiscount).clamp(0, double.infinity) +
+        (order.couponDiscount - newCustomerDiscount - campaignDiscount).clamp(0, double.infinity) +
             order.rewardDiscount;
 
     // Struck-through only when the order records both a waiver and the fee
@@ -155,6 +157,9 @@ class PriceDetailsCard extends StatelessWidget {
               // Discount Applied
               if (totalDiscounts > 0)
                 _buildBillRow('Discount Applied', '-₹${totalDiscounts.toStringAsFixed(0)}', greenColor, greenColor),
+
+              if (campaignDiscount > 0)
+                _buildBillRow('Campaign discount', '-₹${campaignDiscount.toStringAsFixed(0)}', greenColor, greenColor),
 
               if (newCustomerDiscount > 0)
                 _buildBillRow('New customer discount', '-₹${newCustomerDiscount.toStringAsFixed(0)}', greenColor, greenColor),

@@ -20,6 +20,10 @@ class RestaurantReviewItem {
   final String? dishName;
   final String? dishImageUrl;
 
+  /// The restaurant's reply to this review; empty when it has not replied.
+  final String reply;
+  final String replyDate;
+
   const RestaurantReviewItem({
     required this.userName,
     required this.rating,
@@ -27,6 +31,8 @@ class RestaurantReviewItem {
     required this.comment,
     this.dishName,
     this.dishImageUrl,
+    this.reply = '',
+    this.replyDate = '',
   });
 }
 
@@ -64,7 +70,10 @@ class RestaurantReviewsScreen extends ConsumerWidget {
     return list.whereType<Map>().map((raw) {
       final r = raw.cast<String, dynamic>();
       final image = r['dishImage'] as String?;
+      final reply = (r['reply'] as Map?)?.cast<String, dynamic>();
       return RestaurantReviewItem(
+        reply: (reply?['text'] ?? '').toString().trim(),
+        replyDate: _formatDate(reply?['repliedAt']),
         userName: (r['userName'] ?? 'Customer').toString(),
         rating: (r['rating'] as num?)?.toDouble() ?? 0,
         date: _formatDate(r['ratedAt']),
@@ -428,6 +437,46 @@ class RestaurantReviewsScreen extends ConsumerWidget {
                           fontSize: 13.sp,
                           color: isDark ? Colors.white70 : const Color(0xFF374151),
                           height: 1.35,
+                        ),
+                      ),
+                    ],
+                    if (review.reply.isNotEmpty) ...[
+                      SizedBox(height: 10.h),
+                      Container(
+                        width: double.infinity,
+                        padding: EdgeInsets.fromLTRB(10.w, 8.h, 10.w, 8.h),
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF7F7F8),
+                          border: Border(
+                            left: BorderSide(
+                              color: isDark ? AppColors.borderDark : const Color(0xFFD1D5DB),
+                              width: 3,
+                            ),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              review.replyDate.isEmpty
+                                  ? 'Reply from ${restaurant.name}'
+                                  : 'Reply from ${restaurant.name} · ${review.replyDate}',
+                              style: TextStyle(
+                                fontSize: 11.5.sp,
+                                fontWeight: FontWeight.w700,
+                                color: isDark ? Colors.white : const Color(0xFF1E232C),
+                              ),
+                            ),
+                            SizedBox(height: 4.h),
+                            Text(
+                              review.reply,
+                              style: TextStyle(
+                                fontSize: 12.5.sp,
+                                color: isDark ? Colors.white70 : const Color(0xFF4B5563),
+                                height: 1.35,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],

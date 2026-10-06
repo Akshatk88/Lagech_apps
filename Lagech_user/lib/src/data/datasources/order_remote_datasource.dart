@@ -51,6 +51,8 @@ class OrderRemoteDataSource {
 
     return {
       'itemId': item.food.id,
+      // A food campaign dish; the server prices it from the campaign.
+      'campaignId': ?item.food.campaignId,
       'name': item.food.name,
       // The unit price the user was actually shown/charged: base + variant +
       // add-ons. Sending the bare base price here was the bug — the server
@@ -437,6 +439,7 @@ class OrderRemoteDataSource {
             .map(
               (i) => {
                 'itemId': i.food.id,
+                'campaignId': ?i.food.campaignId,
                 'name': i.food.name,
                 'price': i.food.price,
                 'quantity': i.quantity,

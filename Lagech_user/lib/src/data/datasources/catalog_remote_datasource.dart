@@ -216,6 +216,7 @@ class CatalogRemoteDataSource {
     String? cuisine,
     String? sortBy,
     bool recommended = false,
+    bool featured = false,
     int page = 1,
     int limit = 50,
     void Function(List<RestaurantModel>)? onCache,
@@ -250,6 +251,7 @@ class CatalogRemoteDataSource {
         'cuisine': cuisine,
         'sortBy': sortBy,
         if (recommended) 'recommended': true,
+        if (featured) 'featured': true,
       },
       auth: false,
       cacheTtl: _cacheTtl,
@@ -260,7 +262,8 @@ class CatalogRemoteDataSource {
 
     // An empty recommended list means none are picked for this area — widening
     // the query would surface recommendations that don't serve the customer.
-    if (recommended) return results;
+    // Same for featured: none featured here means no row.
+    if (recommended || featured) return results;
 
     // Fallback: If zoneId or lat/lng returned 0 restaurants because MongoDB records
     // do not have zoneId field assigned, query without zoneId and coordinates:
