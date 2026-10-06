@@ -29,7 +29,9 @@ import 'package:food_user_application/features/orders/application/orders_state.d
 import 'package:food_user_application/features/chat/presentation/screens/chat_screen.dart';
 import 'package:food_user_application/features/orders/data/models/delivery_order.dart';
 import 'package:food_user_application/features/orders/data/orders_repository.dart';
+import 'package:food_user_application/features/orders/presentation/widgets/cancel_delivery_sheet.dart';
 import 'package:food_user_application/features/orders/presentation/widgets/collect_payment_sheet.dart';
+import 'package:food_user_application/features/settings/application/business_settings_controller.dart';
 import 'package:food_user_application/features/support/data/support_repository.dart';
 
 const _tripOnlineGreen = Color(0xFFF20D16); // brand red (was green)
@@ -530,6 +532,29 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
     ref.read(goRouterProvider).go('/main');
   }
 
+  /// Rider cancels the accepted delivery on screen (admin-permitted, before
+  /// pickup). The sheet makes the call and shows any refusal itself; on
+  /// success the controller has already dropped the order and focused the
+  /// next active one — stay here for it, or go home if none is left.
+  ///
+  /// Everything used after the sheet closes is captured up front: when the
+  /// last active order is cancelled the overlay hosting this screen is torn
+  /// down, so `ref`/`context` may no longer be usable by then.
+  Future<void> _cancelDelivery(DeliveryOrder order) async {
+    _stopSimulation();
+    final container = ProviderScope.containerOf(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
+    final cancelled = await showCancelDeliverySheet(context, order);
+    if (cancelled != true) return;
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Order cancelled. It will be assigned to another rider.')),
+    );
+    final ordersState = container.read(ordersControllerProvider);
+    if (ordersState is OrdersLoaded && ordersState.hasActiveOrder) return;
+    container.read(activeTripVisibilityControllerProvider.notifier).hide();
+    container.read(goRouterProvider).go('/main');
+  }
+
   Future<void> _promptDropOtp(DeliveryOrder order) async {
     final controller = ref.read(ordersControllerProvider.notifier);
     final otp = await showOtpBottomSheet(context, customerName: order.customerName);
@@ -949,6 +974,10 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
     bool isPickupPhase,
   ) {
     final action = _actionFor(order);
+    final canCancelOrder = ref.watch(
+      businessSettingsControllerProvider.select((s) => s.canCancelOrder),
+    );
+    final showCancel = canCancelOrder && order.isBeforePickup;
     final name = isPickupPhase ? order.restaurant.name : order.customerName;
     final address = isPickupPhase ? order.restaurant.address : order.deliveryAddress.fullAddress;
     final destLat = isPickupPhase ? order.restaurant.location?.lat : order.deliveryAddress.location?.lat;
@@ -1167,7 +1196,23 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
                       ),
               ),
             ),
-            SizedBox(height: 16.h),
+            if (showCancel) ...[
+              SizedBox(height: 8.h),
+              TextButton.icon(
+                onPressed: _isActionLoading || _isCompleting
+                    ? null
+                    : () {
+                        HapticService.light();
+                        _cancelDelivery(order);
+                      },
+                icon: Icon(Icons.cancel_outlined, size: 18.sp, color: subTextColor),
+                label: Text(
+                  'Cancel delivery',
+                  style: TextStyle(color: subTextColor, fontWeight: FontWeight.w700, fontSize: 13.sp),
+                ),
+              ),
+            ],
+            SizedBox(height: showCancel ? 4.h : 16.h),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [

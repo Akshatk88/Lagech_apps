@@ -92,8 +92,16 @@ class OrdersRepository {
   Future<Result<DeliveryOrder, AppError>> accept(String orderId) =>
       _patchOrder(ApiEndpoints.orderAccept(orderId));
 
-  Future<Result<DeliveryOrder, AppError>> reject(String orderId) =>
-      _patchOrder(ApiEndpoints.orderReject(orderId));
+  /// Declines an offer, or cancels an accepted delivery (admin-permitted,
+  /// before pickup only). [reason] is sent only when given, so declining an
+  /// offer still sends no body.
+  Future<Result<DeliveryOrder, AppError>> reject(
+    String orderId, {
+    String? reason,
+  }) => _patchOrder(
+    ApiEndpoints.orderReject(orderId),
+    data: reason != null ? {'reason': reason} : null,
+  );
 
   Future<Result<DeliveryOrder, AppError>> reachedPickup(String orderId) =>
       _patchOrder(ApiEndpoints.orderReachedPickup(orderId));

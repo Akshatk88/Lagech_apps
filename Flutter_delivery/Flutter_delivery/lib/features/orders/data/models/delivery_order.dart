@@ -236,6 +236,13 @@ class DeliveryOrder {
   bool get isCashOnDelivery => paymentMethod == 'cash';
   bool get isPaid => paymentStatus == 'paid';
 
+  /// Still heading to / waiting at the restaurant — the food hasn't been
+  /// picked up. Only then may the rider cancel an accepted delivery (the
+  /// backend refuses after pickup).
+  bool get isBeforePickup =>
+      (currentPhase == 'en_route_to_pickup' || currentPhase == 'at_pickup') &&
+      !const {'picked_up', 'reached_drop', 'delivered'}.contains(orderStatus);
+
   DeliveryOrder copyWith({bool? dropOtpRequired, bool? dropOtpVerified}) {
     return DeliveryOrder(
       id: id,

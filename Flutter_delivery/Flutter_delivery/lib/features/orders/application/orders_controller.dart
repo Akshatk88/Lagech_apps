@@ -331,9 +331,54 @@ class OrdersController extends Notifier<OrdersState> {
     return result;
   }
 
-  Future<Result<DeliveryOrder, AppError>> rejectOrder(String orderId) async {
-    final result = await _repository.reject(orderId);
-    result.when(success: (_) => refreshAvailable(), failure: (_) {});
+  /// Declines an offer, or — for an order the rider already holds — cancels
+  /// that accepted delivery (pass the rider's [reason]). Declining an offer
+  /// is unchanged. A cancelled delivery leaves the active list and the focus
+  /// moves to the next one the rider still holds, if any; on failure (e.g.
+  /// after pickup, or the admin switch is off) nothing changes.
+  Future<Result<DeliveryOrder, AppError>> rejectOrder(
+    String orderId, {
+    String? reason,
+  }) async {
+    final wasActive = _loaded?.activeOrderById(orderId) != null;
+    final result = await _repository.reject(orderId, reason: reason);
+    result.when(
+      success: (_) {
+        if (!wasActive) {
+          refreshAvailable();
+          return;
+        }
+        _mutationVersion++;
+        final now = _loaded;
+        final remaining = (now?.activeOrders ?? const <DeliveryOrder>[])
+            .where((o) => o.id != orderId)
+            .toList();
+        final focused = now?.currentOrder?.id;
+        final limit = now?.orderLimit;
+        // Leaving the cancelled order's tracking room happens in _setLoaded.
+        _setLoaded(
+          OrdersLoaded(
+            availableOrders: remaining.isEmpty
+                ? const []
+                : (now?.availableOrders ?? const []),
+            activeOrders: remaining,
+            selectedOrderId: remaining.isEmpty
+                ? null
+                : (focused != null &&
+                        focused != orderId &&
+                        remaining.any((o) => o.id == focused)
+                    ? focused
+                    : remaining.first.id),
+            orderLimit: limit,
+            canAcceptMore:
+                limit != null ? remaining.length < limit : now?.canAcceptMore,
+          ),
+        );
+        // Re-read /orders/current (and offers, if nothing is left).
+        unawaited(refreshAll());
+      },
+      failure: (_) {},
+    );
     return result;
   }
 
