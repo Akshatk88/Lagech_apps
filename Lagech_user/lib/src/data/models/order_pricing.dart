@@ -1,3 +1,5 @@
+import 'business_settings_model.dart';
+
 /// Server-computed bill from `POST /food/orders/calculate`.
 ///
 /// Pricing is server-owned: never compute or adjust these numbers client-side.
@@ -27,6 +29,25 @@ class OrderPricing {
 
   final double? roadDistanceKm;
 
+  /// Delivery fee before any waiver (0 when the server did not send it).
+  final double originalDeliveryFee;
+
+  /// Delivery fee + GST waived by a free-delivery coupon.
+  final double deliveryFeeWaived;
+
+  /// Delivery fee + GST waived because the item total reached
+  /// [freeDeliveryOver] ("Free delivery over ₹X").
+  final double freeDeliveryWaived;
+
+  /// The admin's "free delivery over" threshold, or null when it is off.
+  final double? freeDeliveryOver;
+
+  /// The part of [discount] that is the first-order discount for new customers.
+  final double newCustomerDiscount;
+
+  /// Why the coupon that was sent did not apply, worded for the customer.
+  final String? couponError;
+
   /// Verbatim server payload, echoed into order creation unchanged.
   final Map<String, dynamic> raw;
 
@@ -47,17 +68,43 @@ class OrderPricing {
     this.couponCode,
     this.appliedCoupon,
     this.roadDistanceKm,
+    this.originalDeliveryFee = 0,
+    this.deliveryFeeWaived = 0,
+    this.freeDeliveryWaived = 0,
+    this.freeDeliveryOver,
+    this.newCustomerDiscount = 0,
+    this.couponError,
     this.raw = const {},
   });
+
+  /// Any delivery fee taken off, by a coupon or by "free delivery over".
+  bool get deliveryWaived => deliveryFeeWaived > 0 || freeDeliveryWaived > 0;
+
+  /// [discount] without the new-customer part — what the coupon/offer gave.
+  double get discountExcludingNewCustomer =>
+      (discount - newCustomerDiscount).clamp(0, double.infinity).toDouble();
+
+  /// What a coupon saved in all: its discount plus any delivery fee it waived.
+  /// Read from `appliedCoupon.savings` when the server sends it.
+  double get couponSavings {
+    final s = appliedCoupon?['savings'];
+    if (s is num) return s.toDouble();
+    return discountExcludingNewCustomer + deliveryFeeWaived;
+  }
 
   /// True once a coupon actually landed — checked against `discount`/
   /// `couponCode` too, not just `appliedCoupon`, since a backend that omits
   /// the nested `appliedCoupon` object but still returns a real `discount`
   /// and `couponCode` should still read as "applied" rather than silently
   /// showing no discount.
+  ///
+  /// A `couponError` means the code was refused, and the new-customer discount
+  /// is part of `discount` without being a coupon, so neither counts here.
   bool get hasCouponApplied =>
       appliedCoupon != null ||
-      ((couponCode?.isNotEmpty ?? false) && discount > 0);
+      ((couponCode?.isNotEmpty ?? false) &&
+          couponError == null &&
+          discountExcludingNewCustomer > 0);
 
   static double _d(dynamic v) => (v as num?)?.toDouble() ?? 0.0;
 
@@ -84,6 +131,14 @@ class OrderPricing {
       couponCode: (json['couponCode'] ?? appliedCoupon?['code'])?.toString(),
       appliedCoupon: appliedCoupon,
       roadDistanceKm: (json['roadDistanceKm'] as num?)?.toDouble(),
+      originalDeliveryFee: _d(json['originalDeliveryFee']),
+      deliveryFeeWaived: _d(json['deliveryFeeWaived']),
+      freeDeliveryWaived: _d(json['freeDeliveryWaived']),
+      freeDeliveryOver: (json['freeDeliveryOver'] as num?)?.toDouble(),
+      newCustomerDiscount: _d(json['newCustomerDiscount']),
+      couponError: (json['couponError'] as String?)?.trim().isNotEmpty == true
+          ? (json['couponError'] as String).trim()
+          : null,
       raw: json,
     );
   }
@@ -122,11 +177,23 @@ class OrderCalculation {
   final List<PriceChange> priceChanges;
   final OrderPricing pricing;
 
+  /// Which methods the order's zone accepts; null from an older backend.
+  final ZonePaymentOptions? paymentOptions;
+
   const OrderCalculation({
     required this.items,
     required this.priceChanges,
     required this.pricing,
+    this.paymentOptions,
   });
+
+  OrderCalculation withPaymentOptions(ZonePaymentOptions options) =>
+      OrderCalculation(
+        items: items,
+        priceChanges: priceChanges,
+        pricing: pricing,
+        paymentOptions: options,
+      );
 
   bool get hasPriceChanges => priceChanges.isNotEmpty;
 
@@ -143,6 +210,11 @@ class OrderCalculation {
       pricing: OrderPricing.fromApi(
         ((json['pricing'] as Map?) ?? const {}).cast<String, dynamic>(),
       ),
+      paymentOptions: json['paymentOptions'] is Map
+          ? ZonePaymentOptions.fromApi(
+              (json['paymentOptions'] as Map).cast<String, dynamic>(),
+            )
+          : null,
     );
   }
 }

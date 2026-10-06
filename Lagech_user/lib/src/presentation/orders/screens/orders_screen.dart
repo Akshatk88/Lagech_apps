@@ -692,6 +692,24 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         ),
       );
     }
+    // Offline payment waiting for the admin: not confirmed yet.
+    if (order.isOfflinePaymentPending) {
+      return Container(
+        padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 3.h),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF7E6),
+          borderRadius: BorderRadius.circular(20.r),
+        ),
+        child: Text(
+          'Payment under verification',
+          style: TextStyle(
+            color: const Color(0xFFB45309),
+            fontSize: 11.sp,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      );
+    }
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 3.h),
       decoration: BoxDecoration(

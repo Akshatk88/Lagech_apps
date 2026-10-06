@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../data/models/campaign_model.dart';
 import '../../../data/models/promo_banner_model.dart';
 import '../../../di/catalog_providers.dart';
+import '../../../di/location_providers.dart';
+import 'zone_viewmodel.dart';
 
 /// Hero banner image URLs from `GET /food/hero-banners/public`.
 ///
@@ -23,7 +25,15 @@ final heroBannersProvider = FutureProvider<List<String>>((ref) async {
 /// of the home screen rather than an error state in the middle of it.
 final promoBannersProvider = FutureProvider<List<PromoBannerModel>>((ref) async {
   try {
-    return await ref.watch(catalogRemoteDataSourceProvider).getPromoBanners();
+    // Scoped to where the customer is, like the restaurant list: the admin
+    // can target a banner at one zone. Re-fetched when the location changes.
+    final zoneId = ref.watch(currentZoneIdProvider);
+    final here = await ref.watch(userLatLngProvider.future);
+    return await ref.watch(catalogRemoteDataSourceProvider).getPromoBanners(
+          zoneId: zoneId,
+          lat: here?.lat,
+          lng: here?.lng,
+        );
   } catch (_) {
     return const [];
   }

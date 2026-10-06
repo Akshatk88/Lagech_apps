@@ -125,4 +125,9 @@ class ApiPaths {
   static const String featureSettings = '/food/admin/feature-settings/public';
   static const String feeSettings = '/food/admin/fee-settings/public';
   static String cmsPage(String key) => '/food/pages/$key';
+
+  /// Business Settings the app acts on (payment switches, maintenance, ...).
+  static const String publicBusinessSettings = '/food/public/business-settings';
+  static const String offlinePaymentMethods = '/food/public/offline-payment-methods';
+  static const String zonePaymentOptions = '/food/zones/payment-options';
 }

@@ -21,11 +21,26 @@ class PriceDetailsCard extends StatelessWidget {
     // walletUsed is deliberately excluded: paying from the wallet is a payment
     // METHOD, not a reduction in what the order cost. Counting it here showed it as
     // "Discount Applied" and meant the itemised rows no longer summed to the total.
-    final totalDiscounts = order.couponDiscount + order.rewardDiscount;
+    // The new-customer discount is part of the order's `discount`; it gets its
+    // own row so the itemised rows still add up to the total.
+    final newCustomerDiscount = order.newCustomerDiscount;
+    final totalDiscounts =
+        (order.couponDiscount - newCustomerDiscount).clamp(0, double.infinity) +
+            order.rewardDiscount;
 
-    final paymentMethodText = order.paymentMethod.isNotEmpty
-        ? 'Paid Via ${order.paymentMethod.toUpperCase()}'
-        : 'Paid Via Online';
+    // Struck-through only when the order records both a waiver and the fee
+    // it replaced — never a figure the order does not carry.
+    final waivedFee = order.deliveryCharge <= 0 &&
+            order.totalDeliveryWaived > 0 &&
+            order.originalDeliveryFee > 0
+        ? '₹${order.originalDeliveryFee.toStringAsFixed(0)}'
+        : '';
+
+    final paymentMethodText = order.isOfflinePaymentPending
+        ? 'Payment under verification'
+        : order.paymentMethod.isNotEmpty
+            ? 'Paid Via ${order.paymentMethod.toUpperCase()}'
+            : 'Paid Via Online';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -139,11 +154,14 @@ class PriceDetailsCard extends StatelessWidget {
               if (totalDiscounts > 0)
                 _buildBillRow('Discount Applied', '-₹${totalDiscounts.toStringAsFixed(0)}', greenColor, greenColor),
 
+              if (newCustomerDiscount > 0)
+                _buildBillRow('New customer discount', '-₹${newCustomerDiscount.toStringAsFixed(0)}', greenColor, greenColor),
+
               // Delivery Fee
               if (order.deliveryCharge > 0)
                 _buildBillRow('Delivery Fee', '₹${order.deliveryCharge.toStringAsFixed(0)}', primaryTextColor, secondaryTextColor)
               else
-                _buildBillRowWithBadge('Delivery Fee', '', 'FREE', secondaryTextColor, greenColor),
+                _buildBillRowWithBadge('Delivery Fee', waivedFee, 'FREE', secondaryTextColor, greenColor),
 
               // GST & Taxes
               if (order.itemTax > 0)

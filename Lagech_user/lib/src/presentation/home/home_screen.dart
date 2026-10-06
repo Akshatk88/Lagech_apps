@@ -1,6 +1,7 @@
 import '../common_widgets/app_refresh_indicator.dart';
 import '../common_widgets/skeleton_loading.dart';
 import '../common_widgets/exit_confirmation_dialog.dart';
+import '../common_widgets/maintenance_banner.dart';
 import '../common_widgets/smart_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -299,6 +300,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             SizedBox(height: 10.h),
+
+                            // Admin's maintenance message: browsing still works,
+                            // checkout is closed (see CartScreen).
+                            MaintenanceBanner(
+                              margin: EdgeInsets.fromLTRB(16.w, 0, 16.w, 10.h),
+                            ),
 
                             // Active category pill if category selected
                             if (_selectedCategory != 'All') ...[

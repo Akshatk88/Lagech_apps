@@ -19,6 +19,7 @@ import 'platform/notifications/push_service.dart';
 import 'presentation/auth/viewmodels/auth_viewmodel.dart';
 import 'presentation/navigation/home_first_back_button_dispatcher.dart';
 import 'di/location_providers.dart';
+import 'di/settings_providers.dart';
 
 class FoodUserApplication extends ConsumerStatefulWidget {
   const FoodUserApplication({super.key});
@@ -125,6 +126,11 @@ class _FoodUserApplicationState extends ConsumerState<FoodUserApplication> {
     // without warming it here the first restaurant fetch goes out with no
     // lat/lng and the backend returns no distanceInKm.
     ref.watch(userLatLngProvider);
+
+    // Load the admin's Business Settings (payment switches, maintenance,
+    // scheduled orders, wallet top-ups, veg toggle) at launch: the cached copy
+    // paints first, then the live one. A failure keeps today's behaviour.
+    ref.listen(businessSettingsProvider, (_, _) {});
 
     return ScreenUtilInit(
       designSize: const Size(375, 812),

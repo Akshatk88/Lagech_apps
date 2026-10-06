@@ -84,13 +84,22 @@ class CatalogRemoteDataSource {
   /// Banners without a usable image are dropped here rather than in the widget:
   /// an empty slide is worse than a shorter carousel, and the page-count dots
   /// would otherwise be wrong.
-  Future<List<PromoBannerModel>> getPromoBanners({String? zoneId}) async {
+  ///
+  /// Filtered to the customer's zone like the other listings (zoneId, else
+  /// lat/lng). A point outside every zone answers `outOfService: true` with no
+  /// banners, which this returns as an empty list.
+  Future<List<PromoBannerModel>> getPromoBanners({
+    String? zoneId,
+    double? lat,
+    double? lng,
+  }) async {
     final data = await _client.get<Map<String, dynamic>>(
       ApiPaths.heroBanners,
-      query: {'zoneId': zoneId},
+      query: {'zoneId': zoneId, 'lat': lat, 'lng': lng},
       auth: false,
       cacheTtl: _cacheTtl,
     );
+    if (data['outOfService'] == true) return const [];
     return ((data['banners'] as List?) ?? const [])
         .whereType<Map>()
         .map((b) => PromoBannerModel.fromApi(b.cast<String, dynamic>()))

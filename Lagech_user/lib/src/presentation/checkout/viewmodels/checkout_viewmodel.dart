@@ -9,6 +9,7 @@ import '../../../di/catalog_providers.dart';
 import '../../../di/location_providers.dart';
 import '../../../di/order_providers.dart';
 import '../../../di/payment_providers.dart';
+import '../../../di/settings_providers.dart';
 import '../../../platform/payment/payment_gateway.dart';
 import '../../auth/viewmodels/auth_viewmodel.dart';
 import '../../cart/viewmodels/cart_viewmodel.dart';
@@ -159,8 +160,20 @@ class CheckoutViewModel extends Notifier<CheckoutState> {
             couponCode: state.couponCode,
             deliveryMode: state.deliveryMode,
           );
+      var priced = calculation;
+      // An older backend does not send paymentOptions with the quote; ask the
+      // zone directly. Failing that, nothing is hidden (today's behaviour) and
+      // the server's own 400 explains a refused method.
+      if (priced.paymentOptions == null) {
+        try {
+          final options = await ref
+              .read(settingsRemoteDataSourceProvider)
+              .getZonePaymentOptions(restaurantId: restaurantId);
+          priced = priced.withPaymentOptions(options);
+        } catch (_) {}
+      }
       state = state.copyWith(
-        calculation: calculation,
+        calculation: priced,
         isCalculating: false,
         priceChangesAccepted: false,
       );
@@ -188,6 +201,7 @@ class CheckoutViewModel extends Notifier<CheckoutState> {
     String? note,
     String? deliveryInstructions,
     bool sendCutlery = false,
+    Map<String, dynamic>? offlinePayment,
   }) async {
     final cart = ref.read(cartViewModelProvider);
     final pricing = state.pricing;
@@ -232,9 +246,17 @@ class CheckoutViewModel extends Notifier<CheckoutState> {
             deliveryInstructions: deliveryInstructions,
             sendCutlery: sendCutlery,
             zoneId: ref.read(currentZoneIdProvider),
+            offlinePayment: offlinePayment,
           );
       return (result: result, error: null);
     } on Failure catch (f) {
+      // A refusal can come from a switch the admin just flipped (maintenance,
+      // a payment method or a zone's COD/online switch): reload the settings
+      // and the quote so the screen catches up with what the server said.
+      if (f is ValidationFailure) {
+        unawaited(ref.read(businessSettingsProvider.notifier).refresh());
+        unawaited(recalculate());
+      }
       return (result: null, error: f.message);
     } catch (_) {
       return (result: null, error: 'Could not place your order. Please try again.');
@@ -257,6 +279,7 @@ class CheckoutViewModel extends Notifier<CheckoutState> {
     String? note,
     String? deliveryInstructions,
     bool sendCutlery = false,
+    Map<String, dynamic>? offlinePayment,
   }) async {
     final user = ref.read(authViewModelProvider).value;
     final customerName = user?.displayName ?? 'Customer';
@@ -271,6 +294,7 @@ class CheckoutViewModel extends Notifier<CheckoutState> {
       note: note,
       deliveryInstructions: deliveryInstructions,
       sendCutlery: sendCutlery,
+      offlinePayment: offlinePayment,
     );
 
     if (placed.error != null) {
@@ -302,8 +326,12 @@ class CheckoutViewModel extends Notifier<CheckoutState> {
       } catch (_) {}
     }
 
-    // For non-gateway payment methods (Cash on Delivery, LAGECH Wallet & Pay Later)
-    if (paymentMethod == 'cash' || paymentMethod == 'wallet' || paymentMethod == 'pay_later') {
+    // For non-gateway payment methods (Cash on Delivery, LAGECH Wallet, Pay
+    // Later and offline payment — the last waits for the admin to verify it)
+    if (paymentMethod == 'cash' ||
+        paymentMethod == 'wallet' ||
+        paymentMethod == 'pay_later' ||
+        paymentMethod == 'offline') {
       ref.read(cartViewModelProvider.notifier).clearCart();
       if (createdOrderModel != null && createdOrderModel.id.isNotEmpty) {
         ref.read(activeOrderViewModelProvider.notifier).setActiveOrderDirectly(createdOrderModel);
@@ -325,6 +353,7 @@ class CheckoutViewModel extends Notifier<CheckoutState> {
         message: switch (paymentMethod) {
           'cash' => 'Order placed with Cash on Delivery 🎉',
           'pay_later' => 'Order placed on Pay Later 🎉',
+          'offline' => 'Order placed. Your payment is being verified.',
           _ => 'Order paid successfully using LAGECH Wallet 🎉',
         },
         orderId: orderId,

@@ -15,6 +15,9 @@ import '../address/viewmodels/address_viewmodel.dart';
 import '../../data/models/address_model.dart';
 import '../../di/catalog_providers.dart';
 import '../../di/location_providers.dart';
+import '../../di/settings_providers.dart';
+import '../../data/models/business_settings_model.dart';
+import '../common_widgets/maintenance_banner.dart';
 import 'viewmodels/cart_viewmodel.dart';
 import '../checkout/viewmodels/checkout_viewmodel.dart';
 import '../wallet/viewmodels/wallet_viewmodel.dart';
@@ -23,6 +26,7 @@ import '../restaurant/widgets/food_detail_sheet.dart';
 import 'widgets/cart_recommendations_section.dart';
 import 'widgets/coupon_sheet.dart';
 import 'widgets/empty_cart_view.dart';
+import 'widgets/offline_payment_sheet.dart';
 import '../../../generated/l10n/app_localizations.dart';
 
 class CartScreen extends ConsumerStatefulWidget {
@@ -51,6 +55,9 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     super.initState();
     // Freshly check restaurant availability when opening the cart screen
     Future.microtask(() {
+      // Maintenance and the payment switches can change at any time; take a
+      // fresh copy before the customer reaches the pay button.
+      ref.read(businessSettingsProvider.notifier).refresh();
       final items = ref.read(cartViewModelProvider).items;
       if (items.isNotEmpty) {
         final rid = items.first.food.restaurantId;
@@ -71,6 +78,71 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       if (a.isDefault) return a;
     }
     return addresses.first;
+  }
+
+  /// Order in which a replacement method is picked when the selected one stops
+  /// being available.
+  static const _fallbackMethodOrder = ['razorpay', 'cash', 'wallet', 'offline'];
+
+  /// Whether [method] may be used for this order: switched on in Business
+  /// Settings AND accepted by the order's zone (`paymentOptions` from the
+  /// quote). Unknown settings/zone count as "allowed" — the server still
+  /// refuses with its own message, which is shown as-is.
+  bool _isPaymentMethodAvailable(
+    String method, {
+    required BusinessSettings settings,
+    required ZonePaymentOptions? zone,
+    required bool isCodAllowed,
+    required bool hasOfflineMethods,
+  }) {
+    switch (method) {
+      case 'razorpay':
+        return settings.digitalEnabled && (zone?.digitalPayment ?? true);
+      case 'cash':
+        return isCodAllowed &&
+            settings.codEnabled &&
+            (zone?.cashOnDelivery ?? true);
+      case 'wallet':
+        return settings.walletPaymentEnabled && (zone?.wallet ?? true);
+      case 'offline':
+        return settings.offlineEnabled && hasOfflineMethods;
+      default:
+        // pay_later has its own eligibility check in the payment sheet.
+        return true;
+    }
+  }
+
+  String _paymentMethodName(String method) => switch (method) {
+        'cash' => 'Cash on Delivery',
+        'wallet' => 'LAGECH Wallet',
+        'offline' => 'Offline payment',
+        'pay_later' => 'Pay Later',
+        _ => 'Online payment',
+      };
+
+  /// A switch is already scheduled for after this frame (build stays pure).
+  bool _methodSwitchScheduled = false;
+
+  /// If the selected method has become unavailable, switches to the first
+  /// allowed one and tells the customer. Does nothing when no method is
+  /// allowed at all — placing the order then surfaces the server's message.
+  void _ensureSelectedMethodAvailable(bool Function(String) isAvailable) {
+    if (_methodSwitchScheduled || isAvailable(_selectedPaymentMethod)) return;
+    final replacement = _fallbackMethodOrder.where(isAvailable).firstOrNull;
+    if (replacement == null || replacement == _selectedPaymentMethod) return;
+    _methodSwitchScheduled = true;
+    final previous = _selectedPaymentMethod;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _methodSwitchScheduled = false;
+      if (!mounted || _selectedPaymentMethod != previous) return;
+      setState(() => _selectedPaymentMethod = replacement);
+      AppSnackbar.info(
+        context,
+        '${_paymentMethodName(previous)} is not available for this order. '
+        'Switched to ${_paymentMethodName(replacement)}.',
+        duration: const Duration(seconds: 4),
+      );
+    });
   }
 
   String get _customerName =>
@@ -97,6 +169,16 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       if (!isLoggedIn) {
         context.push(
           '${RouteNames.login}?from=${Uri.encodeComponent(RouteNames.cart)}',
+        );
+        return;
+      }
+
+      final settings = ref.read(businessSettingsProvider);
+      if (settings.maintenanceMode) {
+        AppSnackbar.warning(
+          context,
+          settings.maintenanceText,
+          duration: const Duration(seconds: 4),
         );
         return;
       }
@@ -196,19 +278,41 @@ class _CartScreenState extends ConsumerState<CartScreen> {
               '₹${walletBalance.toStringAsFixed(2)}',
               '₹${totalToPay.toStringAsFixed(2)}',
             ),
-            action: SnackBarAction(
-              label: AppLocalizations.of(context)!.addMoney,
-              textColor: Colors.white,
-              onPressed: () {
-                context.push(RouteNames.wallet);
-              },
-            ),
+            // Offer "Add money" only while the admin allows wallet top-ups.
+            action: ref.read(businessSettingsProvider).addFund
+                ? SnackBarAction(
+                    label: AppLocalizations.of(context)!.addMoney,
+                    textColor: Colors.white,
+                    onPressed: () {
+                      context.push(RouteNames.wallet);
+                    },
+                  )
+                : null,
           );
           return;
         }
       }
 
       if (cartItems.isEmpty) return;
+
+      Map<String, dynamic>? offlinePayment;
+      if (_selectedPaymentMethod == 'offline') {
+        final methods = await ref.read(offlinePaymentMethodsProvider.future);
+        if (!mounted) return;
+        if (methods.isEmpty) {
+          AppSnackbar.error(
+            context,
+            'Offline payment is not available right now. Please choose another payment method.',
+          );
+          return;
+        }
+        offlinePayment = await OfflinePaymentSheet.show(
+          context,
+          methods: methods,
+          amount: pricing.total,
+        );
+        if (offlinePayment == null || !mounted) return;
+      }
 
       final result = await ref
           .read(checkoutViewModelProvider.notifier)
@@ -221,6 +325,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
             // history. The payload, the API and OrderModel all already carried
             // `note`; only this hand-off was missing.
             note: _cookingRequest,
+            offlinePayment: offlinePayment,
           );
 
       if (!mounted) return;
@@ -236,7 +341,11 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         return;
       }
 
-      AppSnackbar.error(context, result.message);
+      AppSnackbar.error(
+        context,
+        result.message,
+        duration: const Duration(seconds: 4),
+      );
     } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
@@ -387,6 +496,20 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     // Fees and the payable total come from POST /food/orders/calculate.
     final checkoutState = ref.watch(checkoutViewModelProvider);
     final pricing = checkoutState.pricing;
+    final settings = ref.watch(businessSettingsProvider);
+    final hasOfflineMethods =
+        (ref.watch(offlinePaymentMethodsProvider).asData?.value ?? const [])
+            .isNotEmpty;
+    final isCodAllowed =
+        ref.watch(authViewModelProvider).value?.isCodAllowed ?? true;
+    bool isAvailable(String method) => _isPaymentMethodAvailable(
+          method,
+          settings: settings,
+          zone: checkoutState.calculation?.paymentOptions,
+          isCodAllowed: isCodAllowed,
+          hasOfflineMethods: hasOfflineMethods,
+        );
+    _ensureSelectedMethodAvailable(isAvailable);
     final totalDeliveryFee = pricing?.deliveryFee ?? 0.0;
     final platformFee = pricing?.platformFee ?? 0.0;
     final itemTotal = pricing?.subtotal ?? cartState.subtotal;
@@ -418,6 +541,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
         children: [
+          const MaintenanceBanner(margin: EdgeInsets.only(bottom: 12)),
+
           // Closed restaurant alert banner
           if (cartRestaurant != null && !cartRestaurant.isOpen)
             Container(
@@ -541,6 +666,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         isDark,
         textColor,
         cartRestaurant: cartRestaurant,
+        isAvailable: isAvailable,
+        maintenance: settings.maintenanceMode ? settings.maintenanceText : null,
       ),
     );
   }
@@ -1089,11 +1216,22 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                 const SizedBox(height: 2),
                 if (applied)
                   Text(
-                    'You saved ₹${pricing!.discount.toStringAsFixed(0)}',
+                    'You saved ₹${pricing!.couponSavings.toStringAsFixed(0)}',
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                       color: Color(0xFF008A45),
+                    ),
+                  )
+                else if ((couponCode?.isNotEmpty ?? false) &&
+                    pricing?.couponError != null)
+                  // Why the code did not apply, as the server worded it.
+                  Text(
+                    '$couponCode: ${pricing!.couponError}',
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFFB91C1C),
                     ),
                   )
                 else
@@ -1213,8 +1351,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text(
+                    children: [
+                      const Text(
                         'Delivery',
                         style: TextStyle(
                           fontSize: 13.5,
@@ -1222,14 +1360,18 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                           color: Color(0xFF1E1E1E),
                         ),
                       ),
-                      SizedBox(height: 2),
-                      Text(
-                        'Want this later? Schedule it',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          color: Color(0xFF6B7280),
+                      // Hidden when the admin has switched scheduled orders off.
+                      if (ref.watch(businessSettingsProvider
+                          .select((s) => s.scheduledOrder))) ...const [
+                        SizedBox(height: 2),
+                        Text(
+                          'Want this later? Schedule it',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: Color(0xFF6B7280),
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
@@ -1453,7 +1595,28 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                         : '₹${totalDeliveryFee.toStringAsFixed(0)}',
                     secondaryColor,
                     totalDeliveryFee == 0 ? const Color(0xFF059669) : textColor,
+                    // The fee the server waived (coupon or "free delivery
+                    // over"), struck through — only when it sent that figure.
+                    originalAmount: (pricing?.deliveryWaived ?? false) &&
+                            (pricing?.originalDeliveryFee ?? 0) > 0
+                        ? '₹${pricing!.originalDeliveryFee.toStringAsFixed(0)}'
+                        : null,
                   ),
+                  if ((pricing?.freeDeliveryWaived ?? 0) > 0 &&
+                      (pricing?.freeDeliveryOver ?? 0) > 0) ...[
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Free delivery on orders over ₹${pricing!.freeDeliveryOver!.toStringAsFixed(0)}',
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF059669),
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 10),
                   _buildBillRow(
                     AppLocalizations.of(context)!.platformFee,
@@ -1479,13 +1642,24 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                       textColor,
                     ),
                   ],
-                  if (savings > 0) ...[
+                  // `discount` includes the new-customer discount; it gets its
+                  // own row so the rows still add up to the server's total.
+                  if ((pricing?.discountExcludingNewCustomer ?? savings) > 0) ...[
                     const SizedBox(height: 10),
                     _buildBillRow(
                       couponApplied
                           ? AppLocalizations.of(context)!.couponDiscount
                           : AppLocalizations.of(context)!.discount,
-                      '−₹${savings.toStringAsFixed(0)}',
+                      '−₹${(pricing?.discountExcludingNewCustomer ?? savings).toStringAsFixed(0)}',
+                      const Color(0xFF059669),
+                      const Color(0xFF059669),
+                    ),
+                  ],
+                  if ((pricing?.newCustomerDiscount ?? 0) > 0) ...[
+                    const SizedBox(height: 10),
+                    _buildBillRow(
+                      'New customer discount',
+                      '−₹${pricing!.newCustomerDiscount.toStringAsFixed(0)}',
                       const Color(0xFF059669),
                       const Color(0xFF059669),
                     ),
@@ -2027,6 +2201,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         return 'PLACE COD ORDER$amount';
       case 'wallet':
         return 'PAY WITH WALLET$amount';
+      case 'offline':
+        return 'PAY OFFLINE$amount';
       case 'razorpay':
       default:
         return 'PROCEED TO PAYMENT$amount';
@@ -2087,6 +2263,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     double toPay,
     double walletBalance,
     bool isDark,
+    bool Function(String method) isAvailable,
   ) {
     // walletViewModelProvider only fetches once, on first creation. If that
     // fetch lost a race with auth (e.g. it ran while a session had just
@@ -2105,12 +2282,6 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (modalCtx, setModalState) {
-            final currentUser = ref.read(authViewModelProvider).value;
-            final isCodAllowed = currentUser?.isCodAllowed ?? true;
-            if (!isCodAllowed && _selectedPaymentMethod == 'cash') {
-              _selectedPaymentMethod = 'razorpay';
-            }
-
             final modalTextColor = isDark
                 ? AppColors.textPrimaryDark
                 : AppColors.textPrimaryLight;
@@ -2162,7 +2333,10 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                       ),
                       const SizedBox(height: 20),
 
-                      // Option 1: Online Payment (Razorpay / UPI / Cards)
+                      // Option 1: Online Payment (Razorpay / UPI / Cards) —
+                      // shown only while Business Settings and the order's
+                      // zone both allow it.
+                      if (isAvailable('razorpay'))
                       _paymentOptionTile(
                         ctx: modalCtx,
                         methodKey: 'razorpay',
@@ -2176,8 +2350,10 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                         modalSecondaryColor: modalSecondaryColor,
                       ),
 
-                      // Option 2: Cash on Delivery (COD) — only shown if admin has allowed COD for this user
-                      if (isCodAllowed) ...[
+                      // Option 2: Cash on Delivery (COD) — only shown if admin has allowed COD for this user,
+                      // COD is on in Business Settings and the order's zone accepts it
+                      if (isAvailable('cash')) ...[
+                        const SizedBox(height: 10),
                         _paymentOptionTile(
                           ctx: modalCtx,
                           methodKey: 'cash',
@@ -2199,6 +2375,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                       // rather than the `walletBalance` captured when the sheet
                       // was opened, so the refresh triggered above actually
                       // reaches this tile once it resolves.
+                      if (isAvailable('wallet'))
                       Consumer(
                         builder: (context, consumerRef, _) {
                           final liveBalance = consumerRef
@@ -2335,6 +2512,25 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                         },
                       ),
 
+                      // Option 5: Offline payment (bank transfer, UPI, ...) —
+                      // only when switched on and the admin has set up methods.
+                      // The method and payment details are collected when the
+                      // order is placed.
+                      if (isAvailable('offline')) ...[
+                        const SizedBox(height: 10),
+                        _paymentOptionTile(
+                          ctx: modalCtx,
+                          methodKey: 'offline',
+                          icon: Icons.account_balance_outlined,
+                          title: 'Offline payment',
+                          subtitle:
+                              'Bank transfer / UPI — confirmed once we verify your payment',
+                          isDark: isDark,
+                          modalTextColor: modalTextColor,
+                          modalSecondaryColor: modalSecondaryColor,
+                        ),
+                      ],
+
                       const SizedBox(height: 16),
                     ],
                   ),
@@ -2468,14 +2664,11 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     bool isDark,
     Color textColor, {
     RestaurantModel? cartRestaurant,
+    required bool Function(String method) isAvailable,
+    String? maintenance,
   }) {
     final walletState = ref.watch(walletViewModelProvider);
     final walletBalance = walletState.wallet.balance;
-    final currentUser = ref.watch(authViewModelProvider).value;
-    final isCodAllowed = currentUser?.isCodAllowed ?? true;
-    if (!isCodAllowed && _selectedPaymentMethod == 'cash') {
-      _selectedPaymentMethod = 'razorpay';
-    }
 
     IconData paymentIcon;
     String paymentDisplay;
@@ -2488,6 +2681,10 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       case 'wallet':
         paymentIcon = Icons.account_balance_wallet_outlined;
         paymentDisplay = 'LAGECH Wallet (₹${walletBalance.toStringAsFixed(0)})';
+        break;
+      case 'offline':
+        paymentIcon = Icons.account_balance_outlined;
+        paymentDisplay = 'Offline payment (Bank transfer / UPI)';
         break;
       case 'razorpay':
       default:
@@ -2532,6 +2729,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                   toPay ?? ref.read(cartViewModelProvider).subtotal,
                   walletBalance,
                   isDark,
+                  isAvailable,
                 );
               },
               borderRadius: BorderRadius.circular(16),
@@ -2599,6 +2797,39 @@ class _CartScreenState extends ConsumerState<CartScreen> {
             // Proceed to Payment Button
             Builder(builder: (context) {
               final isClosed = cartRestaurant != null && !cartRestaurant.isOpen;
+
+              // Maintenance mode: browsing works, placing orders does not.
+              if (maintenance != null && !isClosed) {
+                return SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.grey.shade500,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28),
+                      ),
+                    ),
+                    onPressed: () => AppSnackbar.warning(
+                      context,
+                      maintenance,
+                      duration: const Duration(seconds: 4),
+                    ),
+                    icon: const Icon(Icons.construction_rounded, size: 20),
+                    label: const Text(
+                      'Ordering Paused',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                );
+              }
 
               return SizedBox(
                 width: double.infinity,

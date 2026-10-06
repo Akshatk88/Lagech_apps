@@ -14,6 +14,7 @@ import '../wallet/viewmodels/wallet_viewmodel.dart';
 import '../../core/utils/localizations.dart';
 import '../branding/theme_provider.dart';
 import '../home/viewmodels/veg_filter_provider.dart';
+import '../../di/settings_providers.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -148,7 +149,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             isDark: isDark,
           ),
 
-          // Tile 3: Veg Mode + ON/OFF
+          // Tile 3: Veg Mode + ON/OFF — only while the admin offers the toggle
+          if (ref.watch(businessSettingsProvider.select((s) => s.vegNonVegToggle)))
           _buildNavTile(
             icon: Icons.eco_outlined,
             iconColor: const Color(0xFF008A45),

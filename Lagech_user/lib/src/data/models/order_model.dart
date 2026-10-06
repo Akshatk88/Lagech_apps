@@ -260,6 +260,25 @@ class OrderModel {
   final double driverTip;
   final String currency;
 
+  /// Delivery fee before any waiver; 0 on orders that predate the field.
+  final double originalDeliveryFee;
+
+  /// Delivery fee + GST waived by a free-delivery coupon.
+  final double deliveryFeeWaived;
+
+  /// Delivery fee + GST waived by "free delivery over ₹X".
+  final double freeDeliveryWaived;
+
+  /// The part of [couponDiscount] that is the new-customer discount.
+  final double newCustomerDiscount;
+
+  /// Offline payment review: `pending`, `verified` or `rejected`; empty when
+  /// the order was not paid offline.
+  final String offlinePaymentStatus;
+
+  /// The admin's note on an offline payment (the reason when rejected).
+  final String offlinePaymentAdminNote;
+
   final String paymentMethod;
   final String paymentStatus;
   final String refundStatus;
@@ -338,6 +357,12 @@ class OrderModel {
     this.rewardDiscount = 0,
     this.driverTip = 0,
     this.currency = 'INR',
+    this.originalDeliveryFee = 0,
+    this.deliveryFeeWaived = 0,
+    this.freeDeliveryWaived = 0,
+    this.newCustomerDiscount = 0,
+    this.offlinePaymentStatus = '',
+    this.offlinePaymentAdminNote = '',
     this.paymentMethod = '',
     this.paymentStatus = '',
     this.refundStatus = 'none',
@@ -409,6 +434,16 @@ class OrderModel {
   /// the order as rated — `PATCH .../ratings` rejects a second submission.
   bool get hasRated => foodRating > 0;
 
+  /// An offline payment the admin has not verified yet: the restaurant does not
+  /// see the order until then.
+  bool get isOfflinePaymentPending =>
+      paymentMethod.toLowerCase() == 'offline' &&
+      orderStatus.toLowerCase() == 'pending_payment' &&
+      offlinePaymentStatus.toLowerCase() != 'rejected';
+
+  /// Any delivery fee taken off, by a coupon or by "free delivery over".
+  double get totalDeliveryWaived => deliveryFeeWaived + freeDeliveryWaived;
+
   /// The bill's "Item Total" row: the backend-computed subtotal, falling back
   /// to summing item lines only for the rare order predating that field.
   /// Single source of truth — every bill/summary screen reads this instead of
@@ -476,6 +511,7 @@ class OrderModel {
   /// Human-readable stage label. Kept here so list, detail and tracking all
   /// render the same wording.
   String get statusLabel {
+    if (isOfflinePaymentPending) return 'Payment under verification';
     switch (orderStatus.toLowerCase()) {
       case 'pending_payment':
         return 'Awaiting payment';
@@ -764,6 +800,14 @@ class OrderModel {
         pricing['tip'] ?? pricing['driverTip'] ?? pricing['deliveryTip'],
       ),
       currency: (pricing['currency'] ?? json['currency'] ?? 'INR').toString(),
+      originalDeliveryFee: _money(pricing['originalDeliveryFee']),
+      deliveryFeeWaived: _money(pricing['deliveryFeeWaived']),
+      freeDeliveryWaived: _money(pricing['freeDeliveryWaived']),
+      newCustomerDiscount: _money(pricing['newCustomerDiscount']),
+      offlinePaymentStatus:
+          ((json['offlinePayment'] as Map?)?['status'] ?? '').toString(),
+      offlinePaymentAdminNote:
+          ((json['offlinePayment'] as Map?)?['adminNote'] ?? '').toString(),
       paymentMethod: (payment['method'] ?? payment['paymentMethod'] ?? json['paymentMethod'] ?? json['payment_method'] ?? '').toString(),
       paymentStatus: (payment['status'] ?? payment['paymentStatus'] ?? json['paymentStatus'] ?? json['payment_status'] ?? '').toString(),
       refundStatus: ((payment['refund'] as Map?)?['status'] ?? 'none').toString(),

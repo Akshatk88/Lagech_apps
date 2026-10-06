@@ -64,9 +64,25 @@ class _HomeHeaderBannerState extends ConsumerState<HomeHeaderBanner> {
   }
 
   Future<void> _openBanner(PromoBannerModel banner) async {
-    final destination = banner.destination;
     Haptics.light();
 
+    // Banners with a type open exactly what the admin linked; a banner whose
+    // target is missing (deleted dish, no link) is a plain image.
+    if (banner.hasTypedTarget) {
+      final target = banner.typedDestination;
+      if (target == null || !mounted) return;
+      if (target.startsWith('/')) {
+        context.push(target);
+        return;
+      }
+      try {
+        await launchUrl(Uri.parse(target), mode: LaunchMode.externalApplication);
+      } catch (_) {}
+      return;
+    }
+
+    // Older backend (no bannerType): ctaLink, else the offers page, as before.
+    final destination = banner.destination;
     if (destination == null || destination.trim().isEmpty) {
       if (mounted) context.push(RouteNames.allOffers);
       return;

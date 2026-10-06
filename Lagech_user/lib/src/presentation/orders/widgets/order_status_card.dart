@@ -51,6 +51,7 @@ class OrderStatusCard extends StatelessWidget {
     if (order.refundStatus == 'refunded') return 'Refund has been processed.';
     if (order.refundStatus == 'initiated') return 'Refund has been initiated.';
     
+    if (order.isOfflinePaymentPending) return 'We are verifying your payment. The restaurant gets your order once it is confirmed.';
     if (order.isAwaitingAcceptance) return 'Waiting for restaurant to confirm.';
     if (status == 'preparing') return 'The restaurant is preparing your food.';
     if (order.isOutForDelivery) return 'Rider is on the way to your location.';

@@ -10,6 +10,7 @@ import '../../../data/models/wallet_model.dart';
 import '../../branding/app_colors.dart';
 import '../../common_widgets/app_snackbar.dart';
 import '../../navigation/route_names.dart';
+import '../../../di/settings_providers.dart';
 import '../viewmodels/wallet_state.dart';
 import '../viewmodels/wallet_viewmodel.dart';
 
@@ -301,6 +302,10 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
               ),
             ],
           ),
+          // "Add money" (and the top-up bonus offers inside its sheet) only
+          // while the admin allows adding funds; the server refuses top-ups
+          // otherwise.
+          if (ref.watch(businessSettingsProvider.select((s) => s.addFund))) ...[
           const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
@@ -329,6 +334,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
               ),
             ),
           ),
+          ],
         ],
       ),
     );

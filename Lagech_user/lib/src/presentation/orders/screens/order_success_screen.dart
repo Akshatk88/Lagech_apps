@@ -182,7 +182,9 @@ class _OrderSuccessScreenState extends ConsumerState<OrderSuccessScreen> with Ti
                             _StaggeredWidget(
                               animation: _getInterval(0.2, 0.5),
                               child: Text(
-                                order.isAwaitingAcceptance
+                                order.isOfflinePaymentPending
+                                    ? 'Payment under verification. The restaurant gets your order once it is confirmed.'
+                                    : order.isAwaitingAcceptance
                                     ? 'Waiting for restaurant confirmation...'
                                     : (order.etaLabel ?? 'Your food is being prepared'),
                                 style: TextStyle(
@@ -576,7 +578,9 @@ class _ItemsCard extends StatelessWidget {
           if (order.packingCharge > 0)
             _billRow('Packing Charges', _fmt(order.packingCharge), textColor, secondary),
           if (order.deliveryCharge > 0)
-            _billRow('Delivery Fee', _fmt(order.deliveryCharge), textColor, secondary),
+            _billRow('Delivery Fee', _fmt(order.deliveryCharge), textColor, secondary)
+          else if (order.totalDeliveryWaived > 0)
+            _billRow('Delivery Fee', 'FREE', AppColors.success, secondary),
           if (order.platformFee > 0)
             _billRow('Platform Fee', _fmt(order.platformFee), textColor, secondary),
           if (order.itemTax > 0)
@@ -595,8 +599,10 @@ class _ItemsCard extends StatelessWidget {
             ),
           if (order.rewardDiscount > 0)
             _billRow('Discount', '-${_fmt(order.rewardDiscount)}', AppColors.success, secondary),
-          if (order.couponDiscount > 0)
-            _billRow('Coupon Discount', '-${_fmt(order.couponDiscount)}', AppColors.success, secondary),
+          if (order.couponDiscount - order.newCustomerDiscount > 0)
+            _billRow('Coupon Discount', '-${_fmt(order.couponDiscount - order.newCustomerDiscount)}', AppColors.success, secondary),
+          if (order.newCustomerDiscount > 0)
+            _billRow('New customer discount', '-${_fmt(order.newCustomerDiscount)}', AppColors.success, secondary),
           if (order.walletUsed > 0)
             _billRow('Wallet Discount', '-${_fmt(order.walletUsed)}', AppColors.success, secondary),
           if (order.driverTip > 0)

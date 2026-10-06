@@ -139,6 +139,7 @@ class OrderRemoteDataSource {
     String? deliveryInstructions,
     bool sendCutlery = false,
     String? zoneId,
+    Map<String, dynamic>? offlinePayment,
   }) async {
     final payload = {
       'items': items.map(itemPayload).toList(),
@@ -154,6 +155,8 @@ class OrderRemoteDataSource {
       'deliveryInstructions': ?deliveryInstructions,
       'sendCutlery': sendCutlery,
       'zoneId': ?zoneId,
+      // `{ methodId, fields, note }` for paymentMethod "offline" only.
+      'offlinePayment': ?offlinePayment,
     };
 
     // ignore: avoid_print

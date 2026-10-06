@@ -297,6 +297,7 @@ class _TrackingHeader extends StatelessWidget {
   String get _displayStatusText {
     if (order.isDelivered) return 'Delivered';
     if (order.isCancelled) return order.statusLabel;
+    if (order.isOfflinePaymentPending) return order.statusLabel;
     final eta = order.etaLabel;
     if (eta != null && eta != 'Calculating...') {
       return '$eta • On Time';

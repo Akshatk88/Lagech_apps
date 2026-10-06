@@ -7,6 +7,7 @@ import '../../../core/utils/haptics.dart';
 import '../../branding/app_colors.dart';
 import '../../navigation/route_names.dart';
 import '../../search/widgets/voice_search_dialog.dart';
+import '../../../di/settings_providers.dart';
 import '../viewmodels/veg_filter_provider.dart';
 
 class HomeSearchBarRow extends ConsumerWidget {
@@ -16,6 +17,9 @@ class HomeSearchBarRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isVegOnly = ref.watch(vegFilterProvider);
+    final showVegToggle = ref.watch(
+      businessSettingsProvider.select((s) => s.vegNonVegToggle),
+    );
 
     return Row(
       children: [
@@ -100,9 +104,10 @@ class HomeSearchBarRow extends ConsumerWidget {
           ),
         ),
 
-        SizedBox(width: 10.w),
-
-        // Right: VEG MODE Toggle Pill Button
+        // Right: VEG MODE Toggle Pill Button — hidden when the admin has
+        // switched the veg / non-veg toggle off.
+        if (showVegToggle) SizedBox(width: 10.w),
+        if (showVegToggle)
         InkWell(
           onTap: () {
             Haptics.light();

@@ -70,11 +70,17 @@ class _CouponSheetBodyState extends ConsumerState<_CouponSheetBody> {
       AppSnackbar.success(
         context,
         'Coupon ${pricing!.couponCode ?? code.trim().toUpperCase()} applied! '
-        'You saved ₹${pricing.discount.toStringAsFixed(0)}',
+        'You saved ₹${pricing.couponSavings.toStringAsFixed(0)}',
       );
       Navigator.of(context).pop();
     } else {
-      AppSnackbar.error(context, 'This coupon is not applicable to your order.');
+      // The server says why ("This coupon expired on 9 Oct 2026", "Add items
+      // worth ₹100 more ..."); the generic line is for an older backend.
+      AppSnackbar.error(
+        context,
+        pricing?.couponError ?? 'This coupon is not applicable to your order.',
+        duration: const Duration(seconds: 4),
+      );
     }
   }
 
@@ -156,7 +162,7 @@ class _CouponSheetBodyState extends ConsumerState<_CouponSheetBody> {
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
-                                  '$appliedCode applied · You saved ₹${pricing!.discount.toStringAsFixed(0)}',
+                                  '$appliedCode applied · You saved ₹${pricing!.couponSavings.toStringAsFixed(0)}',
                                   style: const TextStyle(
                                     color: AppColors.success,
                                     fontWeight: FontWeight.w600,

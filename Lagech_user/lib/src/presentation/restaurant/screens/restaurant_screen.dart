@@ -25,6 +25,7 @@ import '../widgets/food_detail_sheet.dart';
 import 'restaurant_reviews_screen.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../di/location_providers.dart';
+import '../../../di/settings_providers.dart';
 
 class RestaurantScreen extends ConsumerStatefulWidget {
   final RestaurantModel? restaurant;
@@ -991,19 +992,24 @@ class _RestaurantScreenState extends ConsumerState<RestaurantScreen> {
               ),
               SizedBox(width: 3.w),
               Text(
-                restaurant.deliveryTime.isNotEmpty ? '${restaurant.deliveryTime} · Schedule for later' : 'Schedule for later',
+                // "Schedule for later" only while the admin allows scheduled orders.
+                ref.watch(businessSettingsProvider.select((s) => s.scheduledOrder))
+                    ? (restaurant.deliveryTime.isNotEmpty ? '${restaurant.deliveryTime} · Schedule for later' : 'Schedule for later')
+                    : restaurant.deliveryTime,
                 style: TextStyle(
                   fontSize: 12.sp,
                   fontWeight: FontWeight.w600,
                   color: isDark ? AppColors.textSecondaryDark : const Color(0xFF374151),
                 ),
               ),
-              SizedBox(width: 4.w),
-              Icon(
-                Icons.keyboard_arrow_down_rounded,
-                size: 16.sp,
-                color: Colors.grey[500],
-              ),
+              if (ref.watch(businessSettingsProvider.select((s) => s.scheduledOrder))) ...[
+                SizedBox(width: 4.w),
+                Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 16.sp,
+                  color: Colors.grey[500],
+                ),
+              ],
             ],
           ),
 
