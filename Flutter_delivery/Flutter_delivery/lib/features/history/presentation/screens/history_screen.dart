@@ -60,6 +60,12 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   num _tripEarning(Map<String, dynamic> t) =>
       (t['deliveryEarning'] ?? t['earningAmount'] ?? t['amount'] ?? 0) as num;
 
+  /// Customer tip on this trip — already part of [_tripEarning].
+  num _tripTip(Map<String, dynamic> t) {
+    final v = t['tipAmount'] ?? t['tip'];
+    return v is num ? v : 0;
+  }
+
   num _tripTotal(Map<String, dynamic> t) =>
       (t['totalAmount'] ?? t['orderTotal'] ?? 0) as num;
 
@@ -176,6 +182,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     final theme = Theme.of(context);
     final isDarkMode = theme.brightness == Brightness.dark;
     final totalEarnings = _trips.fold<num>(0, (sum, t) => sum + _tripEarning(t));
+    final totalTips = _trips.fold<num>(0, (sum, t) => sum + _tripTip(t));
 
     return Scaffold(
       appBar: AppBar(
@@ -332,6 +339,17 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                                   ),
                                 ],
                               ),
+                              if (totalTips > 0) ...[
+                                SizedBox(height: 8.h),
+                                Text(
+                                  'incl. ₹${totalTips.toStringAsFixed(0)} tips',
+                                  style: TextStyle(
+                                    color: const Color(0xFF1EBE5D),
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13.sp,
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -515,13 +533,27 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                           'Order ₹${_tripTotal(trip).toStringAsFixed(0)}',
                           style: TextStyle(color: Colors.grey, fontSize: 13.sp),
                         ),
-                        Text(
-                          '+₹${_tripEarning(trip).toStringAsFixed(0)}',
-                          style: TextStyle(
-                            color: const Color(0xFF1EBE5D),
-                            fontWeight: FontWeight.w900,
-                            fontSize: 15.sp,
-                          ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              '+₹${_tripEarning(trip).toStringAsFixed(0)}',
+                              style: TextStyle(
+                                color: const Color(0xFF1EBE5D),
+                                fontWeight: FontWeight.w900,
+                                fontSize: 15.sp,
+                              ),
+                            ),
+                            if (_tripTip(trip) > 0)
+                              Text(
+                                'incl. ₹${_tripTip(trip).toStringAsFixed(0)} tip',
+                                style: TextStyle(
+                                  color: const Color(0xFF1EBE5D),
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 11.sp,
+                                ),
+                              ),
+                          ],
                         ),
                       ],
                     ),

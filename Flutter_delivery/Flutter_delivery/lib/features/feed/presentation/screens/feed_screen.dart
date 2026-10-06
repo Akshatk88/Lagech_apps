@@ -29,6 +29,7 @@ import 'package:food_user_application/features/orders/data/orders_repository.dar
 import 'package:food_user_application/features/orders/presentation/widgets/collect_payment_sheet.dart';
 import 'package:food_user_application/features/orders/application/active_trip_visibility_controller.dart';
 import 'package:food_user_application/features/profile/application/availability_controller.dart';
+import 'package:food_user_application/features/settings/application/business_settings_controller.dart';
 import 'package:food_user_application/features/support/data/support_repository.dart';
 import 'package:food_user_application/features/wallet/data/wallet_repository.dart';
 import 'package:food_user_application/core/services/fcm_service.dart';
@@ -977,6 +978,8 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
     final paymentLabel = order.isCashOnDelivery
         ? '₹${order.total.toStringAsFixed(0)} COD'
         : '₹${order.total.toStringAsFixed(0)} Paid';
+    final showTip = order.riderTip > 0 &&
+        ref.watch(businessSettingsControllerProvider.select((s) => s.showEarning));
 
     final bool showNavigate = order.currentPhase == 'en_route_to_pickup' || 
                               order.currentPhase == 'at_pickup' || 
@@ -1052,16 +1055,35 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                     ],
                   ),
                 ),
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 5.h),
-                  decoration: BoxDecoration(
-                    color: theme.primaryColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(12.r),
-                  ),
-                  child: Text(
-                    paymentLabel,
-                    style: TextStyle(color: theme.primaryColor, fontWeight: FontWeight.w800, fontSize: 11.sp),
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 5.h),
+                      decoration: BoxDecoration(
+                        color: theme.primaryColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12.r),
+                      ),
+                      child: Text(
+                        paymentLabel,
+                        style: TextStyle(color: theme.primaryColor, fontWeight: FontWeight.w800, fontSize: 11.sp),
+                      ),
+                    ),
+                    if (showTip) ...[
+                      SizedBox(height: 6.h),
+                      Container(
+                        padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 5.h),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12.r),
+                        ),
+                        child: Text(
+                          'Tip ₹${order.riderTip.toStringAsFixed(0)}',
+                          style: TextStyle(color: Colors.green[700], fontWeight: FontWeight.w800, fontSize: 11.sp),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ),

@@ -45,6 +45,7 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> {
       ? 'Restaurant'
       : _s('restaurantName', 'restaurant');
   num get _earning => _f('deliveryEarning', 'earningAmount', 'amount');
+  num get _tip => _f('tipAmount', 'tip');
   num get _total => _f('totalAmount', 'orderTotal');
   String get _displayOrderId => _s('orderId', 'id', '_id');
   String get _time => _s('time');
@@ -210,6 +211,7 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> {
                       items: order?.items ?? const [],
                       total: order?.total ?? _total.toDouble(),
                       earning: order?.riderEarning ?? _earning.toDouble(),
+                      tip: (order != null && order.riderTip > 0) ? order.riderTip : _tip.toDouble(),
                       paymentLabel: order != null
                           ? (order.isCashOnDelivery
                               ? (order.isPaid ? 'Cash · Collected' : 'Cash on Delivery')
@@ -341,6 +343,7 @@ class _ReceiptTicket extends StatelessWidget {
     required this.items,
     required this.total,
     required this.earning,
+    this.tip = 0,
     required this.paymentLabel,
   });
 
@@ -356,6 +359,9 @@ class _ReceiptTicket extends StatelessWidget {
   final List<OrderItem> items;
   final double total;
   final double earning;
+
+  /// Customer tip — already part of [earning], shown underneath it.
+  final double tip;
   final String? paymentLabel;
 
   @override
@@ -487,6 +493,13 @@ class _ReceiptTicket extends StatelessWidget {
                   '+₹${earning.toStringAsFixed(0)}',
                   style: TextStyle(fontSize: 22.sp, fontWeight: FontWeight.w900, color: accentColor),
                 ),
+                if (tip > 0) ...[
+                  SizedBox(height: 2.h),
+                  Text(
+                    'incl. ₹${tip.toStringAsFixed(0)} tip',
+                    style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w700, color: accentColor),
+                  ),
+                ],
               ],
             ),
           ),

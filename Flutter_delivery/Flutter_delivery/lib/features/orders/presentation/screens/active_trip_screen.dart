@@ -978,6 +978,9 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
       businessSettingsControllerProvider.select((s) => s.canCancelOrder),
     );
     final showCancel = canCancelOrder && order.isBeforePickup;
+    final showEarning = ref.watch(
+      businessSettingsControllerProvider.select((s) => s.showEarning),
+    );
     final name = isPickupPhase ? order.restaurant.name : order.customerName;
     final address = isPickupPhase ? order.restaurant.address : order.deliveryAddress.fullAddress;
     final destLat = isPickupPhase ? order.restaurant.location?.lat : order.deliveryAddress.location?.lat;
@@ -1073,6 +1076,21 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
                               SizedBox(width: 4.w),
                               Text(etaLabel, style: TextStyle(fontSize: 13.sp, color: subTextColor)),
                             ],
+                          ),
+                        ),
+                      if (showEarning && order.riderTip > 0)
+                        Padding(
+                          padding: EdgeInsets.only(top: 6.h),
+                          child: Container(
+                            padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
+                            decoration: BoxDecoration(
+                              color: Colors.green.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10.r),
+                            ),
+                            child: Text(
+                              'Tip ₹${order.riderTip.toStringAsFixed(0)}',
+                              style: TextStyle(color: Colors.green[700], fontWeight: FontWeight.w800, fontSize: 11.sp),
+                            ),
                           ),
                         ),
                     ],

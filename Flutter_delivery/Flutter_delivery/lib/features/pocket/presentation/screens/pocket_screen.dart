@@ -446,6 +446,7 @@ class _PocketScreenState extends ConsumerState<PocketScreen> {
     final totalEarning = (summary?['totalEarning'] as num?)?.toDouble() ?? 0;
     final totalBonus = (summary?['totalBonus'] as num?)?.toDouble() ?? 0;
     final grandTotal = (summary?['grandTotal'] as num?)?.toDouble() ?? 0;
+    final totalTips = (summary?['totalTips'] as num?)?.toDouble() ?? 0;
     final trips = (_pocketData?['trips'] as List<dynamic>?) ?? [];
 
     final perDay = <int, double>{};
@@ -501,7 +502,9 @@ class _PocketScreenState extends ConsumerState<PocketScreen> {
           ),
           SizedBox(height: 6.h),
           Text(
-            'Earnings ₹${totalEarning.toStringAsFixed(0)} · Bonus ₹${totalBonus.toStringAsFixed(0)}',
+            'Earnings ₹${totalEarning.toStringAsFixed(0)}'
+            '${totalTips > 0 ? ' (incl. ₹${totalTips.toStringAsFixed(0)} tips)' : ''}'
+            ' · Bonus ₹${totalBonus.toStringAsFixed(0)}',
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.85),
               fontSize: 11.sp,
@@ -724,8 +727,11 @@ class _PocketScreenState extends ConsumerState<PocketScreen> {
 
   Widget _buildEarningsBreakupCard(ThemeData theme, Color textColor, Color? subTextColor) {
     final summary = _pocketData?['summary'] as Map<String, dynamic>?;
+    final totalTips = (summary?['totalTips'] as num?)?.toDouble() ?? 0;
     final rows = [
       ('Delivery Earnings', (summary?['totalEarning'] as num?)?.toDouble() ?? 0),
+      // Tips are already inside Delivery Earnings; listed for visibility.
+      if (totalTips > 0) ('  incl. Customer Tips', totalTips),
       ('Bonus', (summary?['totalBonus'] as num?)?.toDouble() ?? 0),
       ('Total', (summary?['grandTotal'] as num?)?.toDouble() ?? 0),
     ];

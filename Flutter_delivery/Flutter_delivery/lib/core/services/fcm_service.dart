@@ -60,6 +60,13 @@ String? _orderIdOf(Map<String, dynamic> data) {
   return (id == null || id.isEmpty) ? null : id;
 }
 
+/// " (incl. ₹X tip)" when the new-order push carries a customer tip
+/// (`data.riderTip`, already part of the earnings figure), else "".
+String _tipSuffix(Map<String, dynamic> data) {
+  final tip = double.tryParse('${data['riderTip'] ?? ''}') ?? 0;
+  return tip > 0 ? ' (incl. ₹${tip.toStringAsFixed(0)} tip)' : '';
+}
+
 /// Takes down the incoming-order alert for [orderId] wherever it is showing.
 ///
 /// Safe to call from the background isolate, which is the case that matters: the
@@ -274,7 +281,7 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     // the admin's "show earning" switch (defaults to showing it).
     final showEarning = (await BusinessSettingsCache.read()).showEarning;
     final body = showEarning
-        ? 'From: $pickup\nTo: $drop\nEarnings: ₹$price | Dist: ${distance}km'
+        ? 'From: $pickup\nTo: $drop\nEarnings: ₹$price${_tipSuffix(message.data)} | Dist: ${distance}km'
         : 'From: $pickup\nTo: $drop\nDist: ${distance}km';
 
     await localNotifications.show(
@@ -626,7 +633,7 @@ class FcmService {
       final price = message.data['price'] as String? ?? message.data['earnings'] as String? ?? '';
       final distance = message.data['distance'] as String? ?? message.data['tripDistanceKm'] as String? ?? '';
       final body = BusinessSettingsCache.current.showEarning
-          ? 'From: $pickup\nTo: $drop\nEarnings: ₹$price | Dist: ${distance}km'
+          ? 'From: $pickup\nTo: $drop\nEarnings: ₹$price${_tipSuffix(message.data)} | Dist: ${distance}km'
           : 'From: $pickup\nTo: $drop\nDist: ${distance}km';
       final orderId = _orderIdOf(message.data) ?? '';
 

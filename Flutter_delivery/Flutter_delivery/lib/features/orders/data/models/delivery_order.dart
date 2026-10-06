@@ -199,6 +199,7 @@ class DeliveryOrder {
     required this.paymentStatus,
     required this.total,
     required this.riderEarning,
+    this.riderTip = 0,
     required this.dropOtpRequired,
     required this.dropOtpVerified,
     this.deliveryInstructions,
@@ -224,6 +225,10 @@ class DeliveryOrder {
   final String paymentStatus;
   final double total;
   final double riderEarning;
+
+  /// Customer tip for this delivery — already included in [riderEarning],
+  /// shown separately ("incl. ₹X tip").
+  final double riderTip;
   final bool dropOtpRequired;
   final bool dropOtpVerified;
   final String? deliveryInstructions;
@@ -260,6 +265,7 @@ class DeliveryOrder {
       paymentStatus: paymentStatus,
       total: total,
       riderEarning: riderEarning,
+      riderTip: riderTip,
       dropOtpRequired: dropOtpRequired ?? this.dropOtpRequired,
       dropOtpVerified: dropOtpVerified ?? this.dropOtpVerified,
       deliveryInstructions: deliveryInstructions,
@@ -309,6 +315,7 @@ class DeliveryOrder {
       paymentStatus: payment['status'] as String? ?? 'cod_pending',
       total: (pricing['total'] as num?)?.toDouble() ?? 0,
       riderEarning: n(json['riderEarning'] ?? json['earnings'] ?? json['earningAmount'] ?? json['deliveryEarning']),
+      riderTip: n(json['riderTip'] ?? pricing['riderTip']),
       dropOtpRequired: dropOtp['required'] as bool? ?? false,
       dropOtpVerified: dropOtp['verified'] as bool? ?? false,
       deliveryInstructions:
@@ -366,6 +373,7 @@ class DeliveryOrder {
       paymentStatus: data['paymentStatus'] as String? ?? 'cod_pending',
       total: n(data['total']),
       riderEarning: n(data['riderEarning'] ?? data['earnings']),
+      riderTip: n(data['riderTip']),
       dropOtpRequired: false,
       dropOtpVerified: false,
       pickupDistanceKm: nNullable(data['pickupDistanceKm']),

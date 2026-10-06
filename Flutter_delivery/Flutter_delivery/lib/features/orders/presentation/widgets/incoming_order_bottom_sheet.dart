@@ -70,6 +70,17 @@ class _IncomingOrderBottomSheetState
                     fontWeight: FontWeight.w900,
                   ),
                 ),
+                if (order.riderTip > 0) ...[
+                  SizedBox(height: 4.h),
+                  Text(
+                    'incl. ₹${order.riderTip.toStringAsFixed(0)} tip',
+                    style: TextStyle(
+                      color: const Color(0xFF4ADE80),
+                      fontSize: 13.sp,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
                 SizedBox(height: 12.h),
                 ],
                 // Pickup / Drop distances

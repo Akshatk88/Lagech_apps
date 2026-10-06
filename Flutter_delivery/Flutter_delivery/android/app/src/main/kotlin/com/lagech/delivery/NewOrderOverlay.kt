@@ -204,7 +204,21 @@ object NewOrderOverlay {
         val cleanEarning = earning.replace(Regex("[^0-9.]"), "")
         val formattedEarning = cleanEarning.toDoubleOrNull()?.let { String.format(Locale.US, "₹ %.2f", it) }
             ?: "₹ $earning"
-        tvEarnings.text = formattedEarning
+        // Customer tip is already inside the earning; call it out separately.
+        val tip = data["riderTip"]?.toDoubleOrNull() ?: 0.0
+        tvEarnings.text = if (tip > 0) {
+            val suffix = String.format(Locale.US, "  incl. ₹%.0f tip", tip)
+            android.text.SpannableString(formattedEarning + suffix).apply {
+                setSpan(
+                    android.text.style.RelativeSizeSpan(0.5f),
+                    formattedEarning.length,
+                    length,
+                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                )
+            }
+        } else {
+            formattedEarning
+        }
 
         // Distance & Duration
         val distance = data["tripDistanceKm"]
