@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:food_user_application/core/network/dio_client.dart';
+import 'package:food_user_application/features/orders/domain/order_invoice.dart';
 import 'package:food_user_application/features/orders/domain/order_model.dart';
 
 class OrderListPage {
@@ -60,6 +61,18 @@ class OrderRepository {
     final response = await _dio.get('/food/restaurant/orders/$orderId');
     final data = Map<String, dynamic>.from(response.data as Map);
     return OrderModel.fromJson(Map<String, dynamic>.from(data['order'] as Map));
+  }
+
+  /// The bill ("Print bill"): restaurant copy of the invoice, with the
+  /// restaurant's earning. Someone else's order is a 404.
+  Future<OrderInvoice> getInvoice(String orderId) async {
+    final response = await _dio.get(
+      '/food/restaurant/orders/${Uri.encodeComponent(orderId)}/invoice',
+    );
+    final data = Map<String, dynamic>.from(response.data as Map);
+    return OrderInvoice.fromJson(
+      Map<String, dynamic>.from(data['invoice'] as Map),
+    );
   }
 
   Future<OrderModel> updateStatus(

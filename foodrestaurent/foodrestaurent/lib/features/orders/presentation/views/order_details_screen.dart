@@ -14,6 +14,7 @@ import 'package:food_user_application/features/orders/presentation/controllers/l
 import 'package:food_user_application/features/orders/presentation/widgets/cancel_accepted_order_button.dart';
 import 'package:food_user_application/features/orders/presentation/widgets/order_earnings.dart';
 import 'package:food_user_application/features/orders/presentation/widgets/order_type_badges.dart';
+import 'package:food_user_application/features/orders/presentation/widgets/print_bill_button.dart';
 import 'package:food_user_application/features/orders/presentation/widgets/takeaway_handover_button.dart';
 import 'package:food_user_application/features/business_settings/data/business_settings_repository.dart';
 import 'package:food_user_application/core/widgets/app_refresh_indicator.dart';
@@ -162,6 +163,10 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
           onPressed: () =>
               context.canPop() ? context.pop() : context.go('/orders'),
         ),
+        actions: [
+          if (_order != null && PrintBillButton.appliesTo(_order!))
+            PrintBillButton(order: _order!, compact: true),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -297,6 +302,7 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
           order: order,
           onCancel: () => _updateStatus('cancelled_by_restaurant'),
         ),
+        if (PrintBillButton.appliesTo(order)) PrintBillButton(order: order),
       ],
     );
   }

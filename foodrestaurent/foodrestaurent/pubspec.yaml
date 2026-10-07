@@ -35,6 +35,10 @@ dependencies:
   android_intent_plus: ^6.1.0
   in_app_update: ^4.2.0
   in_app_review: ^2.0.12
+  # Print bill: the bill is drawn as a PDF and sent to the system print dialog.
+  # Held below printing 5.15 / pdf 3.13, which need Dart 3.12 (sdk here is ^3.11.4).
+  pdf: ">=3.11.3 <3.13.0"
+  printing: ">=5.14.3 <5.15.0"
 
 dev_dependencies:
   flutter_test:
