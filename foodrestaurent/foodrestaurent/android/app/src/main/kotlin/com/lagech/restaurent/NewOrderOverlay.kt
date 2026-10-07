@@ -152,9 +152,15 @@ object NewOrderOverlay {
             (data["orderDisplayId"] ?: data["orderNumber"])?.takeIf { it.isNotBlank() }
                 ?: "#${orderId.takeLast(6).uppercase(Locale.ROOT)}"
 
-        val total = (data["total"] ?: data["amount"])
-            ?.replace(Regex("[^0-9.]"), "")
-            ?.toDoubleOrNull()
+        fun amount(key: String): Double? =
+            data[key]?.replace(Regex("[^0-9.]"), "")?.toDoubleOrNull()
+
+        // The restaurant's earning after commission, labelled "You earn"; the
+        // customer's total only from an older server that does not send it.
+        val earning = amount("restaurantEarning")
+        val total = earning ?: amount("total") ?: amount("amount")
+        root.findViewById<TextView>(R.id.tv_amount_label).visibility =
+            if (earning != null) View.VISIBLE else View.GONE
         root.findViewById<TextView>(R.id.tv_amount).text =
             if (total != null) String.format(Locale.US, "₹ %.2f", total) else "New order"
 

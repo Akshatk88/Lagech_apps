@@ -349,7 +349,10 @@ object NewOrderNotifier {
         val parts = listOfNotNull(
             data["customerName"]?.takeIf { it.isNotBlank() }?.let { "Customer: $it" },
             data["itemCount"]?.takeIf { it.isNotBlank() }?.let { "$it item(s)" },
-            (data["total"] ?: data["amount"])?.takeIf { it.isNotBlank() }?.let { "Total: Rs.$it" },
+            // The restaurant's earning after commission; the customer's total only
+            // from an older server that does not send it.
+            data["restaurantEarning"]?.takeIf { it.isNotBlank() }?.let { "You earn: Rs.$it" }
+                ?: (data["total"] ?: data["amount"])?.takeIf { it.isNotBlank() }?.let { "Total: Rs.$it" },
         )
         return if (parts.isEmpty()) "Tap to view the order" else parts.joinToString(" · ")
     }

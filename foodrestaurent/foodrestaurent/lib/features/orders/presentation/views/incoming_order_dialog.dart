@@ -15,6 +15,7 @@ import 'package:food_user_application/features/business_settings/domain/restaura
 import 'package:food_user_application/features/orders/data/order_repository.dart';
 import 'package:food_user_application/features/orders/domain/order_model.dart';
 import 'package:food_user_application/features/orders/presentation/controllers/live_orders_controller.dart';
+import 'package:food_user_application/features/orders/presentation/widgets/order_earnings.dart';
 import 'package:food_user_application/features/orders/presentation/widgets/order_type_badges.dart';
 
 // A push can arrive more than once in a burst (e.g. connectivity blip causing
@@ -170,6 +171,19 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
       _order = order;
       _loading = false;
     });
+    if (order != null && order.finance == null) _loadEarning(order.id);
+  }
+
+  /// The cached list (or an older server) may lack the `finance` block; the
+  /// order details carry it. Until then the dialog shows only the item total.
+  Future<void> _loadEarning(String id) async {
+    try {
+      final fresh = await ref.read(orderRepositoryProvider).getById(id);
+      if (!mounted || _closed || fresh.finance == null) return;
+      setState(() => _order = _order?.copyWith(finance: fresh.finance));
+    } catch (e) {
+      if (kDebugMode) debugPrint('IncomingOrderDialog: earning fetch failed: $e');
+    }
   }
 
   Future<void> _respond(String orderStatus) async {
@@ -520,22 +534,6 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildBillRow(String title, double amount) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(title, style: const TextStyle(color: Colors.grey, fontSize: 13)),
-          Text(
-            '₹${amount.toStringAsFixed(2)}',
-            style: const TextStyle(color: Colors.black87, fontSize: 13),
-          ),
-        ],
-      ),
     );
   }
 
@@ -902,7 +900,7 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(
-                        Icons.receipt_long,
+                        Icons.account_balance_wallet,
                         color: AppColors.primaryDark,
                         size: 20,
                       ),
@@ -913,7 +911,7 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'Bill details',
+                            'Earnings',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 15,
@@ -921,64 +919,11 @@ class _IncomingOrderDialogState extends ConsumerState<IncomingOrderDialog> {
                             ),
                           ),
                           const SizedBox(height: 12),
-                          _buildBillRow('Subtotal', order.pricing.subtotal),
-                          _buildBillRow(
-                            'Delivery fee',
-                            order.pricing.deliveryFee,
-                          ),
-                          _buildBillRow(
-                            'Platform fee',
-                            order.pricing.platformFee,
-                          ),
-                          _buildBillRow('Tax', order.pricing.tax),
-                          if (order.pricing.riderTip > 0)
-                            _buildBillRow(
-                            'Rider tip (for delivery partner)',
-                            order.pricing.riderTip,
-                          ),
+                          OrderEarningsBreakdown(order: order, fontSize: 13),
                         ],
                       ),
                     ),
                   ],
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryTint,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.account_balance_wallet,
-                        color: AppColors.primaryDark,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Text(
-                          'Total',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                            color: Colors.black87,
-                          ),
-                        ),
-                      ),
-                      Text(
-                        '₹${order.total.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 16,
-                          color: AppColors.primaryDeep,
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
                 const SizedBox(height: 16),
               ],

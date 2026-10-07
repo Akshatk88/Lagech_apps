@@ -118,6 +118,65 @@ class OrderPricingModel {
   final double riderTip;
 }
 
+/// What the order is worth to the restaurant — the server's `finance` block on
+/// every restaurant order (list, details, status updates, `new_order`).
+///
+/// The customer's delivery fee, platform fee, tip and grand total are not the
+/// restaurant's money; [netPayout] is what it receives after commission and its
+/// share of discounts.
+class OrderFinanceModel {
+  OrderFinanceModel({
+    required this.itemTotal,
+    required this.packagingFee,
+    required this.commission,
+    required this.restaurantDiscountShare,
+    required this.discount,
+    required this.taxAmount,
+    required this.totalCustomerPaid,
+    required this.netPayout,
+    required this.isSettled,
+    required this.settledAt,
+  });
+
+  /// Null when the payload has no usable `finance` block (older server, or a
+  /// socket payload without it) — callers then fetch the order details.
+  static OrderFinanceModel? tryParse(dynamic raw) {
+    if (raw is! Map) return null;
+    final json = Map<String, dynamic>.from(raw);
+    num? asNum(dynamic v) => v is num ? v : num.tryParse((v ?? '').toString());
+    final netPayout = asNum(json['netPayout'])?.toDouble();
+    if (netPayout == null) return null;
+    return OrderFinanceModel(
+      itemTotal: asNum(json['itemTotal'])?.toDouble() ?? 0,
+      packagingFee: asNum(json['packagingFee'])?.toDouble() ?? 0,
+      commission: asNum(json['commission'])?.toDouble() ?? 0,
+      restaurantDiscountShare:
+          asNum(json['restaurantDiscountShare'])?.toDouble() ?? 0,
+      discount: asNum(json['discount'])?.toDouble() ?? 0,
+      taxAmount: asNum(json['taxAmount'])?.toDouble() ?? 0,
+      totalCustomerPaid: asNum(json['totalCustomerPaid'])?.toDouble() ?? 0,
+      netPayout: netPayout,
+      isSettled: json['isSettled'] == true,
+      settledAt: DateTime.tryParse((json['settledAt'] ?? '').toString()),
+    );
+  }
+
+  final double itemTotal;
+  final double packagingFee;
+  final double commission;
+
+  /// The part of the customer's discount the restaurant funds.
+  final double restaurantDiscountShare;
+  final double discount;
+  final double taxAmount;
+  final double totalCustomerPaid;
+
+  /// What the restaurant receives for this order.
+  final double netPayout;
+  final bool isSettled;
+  final DateTime? settledAt;
+}
+
 class OrderModel {
   OrderModel({
     required this.id,
@@ -147,6 +206,7 @@ class OrderModel {
     this.isScheduled = false,
     this.scheduledAt,
     this.releaseAt,
+    this.finance,
   });
 
   factory OrderModel.fromJson(Map<String, dynamic> rawJson) {
@@ -216,6 +276,7 @@ class OrderModel {
       isScheduled: json['isScheduled'] == true,
       scheduledAt: DateTime.tryParse((json['scheduledAt'] ?? '').toString()),
       releaseAt: DateTime.tryParse((json['releaseAt'] ?? '').toString()),
+      finance: OrderFinanceModel.tryParse(json['finance']),
     );
   }
 
@@ -252,6 +313,16 @@ class OrderModel {
   /// When a scheduled order starts ringing as a new order (~40 min before the
   /// slot). Until then the server sends no `new_order` alert for it.
   final DateTime? releaseAt;
+
+  /// The restaurant's earning on this order; null until the server sends it.
+  final OrderFinanceModel? finance;
+
+  /// The food value of the order — the server's item total, or the subtotal
+  /// while [finance] is not known yet.
+  double get itemTotal => finance?.itemTotal ?? pricing.subtotal;
+
+  /// What the restaurant receives after commission, when known.
+  double? get restaurantEarning => finance?.netPayout;
 
   bool get isTakeaway => orderType == 'takeaway';
 
@@ -302,6 +373,7 @@ class OrderModel {
     DateTime? acceptanceDeadlineAt,
     DateTime? createdAt,
     Map<String, DateTime>? statusTimes,
+    OrderFinanceModel? finance,
   }) {
     return OrderModel(
       id: id ?? this.id,
@@ -331,6 +403,7 @@ class OrderModel {
       isScheduled: isScheduled,
       scheduledAt: scheduledAt,
       releaseAt: releaseAt,
+      finance: finance ?? this.finance,
     );
   }
 

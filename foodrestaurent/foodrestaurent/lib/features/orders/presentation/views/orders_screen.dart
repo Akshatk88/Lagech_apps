@@ -751,9 +751,11 @@ class _OrderCard extends ConsumerWidget {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'Order Amount',
-                              style: TextStyle(
+                            Text(
+                              order.restaurantEarning != null
+                                  ? "You'll receive"
+                                  : 'Item total',
+                              style: const TextStyle(
                                 fontSize: 12,
                                 color: Colors.grey,
                                 fontWeight: FontWeight.w500,
@@ -761,7 +763,7 @@ class _OrderCard extends ConsumerWidget {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              '₹${order.total.toStringAsFixed(2)}',
+                              '₹${(order.restaurantEarning ?? order.itemTotal).toStringAsFixed(2)}',
                               style: const TextStyle(
                                 fontWeight: FontWeight.w900,
                                 fontSize: 24,

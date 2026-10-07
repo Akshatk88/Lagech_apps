@@ -121,16 +121,22 @@ String buildOrderNotificationBody(Map<String, dynamic> data) {
 
   final lines = <String>[];
   final items = _nonEmpty(data['itemsList']);
+  // The restaurant's earning after commission; the customer's total only from
+  // an older server that does not send it.
+  final earning = _nonEmpty(data['restaurantEarning']);
   final total = _nonEmpty(data['total']);
   final customer = _nonEmpty(data['customerName']);
   final address = _nonEmpty(data['address']);
   final payment = _nonEmpty(data['paymentMethod']);
 
   if (items != null) lines.add(items);
-  if (total != null) {
-    lines.add(
-      payment != null ? 'Total: Rs.$total  ·  $payment' : 'Total: Rs.$total',
-    );
+  final amount = earning != null
+      ? 'You earn: Rs.$earning'
+      : total != null
+      ? 'Total: Rs.$total'
+      : null;
+  if (amount != null) {
+    lines.add(payment != null ? '$amount  ·  $payment' : amount);
   }
   if (customer != null) lines.add(customer);
   if (address != null) lines.add(address);

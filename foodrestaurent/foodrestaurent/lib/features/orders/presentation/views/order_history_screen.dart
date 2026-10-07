@@ -444,7 +444,10 @@ class _OrderHistoryScreenState extends ConsumerState<OrderHistoryScreen> {
                     const SizedBox(width: 12),
 
                     Text(
-                      '₹${order.total.toStringAsFixed(2)}',
+                      // The restaurant's earning, not the customer's bill.
+                      order.restaurantEarning != null
+                          ? "You'll receive ₹${order.restaurantEarning!.toStringAsFixed(2)}"
+                          : '₹${order.itemTotal.toStringAsFixed(2)}',
 
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

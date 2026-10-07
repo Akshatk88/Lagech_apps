@@ -96,6 +96,14 @@ class OrderAlertService {
     stringData['orderId'] = orderId;
     stringData['type'] = 'new_order';
 
+    // The socket payload carries the earning inside `finance`; the native alert
+    // reads the flat `restaurantEarning` key, as on the FCM push.
+    final finance = rawData['finance'];
+    if ((stringData['restaurantEarning'] ?? '').isEmpty && finance is Map) {
+      final netPayout = finance['netPayout'];
+      if (netPayout != null) stringData['restaurantEarning'] = '$netPayout';
+    }
+
     // "Confirmed by deliveryman": a delivery order arrives already confirmed,
     // so there is nothing to accept or reject — a plain alert, and the in-app
     // dialog offers "Start preparing" instead.
@@ -105,12 +113,16 @@ class OrderAlertService {
         ? stringData['title']!
         : 'New Order Received!';
     final customerName = stringData['customerName'];
+    final earning = stringData['restaurantEarning'];
     final total = stringData['total'] ?? stringData['amount'];
     final body = stringData['body']?.isNotEmpty == true
         ? stringData['body']!
         : [
             if (customerName != null && customerName.isNotEmpty) 'Customer: $customerName',
-            if (total != null && total.isNotEmpty) 'Total: Rs.$total',
+            if (earning != null && earning.isNotEmpty)
+              'You earn: Rs.$earning'
+            else if (total != null && total.isNotEmpty)
+              'Total: Rs.$total',
             arrivesConfirmed
                 ? 'Confirmed — tap to start preparing'
                 : 'Tap or choose Accept/Reject',

@@ -12,6 +12,7 @@ import 'package:food_user_application/features/orders/data/order_repository.dart
 import 'package:food_user_application/features/orders/domain/order_model.dart';
 import 'package:food_user_application/features/orders/presentation/controllers/live_orders_controller.dart';
 import 'package:food_user_application/features/orders/presentation/widgets/cancel_accepted_order_button.dart';
+import 'package:food_user_application/features/orders/presentation/widgets/order_earnings.dart';
 import 'package:food_user_application/features/orders/presentation/widgets/order_type_badges.dart';
 import 'package:food_user_application/features/orders/presentation/widgets/takeaway_handover_button.dart';
 import 'package:food_user_application/features/business_settings/data/business_settings_repository.dart';
@@ -241,8 +242,8 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
         const SizedBox(height: 16),
         _SectionCard(
           cardColor: cardColor,
-          title: 'Bill details',
-          icon: Icons.payments_outlined,
+          title: 'Earnings',
+          icon: Icons.account_balance_wallet_outlined,
           child: BillDetails(order: order),
         ),
         if (order.note.isNotEmpty || order.deliveryInstructions.isNotEmpty) ...[
@@ -551,12 +552,25 @@ class _StatusHeaderCard extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              Text(
-                '₹${order.total.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w900,
-                ),
+              // The restaurant's earning, not the customer's bill; the item
+              // total until the server's earning is known.
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    order.restaurantEarning != null
+                        ? "You'll receive"
+                        : 'Item total',
+                    style: const TextStyle(color: Colors.grey, fontSize: 11),
+                  ),
+                  Text(
+                    '₹${(order.restaurantEarning ?? order.itemTotal).toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -895,61 +909,9 @@ class BillDetails extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pricing = order.pricing;
-
-    Widget row(String label, double amount, {bool isDiscount = false}) {
-      if (amount == 0) return const SizedBox.shrink();
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              label,
-              style: const TextStyle(color: Colors.grey, fontSize: 14),
-            ),
-            Text(
-              '${isDiscount ? '- ' : ''}₹${amount.toStringAsFixed(2)}',
-              style: TextStyle(
-                fontSize: 14,
-                color: isDiscount ? AppColors.success : null,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
     return Column(
       children: [
-        row('Subtotal', pricing.subtotal),
-        row('Packaging fee', pricing.packagingFee),
-        row('Delivery fee', pricing.deliveryFee),
-        row('Platform fee', pricing.platformFee),
-        row('Tax', pricing.tax),
-        row('Rider tip (passed to delivery partner)', pricing.riderTip),
-        if (pricing.discount > 0)
-          row(
-            pricing.couponCode.isNotEmpty
-                ? 'Discount (${pricing.couponCode})'
-                : 'Discount',
-            pricing.discount,
-            isDiscount: true,
-          ),
-        const Divider(height: 20),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Total',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-            ),
-            Text(
-              '₹${order.total.toStringAsFixed(2)}',
-              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
-            ),
-          ],
-        ),
+        OrderEarningsBreakdown(order: order),
         const SizedBox(height: 12),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
