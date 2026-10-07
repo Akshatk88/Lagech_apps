@@ -1,4 +1,4 @@
-package com.lagech.restaurent
+package com.lagech.vendor
 
 import android.util.Log
 import com.google.firebase.messaging.RemoteMessage

@@ -1,45 +1,103 @@
 {
   "project_info": {
-    "project_number": "857925379912",
-    "project_id": "lagech-6be7b",
-    "storage_bucket": "lagech-6be7b.firebasestorage.app"
+    "project_number": "853137767775",
+    "firebase_url": "https://pr-2602-048---lagech-default-rtdb.firebaseio.com",
+    "project_id": "pr-2602-048---lagech",
+    "storage_bucket": "pr-2602-048---lagech.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:857925379912:android:d582ef07ffa91a3a00357d",
+        "mobilesdk_app_id": "1:853137767775:android:538bc44a93047e3499caea",
         "android_client_info": {
-          "package_name": "com.lagech.restaurent"
+          "package_name": "com.lagech.customer"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "853137767775-iktph8crnqalv8d7ihcbck977r927sp7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.lagech.customer",
+            "certificate_hash": "9f731c47e22d44ee7fc3ce0000559647127dd985"
+          }
+        },
+        {
+          "client_id": "853137767775-qrrm0l52obt842li3n3rr9cpr6khcvb4.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "AIzaSyDit5-NkEfNpibI4XB9NkJklSwkqcrLz6c"
+          "current_key": "AIzaSyC4U6VCFm5e6QBfapSOmShoEg7lMGAfsak"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "853137767775-qrrm0l52obt842li3n3rr9cpr6khcvb4.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     },
     {
       "client_info": {
-        "mobilesdk_app_id": "1:857925379912:android:bc587d6759fce9ee00357d",
+        "mobilesdk_app_id": "1:853137767775:android:fa0e2bd8dc36290599caea",
         "android_client_info": {
-          "package_name": "com.lagech.user"
+          "package_name": "com.lagech.delivery"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "853137767775-qrrm0l52obt842li3n3rr9cpr6khcvb4.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "AIzaSyDit5-NkEfNpibI4XB9NkJklSwkqcrLz6c"
+          "current_key": "AIzaSyC4U6VCFm5e6QBfapSOmShoEg7lMGAfsak"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "853137767775-qrrm0l52obt842li3n3rr9cpr6khcvb4.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:853137767775:android:f6bb83f241cf619d99caea",
+        "android_client_info": {
+          "package_name": "com.lagech.vendor"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "853137767775-qrrm0l52obt842li3n3rr9cpr6khcvb4.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC4U6VCFm5e6QBfapSOmShoEg7lMGAfsak"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "853137767775-qrrm0l52obt842li3n3rr9cpr6khcvb4.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

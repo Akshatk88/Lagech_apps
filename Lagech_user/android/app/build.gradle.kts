@@ -15,14 +15,14 @@ plugins {
 }
 
 android {
-    namespace = "com.lagech.user"
+    namespace = "com.lagech.customer"
 
     compileSdk = 36
 
     ndkVersion = "28.2.13676358"
 
     defaultConfig {
-        applicationId = "com.lagech.user"
+        applicationId = "com.lagech.customer"
 
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion

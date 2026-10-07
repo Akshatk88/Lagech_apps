@@ -37,19 +37,19 @@ class AppConstants {
   }
 
   static String firbaseApiKey = (Platform.isAndroid)
-      ? "AIzaSyDit5-NkEfNpibI4XB9NkJklSwkqcrLz6c"
+      ? "AIzaSyC4U6VCFm5e6QBfapSOmShoEg7lMGAfsak"
       : "ios firebase api key";
 
   static String firebaseAppId = (Platform.isAndroid)
-      ? "1:857925379912:android:0e09d76be8d8b80800357d"
+      ? "1:853137767775:android:fa0e2bd8dc36290599caea"
       : "ios firebase app id";
 
   static String firebasemessagingSenderId = (Platform.isAndroid)
-      ? "857925379912"
+      ? "853137767775"
       : "ios firebase sender id";
 
   static String firebaseProjectId = (Platform.isAndroid)
-      ? "lagech-6be7b"
+      ? "pr-2602-048---lagech"
       : "ios firebase project id";
 
   static String mapKey = (Platform.isAndroid)

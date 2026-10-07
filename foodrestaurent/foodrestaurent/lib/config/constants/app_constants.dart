@@ -36,16 +36,16 @@ class AppConstants {
   }
 
   static String firbaseApiKey = (kIsWeb || Platform.isAndroid)
-      ? "AIzaSyDit5-NkEfNpibI4XB9NkJklSwkqcrLz6c"
+      ? "AIzaSyC4U6VCFm5e6QBfapSOmShoEg7lMGAfsak"
       : "ios firebase api key";
   static String firebaseAppId = (kIsWeb || Platform.isAndroid)
-      ? "1:857925379912:android:d582ef07ffa91a3a00357d"
+      ? "1:853137767775:android:f6bb83f241cf619d99caea"
       : "ios firebase app id";
   static String firebasemessagingSenderId = (kIsWeb || Platform.isAndroid)
-      ? "857925379912"
+      ? "853137767775"
       : "ios firebase sender id";
   static String firebaseProjectId = (kIsWeb || Platform.isAndroid)
-      ? "lagech-6be7b"
+      ? "pr-2602-048---lagech"
       : "ios firebase project id";
 
   /// Google Maps API key (Maps SDK for Android/iOS + Geocoding API enabled).
@@ -53,6 +53,6 @@ class AppConstants {
 
   static const String stripPublishKey = '';
 
-  static String packageName = 'com.lagech.restaurent';
+  static String packageName = 'com.lagech.vendor';
   static String signKey = '';
 }

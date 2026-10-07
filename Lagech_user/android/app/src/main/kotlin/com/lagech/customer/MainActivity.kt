@@ -1,4 +1,4 @@
-package com.lagech.user
+package com.lagech.customer
 
 import io.flutter.embedding.android.FlutterActivity
 

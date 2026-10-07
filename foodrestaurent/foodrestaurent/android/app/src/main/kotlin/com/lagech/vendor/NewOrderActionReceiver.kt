@@ -1,4 +1,4 @@
-package com.lagech.restaurent
+package com.lagech.vendor
 
 import android.app.NotificationManager
 import android.content.BroadcastReceiver

@@ -1,4 +1,4 @@
-package com.lagech.restaurent
+package com.lagech.vendor
 
 import android.app.KeyguardManager
 import android.app.PendingIntent

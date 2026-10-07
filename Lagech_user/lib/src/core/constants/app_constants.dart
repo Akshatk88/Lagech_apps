@@ -46,29 +46,29 @@ class AppConstants {
     defaultValue: hostUrl,
   );
 
-  /// Firebase project configuration for User App (com.lagech.user).
+  /// Firebase project configuration for User App (com.lagech.customer).
   static String firebaseApiKey = (kIsWeb || Platform.isAndroid)
-      ? "AIzaSyDit5-NkEfNpibI4XB9NkJklSwkqcrLz6c"
+      ? "AIzaSyC4U6VCFm5e6QBfapSOmShoEg7lMGAfsak"
       : "ios firebase api key";
 
   static String get firbaseApiKey => firebaseApiKey;
 
   static String firebaseAppId = (kIsWeb || Platform.isAndroid)
-      ? "1:857925379912:android:bc587d6759fce9ee00357d"
+      ? "1:853137767775:android:538bc44a93047e3499caea"
       : "ios firebase app id";
 
   static String firebaseMessagingSenderId = (kIsWeb || Platform.isAndroid)
-      ? "857925379912"
+      ? "853137767775"
       : "ios firebase sender id";
 
   static String get firebasemessagingSenderId => firebaseMessagingSenderId;
 
   static String firebaseProjectId = (kIsWeb || Platform.isAndroid)
-      ? "lagech-6be7b"
+      ? "pr-2602-048---lagech"
       : "ios firebase project id";
 
   static String firebaseDatabaseUrl =
-      "https://lagech-6be7b-default-rtdb.firebaseio.com";
+      "https://pr-2602-048---lagech-default-rtdb.firebaseio.com";
 
   /// Google Maps API key (Maps SDK + Geocoding API).
   static String mapKey = 'AIzaSyCLHQKJg5shpKs0uNiDHiZJTtBUMKl21ak';
@@ -83,6 +83,6 @@ class AppConstants {
     LocaleLanguageList(name: 'English', lang: 'en'),
   ];
 
-  static String packageName = 'com.lagech.user';
+  static String packageName = 'com.lagech.customer';
   static String signKey = '';
 }

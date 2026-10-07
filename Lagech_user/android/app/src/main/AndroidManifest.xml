@@ -24,6 +24,13 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- The backend sends click_action=FLUTTER_NOTIFICATION_CLICK on every push.
+                 Without an activity that answers it, tapping the tray notification
+                 does nothing, so FCM taps never reach the app (chat, orders). -->
+            <intent-filter>
+                <action android:name="FLUTTER_NOTIFICATION_CLICK" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
             <!-- Deep Linking Intent Filters for HTTP/HTTPS universal links and lagech:// scheme -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />

@@ -18,7 +18,7 @@
 -dontwarn com.google.firebase.messaging.**
 
 # Native Messaging Services in foodrestaurent
--keep class com.lagech.restaurent.** { *; }
+-keep class com.lagech.vendor.** { *; }
 
 # Flutter Local Notifications
 -keep class com.dexterous.flutterlocalnotifications.** { *; }

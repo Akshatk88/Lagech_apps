@@ -94,9 +94,18 @@ class _FoodUserApplicationState extends ConsumerState<FoodUserApplication> {
 
   /// Routes an order push to the tracking screen, and a chat push to that
   /// order's chat with the delivery partner.
-  void _handleDeepLink(PushDeepLink link) {
+  Future<void> _handleDeepLink(PushDeepLink link) async {
     final orderId = link.trackableOrderId;
     if (orderId == null || orderId.isEmpty) return;
+
+    // A tap that launched the app arrives before the session is restored and the
+    // router has settled; a route pushed that early is wiped by the startup
+    // redirect. Wait for the session, then a beat for the first screen.
+    try {
+      await ref.read(authViewModelProvider.future);
+    } catch (_) {}
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    if (!mounted) return;
 
     if (link.isChat) {
       // `peerId` is optional: with just the order the server resolves the

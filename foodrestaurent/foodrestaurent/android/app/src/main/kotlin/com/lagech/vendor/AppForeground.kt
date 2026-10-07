@@ -1,4 +1,4 @@
-package com.lagech.restaurent
+package com.lagech.vendor
 
 /**
  * Tracks whether the Flutter Activity is currently in the foreground (active on screen)
