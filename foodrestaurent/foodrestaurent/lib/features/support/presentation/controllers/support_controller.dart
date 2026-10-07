@@ -9,10 +9,12 @@ class SupportController extends AsyncNotifier<List<SupportTicketModel>> {
   }
 
   Future<void> refresh() async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(
+    // Keep showing the current tickets while reloading: setting `loading` first
+    // made the whole stats row and ticket list vanish after every submit.
+    final next = await AsyncValue.guard(
       () => ref.read(supportRepositoryProvider).list(),
     );
+    state = next;
   }
 
   Future<void> createTicket({

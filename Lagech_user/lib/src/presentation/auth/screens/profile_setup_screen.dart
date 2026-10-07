@@ -256,7 +256,14 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
               hintText: hint,
               hintStyle: TextStyle(fontSize: 14, color: secondary, fontWeight: FontWeight.w400),
               prefixIcon: Icon(icon, color: _orange, size: 20),
+              // The theme sets enabled/focused/error borders too; `border`
+              // alone leaves them on, which drew a second outline inside the box.
               border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              errorBorder: InputBorder.none,
+              focusedErrorBorder: InputBorder.none,
+              disabledBorder: InputBorder.none,
               filled: false, // theme fills every field; the container draws the background
               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
             ),

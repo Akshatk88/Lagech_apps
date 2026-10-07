@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:food_user_application/features/chat/presentation/screens/chat_order_loader.dart';
 import 'package:food_user_application/features/splash/presentation/screens/splash_screen.dart';
 import 'package:food_user_application/features/onboarding/presentation/screens/onboarding_screen.dart';
 import 'package:food_user_application/features/main/presentation/screens/main_screen.dart';
@@ -47,6 +48,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/notifications',
         builder: (context, state) => const NotificationsScreen(),
+      ),
+      // Customer chat for an order, reached by tapping a chat push notification.
+      GoRoute(
+        path: '/chat/:orderId',
+        builder: (context, state) =>
+            ChatOrderLoader(orderId: state.pathParameters['orderId'] ?? ''),
       ),
       GoRoute(
         path: '/refer-earn',

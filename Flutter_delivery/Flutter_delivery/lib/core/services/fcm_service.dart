@@ -387,6 +387,67 @@ class FcmService {
   Stream<Map<String, dynamic>> get onNotificationTap =>
       _notificationTapController.stream;
 
+  // A tap that launches the app from cold is delivered inside `initialize()`,
+  // before the incoming-order controller exists to listen. A broadcast stream
+  // drops events nobody is listening to, so the tap was simply lost and the rider
+  // opened the app from the notification to an empty screen. With no listener yet
+  // the tap is parked here, and the controller collects it when it is built.
+  Map<String, dynamic>? _pendingTap;
+
+  /// The notification tap that arrived before anything was listening, cleared
+  /// on read.
+  Map<String, dynamic>? takePendingTap() {
+    final tap = _pendingTap;
+    _pendingTap = null;
+    return tap;
+  }
+
+  void _emitTap(Map<String, dynamic> data) {
+    if (_notificationTapController.hasListener) {
+      _notificationTapController.add(data);
+    } else {
+      _pendingTap = data;
+    }
+  }
+
+  // ── Chat notification taps ────────────────────────────────────────────────
+  //
+  // A chat push carries `type: chat_message` and the order id. Nothing used to
+  // act on it: the tap stream above is only consumed by the incoming-order
+  // controller, which ignores every other type.
+  //
+  // The tapped order id is PARKED and a ping is sent. A tap on a cold start
+  // arrives inside `initialize()`, before the router or any screen exists, so a
+  // plain stream event would be lost; whichever screen is ready takes the parked
+  // id, once, via [takePendingChatOrderId].
+  final _chatTapController = StreamController<void>.broadcast();
+  String? _pendingChatOrderId;
+
+  /// Fires when a chat notification was tapped. Read the id with
+  /// [takePendingChatOrderId].
+  Stream<void> get onChatTap => _chatTapController.stream;
+
+  /// The order whose chat notification was tapped, cleared on read.
+  String? takePendingChatOrderId() {
+    final id = _pendingChatOrderId;
+    _pendingChatOrderId = null;
+    return id;
+  }
+
+  /// Returns true if [data] is a chat notification (and so is handled here and
+  /// must not reach the incoming-order controller).
+  bool _routeIfChat(Map<String, dynamic> data) {
+    if ((data['type'] ?? '').toString() != 'chat_message') return false;
+    final orderId =
+        (data['orderId'] ?? data['orderMongoId'] ?? '').toString().trim();
+    // A support chat has no order id; there is nothing to open for it here.
+    if (orderId.isNotEmpty) {
+      _pendingChatOrderId = orderId;
+      _chatTapController.add(null);
+    }
+    return true;
+  }
+
   Stream<Map<String, dynamic>> get onNotificationReceived =>
       _notificationReceivedController.stream;
 
@@ -555,13 +616,15 @@ class FcmService {
     try {
       final decoded = jsonDecode(payload);
       if (decoded is Map) {
-        _notificationTapController.add(Map<String, dynamic>.from(decoded));
+        final data = Map<String, dynamic>.from(decoded);
+        if (_routeIfChat(data)) return;
+        _emitTap(data);
         return;
       }
     } catch (_) {
       // Not JSON — fall through to the legacy plain-orderId form.
     }
-    _notificationTapController.add({'orderId': payload});
+    _emitTap({'orderId': payload});
   }
 
   Future<void> registerToken() async {
@@ -707,15 +770,20 @@ class FcmService {
           presentSound: true,
         ),
       ),
-      payload: (message.data['orderId'] ?? message.data['orderMongoId'])?.toString(),
+      // The whole data map, not a bare order id: the `type` has to survive until
+      // the tap, otherwise a chat (or any non-offer) notification is
+      // indistinguishable from an order offer and the wrong screen opens.
+      payload: jsonEncode(message.data),
     );
   }
 
   void _handleNotificationOpen(RemoteMessage message) {
-    _notificationTapController.add(message.data);
+    if (_routeIfChat(message.data)) return;
+    _emitTap(message.data);
   }
 
   void dispose() {
+    _chatTapController.close();
     _notificationTapController.close();
     _notificationReceivedController.close();
   }

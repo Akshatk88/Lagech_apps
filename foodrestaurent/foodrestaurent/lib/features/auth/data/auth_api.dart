@@ -52,20 +52,13 @@ class AuthApi {
     );
   }
 
+  /// `DELETE /food/restaurant/me` is the one delete route the server has (the two
+  /// `/food/auth/...` paths this used to fall back to do not exist and return
+  /// 404). Failures are the server's real answer and must reach the user as is,
+  /// e.g. 400 "Restaurants with order history cannot be deleted. Please contact
+  /// support."
   Future<void> deleteAccount() async {
-    try {
-      await _dio.delete('/food/auth/restaurant/account');
-    } on DioException catch (e) {
-      if (e.response?.statusCode == 404) {
-        try {
-          await _dio.delete('/food/auth/account');
-        } on DioException catch (_) {
-          await _dio.delete('/food/restaurant/me');
-        }
-      } else {
-        rethrow;
-      }
-    }
+    await _dio.delete('/food/restaurant/me');
   }
 }
 

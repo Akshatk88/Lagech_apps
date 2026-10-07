@@ -9,6 +9,7 @@ class SupportTicketModel {
     required this.priority,
     required this.status,
     required this.adminResponse,
+    required this.respondedAt,
     required this.createdAt,
   });
 
@@ -21,8 +22,11 @@ class SupportTicketModel {
       description: (json['description'] ?? '').toString(),
       orderRef: (json['orderRef'] ?? '').toString(),
       priority: (json['priority'] ?? 'medium').toString(),
-      status: (json['status'] ?? 'open').toString(),
-      adminResponse: (json['adminResponse'] ?? '').toString(),
+      // The server sends `in_progress`; its ?status= filter takes `in-progress`.
+      // Either spelling is normalised here so the screen only ever sees one.
+      status: (json['status'] ?? 'open').toString().replaceAll('-', '_'),
+      adminResponse: (json['adminResponse'] ?? '').toString().trim(),
+      respondedAt: DateTime.tryParse((json['respondedAt'] ?? '').toString()),
       createdAt:
           DateTime.tryParse((json['createdAt'] ?? '').toString()) ??
           DateTime.now(),
@@ -36,7 +40,21 @@ class SupportTicketModel {
   final String description;
   final String orderRef;
   final String priority;
-  final String status; // open | in-progress | resolved
+  final String status; // open | in_progress | resolved
+
+  /// The admin's reply; empty until answered.
   final String adminResponse;
+
+  /// When the admin replied; null until answered.
+  final DateTime? respondedAt;
+
+  bool get hasAdminResponse => adminResponse.isNotEmpty;
+
+  String get statusLabel => switch (status) {
+        'in_progress' => 'In progress',
+        'resolved' => 'Resolved',
+        'open' => 'Open',
+        _ => status,
+      };
   final DateTime createdAt;
 }

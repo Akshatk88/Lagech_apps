@@ -33,9 +33,25 @@ class ProfileRepository {
     'upiId': ?upiId,
   });
 
+  /// `POST /food/delivery/profile/photo-base64` with `{ base64 }`; the partner
+  /// comes back as `data.partner`.
   Future<Result<DeliveryPartner, AppError>> uploadProfilePhotoBase64(
     String base64Image,
-  ) => _patch(ApiEndpoints.profilePhotoBase64, {'photo': base64Image});
+  ) async {
+    try {
+      final res = await _dio.post(
+        ApiEndpoints.profilePhotoBase64,
+        data: {'base64': base64Image},
+      );
+      final body = res.data['data'] as Map<String, dynamic>;
+      final partner = body['partner'] ?? body['user'] ?? body;
+      return Result.success(
+        DeliveryPartner.fromJson(partner as Map<String, dynamic>),
+      );
+    } on DioException catch (e) {
+      return Result.failure(_mapError(e));
+    }
+  }
 
   Future<Result<DeliveryPartner, AppError>> updateAvailability(
     bool isOnline, {

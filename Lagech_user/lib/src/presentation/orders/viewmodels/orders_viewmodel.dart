@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/error/failures.dart';
 import '../../../data/models/order_model.dart';
+import '../../../core/services/partner_contact_cache.dart';
 import '../../../di/order_providers.dart';
 import '../../../di/socket_providers.dart';
 import '../../auth/viewmodels/auth_viewmodel.dart';
@@ -248,5 +249,11 @@ class OrdersViewModel extends Notifier<OrdersState> {
 /// A single order, polled while a tracking screen is open.
 final orderDetailProvider = FutureProvider.autoDispose
     .family<OrderModel, String>((ref, orderId) async {
-      return ref.watch(orderRemoteDataSourceProvider).getOrderModel(orderId);
+      final order =
+          await ref.watch(orderRemoteDataSourceProvider).getOrderModel(orderId);
+      final phone = order.deliveryPartner?.phone ?? '';
+      if (phone.isNotEmpty) {
+        PartnerContactCache.remember(order.id, phone);
+      }
+      return order;
     });

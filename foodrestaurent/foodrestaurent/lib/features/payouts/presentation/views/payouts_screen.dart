@@ -13,7 +13,7 @@ import 'package:food_user_application/features/finance/domain/subscription_invoi
 import 'package:food_user_application/features/finance/domain/withdrawal_model.dart';
 import 'package:food_user_application/features/finance/presentation/controllers/finance_controller.dart';
 import 'package:food_user_application/features/restaurant_profile/presentation/controllers/restaurant_profile_controller.dart';
-import 'package:food_user_application/core/widgets/app_drawer.dart';
+import 'package:food_user_application/core/widgets/controller_scope.dart';
 
 class PayoutsScreen extends ConsumerStatefulWidget {
   const PayoutsScreen({super.key, this.initialTab = 'invoices'});
@@ -84,7 +84,6 @@ class _PayoutsScreenState extends ConsumerState<PayoutsScreen> {
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       extendBodyBehindAppBar: true,
-      drawer: const AppDrawer(),
       appBar: _buildAppBar(context),
 
       body: Stack(
@@ -174,11 +173,13 @@ class _PayoutsScreenState extends ConsumerState<PayoutsScreen> {
       elevation: 0,
       centerTitle: true,
       toolbarHeight: 92,
-      leadingWidth: 64,
+      // The side drawer (and its hamburger) is gone, so no leading slot.
+      automaticallyImplyLeading: false,
+      leadingWidth: 0,
       titleSpacing: 0,
 
-      // No extra side padding: the drawer button and the illustration already
-      // take ~140px, and the old 94px of padding left the name at "Cen…".
+      // Little side padding, so a long restaurant name has room next to the
+      // illustration instead of being cut to "Cen…".
       title: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4),
         child: Column(
@@ -379,9 +380,7 @@ class _PayoutsScreenState extends ConsumerState<PayoutsScreen> {
         padding: const EdgeInsets.all(24),
         child: _buildErrorText(
           context,
-          error is ApiException
-              ? error.message
-              : 'Failed to load finance data.',
+          apiErrorMessage(error, 'Failed to load finance data.'),
         ),
       ),
 
@@ -959,9 +958,7 @@ class _PayoutsScreenState extends ConsumerState<PayoutsScreen> {
 
             error: (error, _) => _buildErrorText(
               context,
-              error is ApiException
-                  ? error.message
-                  : 'Failed to load subscription invoices.',
+              apiErrorMessage(error, 'Failed to load subscription invoices.'),
             ),
 
             data: (invoices) {
@@ -1136,7 +1133,7 @@ class _PayoutsScreenState extends ConsumerState<PayoutsScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: _buildErrorText(
               context,
-              error is ApiException ? error.message : 'Failed to load wallet.',
+              apiErrorMessage(error, 'Failed to load wallet.'),
             ),
           ),
 
@@ -1181,9 +1178,7 @@ class _PayoutsScreenState extends ConsumerState<PayoutsScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: _buildErrorText(
               context,
-              error is ApiException
-                  ? error.message
-                  : 'Failed to load withdrawal requests.',
+              apiErrorMessage(error, 'Failed to load withdrawal requests.'),
             ),
           ),
 
@@ -1532,12 +1527,14 @@ class _PayoutsScreenState extends ConsumerState<PayoutsScreen> {
     BuildContext context,
     double netAvailable,
   ) async {
-    final amountController = TextEditingController();
-
+    // The controller is owned by the dialog (ControllerScope) and disposed with
+    // it. It used to be disposed right after `await showDialog`, which ran while
+    // the dialog was still fading out and crashed with the red
+    // `_dependents.isEmpty` assertion screen.
     final result = await showDialog<double>(
       context: context,
       builder: (dialogContext) {
-        return AlertDialog(
+        return ControllerScope(builder: (_, amountController) => AlertDialog(
           title: const Text('Withdraw funds'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1582,11 +1579,9 @@ class _PayoutsScreenState extends ConsumerState<PayoutsScreen> {
               child: const Text('Withdraw'),
             ),
           ],
-        );
+        ));
       },
     );
-
-    amountController.dispose();
 
     if (result == null) return;
     if (!context.mounted) return;
@@ -1625,9 +1620,7 @@ class _PayoutsScreenState extends ConsumerState<PayoutsScreen> {
       }
     } catch (e) {
       if (context.mounted) {
-        final message = e is ApiException
-            ? e.message
-            : 'Failed to submit withdrawal request.';
+        final message = apiErrorMessage(e, 'Failed to submit withdrawal request.');
 
         _showSnack(context, message, isError: true);
       }

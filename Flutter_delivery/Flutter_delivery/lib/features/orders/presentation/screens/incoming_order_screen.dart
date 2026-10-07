@@ -1,8 +1,6 @@
 import 'dart:async';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:food_user_application/features/orders/presentation/widgets/incoming_order_bottom_sheet.dart';
@@ -12,6 +10,7 @@ import 'package:food_user_application/core/error/result.dart';
 import 'package:food_user_application/core/constants/map_styles.dart';
 import 'package:food_user_application/core/services/haptic_service.dart';
 import 'package:food_user_application/core/services/location_service.dart';
+import 'package:food_user_application/core/utils/rider_marker.dart';
 import 'package:food_user_application/core/services/sound_service.dart';
 import 'package:food_user_application/core/utils/polyline_decoder.dart';
 import 'package:food_user_application/features/auth/application/auth_controller.dart';
@@ -84,23 +83,11 @@ class _IncomingOrderScreenState extends ConsumerState<IncomingOrderScreen> {
         ref.read(locationServiceProvider).positionStream.listen(_onPositionUpdate);
   }
 
-  Future<Uint8List> _getBytesFromAsset(String path, int width) async {
-    final data = await rootBundle.load(path);
-    final codec = await ui.instantiateImageCodec(
-      data.buffer.asUint8List(),
-      targetWidth: width,
-    );
-    final frame = await codec.getNextFrame();
-    return (await frame.image.toByteData(format: ui.ImageByteFormat.png))!
-        .buffer
-        .asUint8List();
-  }
-
   Future<void> _loadMarkerIcon() async {
     try {
-      final bytes = await _getBytesFromAsset('assets/image/bike.png', 80);
+      final icon = await RiderMarker.load();
       if (!mounted) return;
-      setState(() => _bikeMarkerIcon = BitmapDescriptor.fromBytes(bytes));
+      setState(() => _bikeMarkerIcon = icon);
     } catch (_) {
       // Falls back to the native "my location" blue dot.
     }
@@ -215,8 +202,7 @@ class _IncomingOrderScreenState extends ConsumerState<IncomingOrderScreen> {
 
         final authState = ref.read(authControllerProvider);
         final isBike = authState is AuthAuthenticated &&
-            (authState.user.vehicleType?.toLowerCase() == 'bike' ||
-                authState.user.vehicleType?.toLowerCase() == 'two_wheeler');
+            RiderMarker.usesBike(authState.user.vehicleType);
         final useCustomMarker = isBike && _bikeMarkerIcon != null;
 
         return GoogleMap(
@@ -232,7 +218,9 @@ class _IncomingOrderScreenState extends ConsumerState<IncomingOrderScreen> {
                 position: LatLng(pos.latitude, pos.longitude),
                 icon: _bikeMarkerIcon!,
                 anchor: const Offset(0.5, 0.5),
-                rotation: pos.heading,
+                rotation: RiderMarker.rotationFor(pos.heading),
+                flat: true,
+                zIndexInt: 2,
               ),
             if (_routePoints.isNotEmpty)
               Marker(

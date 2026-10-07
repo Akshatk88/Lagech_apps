@@ -117,9 +117,7 @@ class _ZoneSetupScreenState extends ConsumerState<ZoneSetupScreen> {
         );
       }
     } catch (e) {
-      final message = e is ApiException
-          ? e.message
-          : 'Failed to save location. Please try again.';
+      final message = apiErrorMessage(e, 'Failed to save location. Please try again.');
       setState(() => _error = message);
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -195,9 +193,7 @@ class _ZoneSetupScreenState extends ConsumerState<ZoneSetupScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => Center(
           child: Text(
-            error is ApiException
-                ? error.message
-                : 'Failed to load restaurant.',
+            apiErrorMessage(error, 'Failed to load restaurant.'),
           ),
         ),
         data: (restaurant) {

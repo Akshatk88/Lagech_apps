@@ -1,6 +1,7 @@
 package com.lagech.restaurent
 
 import android.app.KeyguardManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
@@ -210,6 +211,11 @@ object NewOrderOverlay {
     }
 
     private fun sendDecision(context: Context, action: String, orderId: String) {
+        // Accept brings the app forward. This has to happen while the overlay
+        // window is still on screen: that visible window is what lets Android allow
+        // a background launch, and it is gone once the overlay is removed below.
+        if (action == NewOrderNotifier.ACTION_ACCEPT) openApp(context, orderId)
+
         // Off the screen and silent before anything else, as on the notification.
         NewOrderRingtone.stop(null)
         removeLocked()
@@ -219,6 +225,30 @@ object NewOrderOverlay {
                 putExtra(NewOrderNotifier.EXTRA_ORDER_ID, orderId)
             },
         )
+    }
+
+    private fun openApp(context: Context, orderId: String) {
+        try {
+            val launch = context.packageManager
+                .getLaunchIntentForPackage(context.packageName)
+                ?.apply {
+                    addFlags(
+                        Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                            Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                            Intent.FLAG_ACTIVITY_REORDER_TO_FRONT,
+                    )
+                    putExtra(NewOrderNotifier.EXTRA_ORDER_ID, orderId)
+                } ?: return
+            PendingIntent.getActivity(
+                context,
+                NewOrderNotifier.notificationId(orderId),
+                launch,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            ).send()
+        } catch (t: Throwable) {
+            Log.w(TAG, "could not open the app from the overlay", t)
+        }
     }
 
     private fun startCountdown(root: View, millis: Long) {

@@ -92,9 +92,7 @@ class OffersScreen extends ConsumerWidget {
               Padding(
                 padding: const EdgeInsets.all(24),
                 child: Text(
-                  error is ApiException
-                      ? error.message
-                      : 'Failed to load offers.',
+                  apiErrorMessage(error, 'Failed to load offers.'),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -282,9 +280,7 @@ class OffersScreen extends ConsumerWidget {
                           }
                         } catch (e) {
                           if (context.mounted) {
-                            final message = e is ApiException
-                                ? e.message
-                                : 'Something went wrong.';
+                            final message = apiErrorMessage(e, 'Something went wrong.');
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(message),

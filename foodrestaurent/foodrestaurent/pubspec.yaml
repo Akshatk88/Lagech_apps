@@ -39,6 +39,7 @@ dependencies:
   # Held below printing 5.15 / pdf 3.13, which need Dart 3.12 (sdk here is ^3.11.4).
   pdf: ">=3.11.3 <3.13.0"
   printing: ">=5.14.3 <5.15.0"
+  url_launcher: ^6.3.3
 
 dev_dependencies:
   flutter_test:

@@ -50,9 +50,7 @@ class RestaurantStatusScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => Center(
           child: Text(
-            error is ApiException
-                ? error.message
-                : 'Failed to load restaurant status.',
+            apiErrorMessage(error, 'Failed to load restaurant status.'),
           ),
         ),
         data: (restaurant) => SingleChildScrollView(
@@ -107,16 +105,26 @@ class RestaurantStatusScreen extends ConsumerWidget {
                           ],
                         ),
                       ),
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: const BoxDecoration(
-                          color: AppColors.surfaceVariantLight,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.settings_outlined,
-                          color: AppColors.textSecondaryLight,
-                          size: 20,
+                      // Was a plain Container: it looked like a button and did
+                      // nothing. Opens the full restaurant settings (logo, name,
+                      // address, documents).
+                      Tooltip(
+                        message: 'Restaurant settings',
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: () => context.push('/outlet-info'),
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: const BoxDecoration(
+                              color: AppColors.surfaceVariantLight,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.settings_outlined,
+                              color: AppColors.textSecondaryLight,
+                              size: 20,
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -180,9 +188,7 @@ class RestaurantStatusScreen extends ConsumerWidget {
                                 .updateAvailability(value);
                           } catch (e) {
                             if (context.mounted) {
-                              final message = e is ApiException
-                                  ? e.message
-                                  : 'Failed to update. Please try again.';
+                              final message = apiErrorMessage(e, 'Failed to update. Please try again.');
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(message),

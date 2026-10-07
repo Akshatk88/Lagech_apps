@@ -170,9 +170,7 @@ class _ComplaintsScreenState extends ConsumerState<ComplaintsScreen> {
             Padding(
               padding: const EdgeInsets.all(24),
               child: Text(
-                error is ApiException
-                    ? error.message
-                    : 'Failed to load complaints.',
+                apiErrorMessage(error, 'Failed to load complaints.'),
                 textAlign: TextAlign.center,
               ),
             ),

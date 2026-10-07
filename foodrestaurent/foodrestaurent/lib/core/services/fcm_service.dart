@@ -553,6 +553,9 @@ class FcmService {
       } else {
         GoRouter.of(context).go('/orders');
       }
+    } else if (type?.toLowerCase() == 'support_response') {
+      // The admin answered a support ticket: open the tickets, where the reply is.
+      GoRouter.of(context).push('/support');
     } else {
       GoRouter.of(context).go('/notifications');
     }

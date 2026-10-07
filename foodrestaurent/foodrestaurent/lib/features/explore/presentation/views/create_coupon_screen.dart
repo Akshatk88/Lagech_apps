@@ -108,9 +108,7 @@ class _CreateCouponScreenState extends ConsumerState<CreateCouponScreen> {
       }
     } catch (e) {
       _showError(
-        e is ApiException
-            ? e.message
-            : 'Failed to create coupon. Please try again.',
+        apiErrorMessage(e, 'Failed to create coupon. Please try again.'),
       );
     } finally {
       if (mounted) setState(() => _isSaving = false);

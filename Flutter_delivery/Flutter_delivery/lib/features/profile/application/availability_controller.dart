@@ -17,6 +17,11 @@ class AvailabilityController extends Notifier<bool> {
   late final ProfileRepository _repository;
   StreamSubscription<Position>? _positionSub;
   Timer? _keepAliveTimer;
+
+  /// Re-sends the rider's last position to the customers every few seconds.
+  /// The position stream only fires after 15 m of movement, so a rider waiting at
+  /// the restaurant or at a signal sent nothing, and the customer's map froze.
+  Timer? _liveLocationBeat;
   DateTime _lastPing = DateTime.fromMillisecondsSinceEpoch(0);
 
   @override
@@ -112,6 +117,12 @@ class AvailabilityController extends Notifier<bool> {
     // window elapses. Ping on a timer too, independent of movement.
     _keepAliveTimer?.cancel();
     _keepAliveTimer = Timer.periodic(const Duration(minutes: 3), (_) => _pingLocation());
+
+    _liveLocationBeat?.cancel();
+    _liveLocationBeat = Timer.periodic(const Duration(seconds: 10), (_) {
+      final last = ref.read(locationServiceProvider).lastPosition;
+      if (last != null) _sendLiveLocation(last);
+    });
     // Ping immediately as well. build() starts tracking for a rider who was
     // already online without ever taking a fix (unlike goOnline, which calls
     // getCurrentPosition), so without this their first ping is 3 minutes away
@@ -146,6 +157,8 @@ class AvailabilityController extends Notifier<bool> {
     _positionSub = null;
     _keepAliveTimer?.cancel();
     _keepAliveTimer = null;
+    _liveLocationBeat?.cancel();
+    _liveLocationBeat = null;
     ref.read(locationServiceProvider).stopTracking();
 
     // The notification must go the moment the rider goes offline. A lingering
@@ -165,21 +178,32 @@ class AvailabilityController extends Notifier<bool> {
       lng: position.longitude,
     );
 
-    // Every delivery the rider holds gets the live position — each order's
-    // customer tracks the rider through its own order id.
+    _sendLiveLocation(position);
+  }
+
+  /// Every delivery the rider holds gets the live position — each order's
+  /// customer tracks the rider through its own order id.
+  void _sendLiveLocation(Position position) {
     final ordersState = ref.read(ordersControllerProvider);
-    if (ordersState is OrdersLoaded) {
-      final socket = ref.read(socketServiceProvider);
-      for (final order in ordersState.activeOrders) {
-        socket.sendLocationUpdate(
-          orderId: order.id,
-          lat: position.latitude,
-          lng: position.longitude,
-          heading: position.heading,
-          speed: position.speed,
-          accuracy: position.accuracy,
-        );
-      }
+    if (ordersState is! OrdersLoaded || ordersState.activeOrders.isEmpty) return;
+
+    final socket = ref.read(socketServiceProvider);
+    // Only a real bearing is sent. The phone reports -1 or exactly 0.0 when it
+    // has none (a rider standing still), and the server reads a 0 as "pointing
+    // north", which snapped the customer's bike north. When it is left out the
+    // server keeps the last known heading for the order instead.
+    final heading = (position.heading.isFinite && position.heading > 0)
+        ? position.heading
+        : null;
+    for (final order in ordersState.activeOrders) {
+      socket.sendLocationUpdate(
+        orderId: order.id,
+        lat: position.latitude,
+        lng: position.longitude,
+        heading: heading,
+        speed: position.speed,
+        accuracy: position.accuracy,
+      );
     }
   }
 }

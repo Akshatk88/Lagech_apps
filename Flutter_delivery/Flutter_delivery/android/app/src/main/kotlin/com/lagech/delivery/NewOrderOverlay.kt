@@ -267,7 +267,9 @@ object NewOrderOverlay {
         // Accept Button
         btnAccept.setOnClickListener {
             Log.d(TAG, "Rider clicked ACCEPT for order $orderId")
-            dismissLocked(context)
+            // The activity is launched while the overlay window is still on screen:
+            // that visible window is what lets Android allow a background launch.
+            // The overlay is removed afterwards.
 
             // Wake screen if device is locked or display is off
             try {
@@ -319,6 +321,8 @@ object NewOrderOverlay {
             } else {
                 Log.e(TAG, "Launch intent for package ${context.packageName} was null")
             }
+
+            dismissLocked(context)
         }
 
         // Google Maps Static Preview

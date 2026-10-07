@@ -116,9 +116,7 @@ class _OrderHistoryScreenState extends ConsumerState<OrderHistoryScreen> {
                     Padding(
                       padding: const EdgeInsets.all(24),
                       child: Text(
-                        error is ApiException
-                            ? error.message
-                            : 'Failed to load orders.',
+                        apiErrorMessage(error, 'Failed to load orders.'),
                         textAlign: TextAlign.center,
                         style: TextStyle(color: theme.colorScheme.onSurface),
                       ),

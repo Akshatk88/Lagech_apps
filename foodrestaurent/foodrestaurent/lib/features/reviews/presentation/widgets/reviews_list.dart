@@ -26,7 +26,7 @@ class ReviewsList extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.all(24),
               child: Text(
-                error is ApiException ? error.message : 'Failed to load reviews.',
+                apiErrorMessage(error, 'Failed to load reviews.'),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -262,7 +262,7 @@ class _ReplySheetState extends ConsumerState<_ReplySheet> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _error = e is ApiException ? e.message : 'Could not save the reply. Please try again.';
+        _error = apiErrorMessage(e, 'Could not save the reply. Please try again.');
       });
     }
   }

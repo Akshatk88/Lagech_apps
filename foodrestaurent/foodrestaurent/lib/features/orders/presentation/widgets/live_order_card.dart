@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:food_user_application/config/theme/app_colors.dart';
+import 'package:food_user_application/core/utils/phone_launcher.dart';
 import 'package:food_user_application/features/orders/domain/order_model.dart';
 import 'package:food_user_application/features/orders/presentation/widgets/order_type_badges.dart';
 import 'package:food_user_application/features/orders/presentation/widgets/resend_rider_button.dart';
@@ -623,7 +624,13 @@ class _LiveOrderCardState extends ConsumerState<LiveOrderCard> {
         children: [
           Expanded(
             child: OutlinedButton(
-              onPressed: widget.order.hasRider ? () {} : null,
+              // Rider once assigned, otherwise the customer.
+              onPressed: () => callPhone(
+                context,
+                widget.order.hasRider && widget.order.riderPhone.isNotEmpty
+                    ? widget.order.riderPhone
+                    : widget.order.customerPhone,
+              ),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.primaryDark,
                 side: BorderSide(color: AppColors.primaryAlpha(0.35)),
@@ -631,19 +638,6 @@ class _LiveOrderCardState extends ConsumerState<LiveOrderCard> {
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
               child: const Icon(Icons.phone_outlined, size: 20),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: OutlinedButton(
-              onPressed: () {},
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.primaryDark,
-                side: BorderSide(color: AppColors.primaryAlpha(0.35)),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-              child: const Icon(Icons.chat_bubble_outline, size: 20),
             ),
           ),
           const SizedBox(width: 12),

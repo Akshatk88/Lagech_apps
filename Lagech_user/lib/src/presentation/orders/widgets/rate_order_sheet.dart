@@ -12,9 +12,16 @@ import '../viewmodels/orders_viewmodel.dart';
 /// Bottom sheet for rating a delivered order — food, delivery partner (if
 /// any), and individual items, submitted together in one PATCH call.
 class RateOrderSheet extends ConsumerStatefulWidget {
-  const RateOrderSheet({super.key, required this.order});
+  const RateOrderSheet({
+    super.key,
+    required this.order,
+    this.initialDeliveryRating = 0,
+  });
 
   final OrderModel order;
+
+  /// Stars the user already tapped on the previous screen.
+  final int initialDeliveryRating;
 
   @override
   ConsumerState<RateOrderSheet> createState() => _RateOrderSheetState();
@@ -22,7 +29,7 @@ class RateOrderSheet extends ConsumerStatefulWidget {
 
 class _RateOrderSheetState extends ConsumerState<RateOrderSheet> {
   int _restaurantRating = 0;
-  int _deliveryRating = 0;
+  late int _deliveryRating = widget.initialDeliveryRating;
   final _restaurantComment = TextEditingController();
   final _deliveryComment = TextEditingController();
   final Map<String, int> _itemRatings = {};

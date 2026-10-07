@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/error/result.dart';
+import '../../../core/services/app_messenger.dart';
 import '../../../core/services/fcm_service.dart';
 import '../../../core/services/new_order_overlay_bridge.dart';
 import '../../../core/services/socket_service.dart';
@@ -41,6 +43,13 @@ class IncomingOrderController extends Notifier<DeliveryOrder?> {
     final fcm = ref.read(fcmServiceProvider);
     _fcmReceivedSub = fcm.onNotificationReceived.listen(_onRealtimePayload);
     _fcmTapSub = fcm.onNotificationTap.listen(_onRealtimePayload);
+
+    // A notification tap that launched the app arrived before this controller
+    // existed to hear it; FcmService parked it.
+    final pendingTap = fcm.takePendingTap();
+    if (pendingTap != null) {
+      Future.microtask(() => _onRealtimePayload(pendingTap));
+    }
 
     ref.onDispose(() {
       _socketSub?.cancel();
@@ -148,9 +157,31 @@ class IncomingOrderController extends Notifier<DeliveryOrder?> {
     _recentlyDeclinedOrderTimes.remove(orderId);
     unawaited(NewOrderOverlayBridge.dismissOverlay());
     state = null;
-    await ref
+    final result = await ref
         .read(ordersControllerProvider.notifier)
         .acceptOrder(orderId);
+    reportAcceptResult(orderId, result);
+  }
+
+  /// Handles the outcome of an accept, whichever path made it (the in-app card
+  /// or the overlay hand-off).
+  ///
+  /// A refused accept — the cash limit is reached, another rider took the order,
+  /// the order limit is full — used to vanish without a word, and left the order
+  /// marked "resolved" for good. Every later offer for it was then skipped inside
+  /// the app while the native overlay (which knows nothing of this list) kept
+  /// appearing: an overlay and a notification, and an empty app behind them.
+  void reportAcceptResult(String orderId, Result<DeliveryOrder, AppError> result) {
+    result.when(
+      success: (_) {},
+      failure: (error) {
+        // Not answered after all: let a genuine re-offer show again, but not
+        // instantly — the same offer would only be refused the same way.
+        _resolvedOrderIds.remove(orderId);
+        _recentlyDeclinedOrderTimes[orderId] = DateTime.now();
+        showAppMessage(error.message);
+      },
+    );
   }
 
   Future<void> decline() async {

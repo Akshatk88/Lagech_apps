@@ -19,7 +19,7 @@ import 'package:food_user_application/features/business_settings/data/business_s
 import 'package:food_user_application/features/orders/presentation/widgets/cancel_accepted_order_button.dart';
 import 'package:food_user_application/features/restaurant_profile/presentation/controllers/restaurant_profile_controller.dart';
 import 'package:food_user_application/core/widgets/app_refresh_indicator.dart';
-import 'package:food_user_application/core/widgets/app_drawer.dart';
+import 'package:food_user_application/core/utils/phone_launcher.dart';
 
 class _TabConfig {
   final String label;
@@ -53,7 +53,6 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
       length: _tabs.length,
       child: Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        drawer: const AppDrawer(),
         appBar: _buildAppBar(context),
         body: Column(
           children: [
@@ -65,9 +64,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                   child: Padding(
                     padding: const EdgeInsets.all(24),
                     child: Text(
-                      error is ApiException
-                          ? error.message
-                          : 'Failed to load orders.',
+                      apiErrorMessage(error, 'Failed to load orders.'),
                       textAlign: TextAlign.center,
                     ),
                   ),
@@ -483,10 +480,13 @@ class _AvailabilityToggleState extends ConsumerState<_AvailabilityToggle> {
           .read(restaurantProfileControllerProvider.notifier)
           .updateAvailability(value);
     } catch (e) {
-      if (context.mounted) {
-        final message = e is ApiException
-            ? e.message
-            : 'Failed to update status. Please try again.';
+      if (mounted) {
+        // Dio wraps the server's message in a DioException; `e is ApiException`
+        // never matched it, so the real reason was always replaced by a generic.
+        final message = apiErrorMessage(
+          e,
+          'Failed to update status. Please try again.',
+        );
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(message), backgroundColor: AppColors.error),
         );
@@ -714,16 +714,20 @@ class _OrderCard extends ConsumerWidget {
                           ],
                         ),
                       ),
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade200),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(
-                          Icons.phone_outlined,
-                          size: 20,
-                          color: isDarkMode ? Colors.white70 : Colors.black87,
+                      InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () => callPhone(context, order.customerPhone),
+                        child: Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade200),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(
+                            Icons.phone_outlined,
+                            size: 20,
+                            color: isDarkMode ? Colors.white70 : Colors.black87,
+                          ),
                         ),
                       ),
                     ],
@@ -802,9 +806,7 @@ class _OrderCard extends ConsumerWidget {
             .updateStatus(order.id, newStatus);
       } catch (e) {
         if (context.mounted) {
-          final message = e is ApiException
-              ? e.message
-              : 'Failed to update order. Please try again.';
+          final message = apiErrorMessage(e, 'Failed to update order. Please try again.');
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(message), backgroundColor: AppColors.error),
           );

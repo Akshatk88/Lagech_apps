@@ -71,9 +71,12 @@ class _FoodItemFormSheetState extends ConsumerState<FoodItemFormSheet> {
   }
 
   void _removeVariant(int index) {
-    setState(() {
-      final v = _variants.removeAt(index);
-      for (final c in v.values) {
+    final removed = _variants.removeAt(index);
+    setState(() {});
+    // The removed row's fields are still on screen until this frame is built, so
+    // their controllers are disposed afterwards, not inside setState.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final c in removed.values) {
         c.dispose();
       }
     });
@@ -180,9 +183,7 @@ class _FoodItemFormSheetState extends ConsumerState<FoodItemFormSheet> {
       }
     } catch (e) {
       _showError(
-        e is ApiException
-            ? e.message
-            : 'Something went wrong. Please try again.',
+        apiErrorMessage(e, 'Something went wrong. Please try again.'),
       );
     } finally {
       if (mounted) setState(() => _isSaving = false);

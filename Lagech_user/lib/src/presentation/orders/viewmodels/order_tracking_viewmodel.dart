@@ -1,4 +1,5 @@
 import 'active_order_viewmodel.dart';
+import '../../../core/services/partner_contact_cache.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -196,7 +197,8 @@ class OrderTrackingViewModel extends Notifier<OrderTrackingState> {
     _teardown();
     _orderId = cleanId;
 
-    if (active != null && (cleanId.isEmpty || active.id == cleanId || active.orderNumber == cleanId || cleanId.contains(active.orderNumber))) {
+    if (active != null && (cleanId.isEmpty || active.id == cleanId || (active.orderNumber.isNotEmpty && (active.orderNumber == cleanId || cleanId.contains(active.orderNumber))))) {
+      PartnerContactCache.remember(active.id, active.deliveryPartner?.phone ?? '');
       state = OrderTrackingState(
         order: active,
         isLoading: false,
@@ -348,6 +350,7 @@ class OrderTrackingViewModel extends Notifier<OrderTrackingState> {
       if (order.id.isNotEmpty) {
         _orderId = order.id;
       }
+      PartnerContactCache.remember(order.id, order.deliveryPartner?.phone ?? '');
       state = state.copyWith(
         order: order,
         isLoading: false,
@@ -379,7 +382,13 @@ class OrderTrackingViewModel extends Notifier<OrderTrackingState> {
       }
     } catch (e, stack) {
       debugPrint('[TRACKING ERROR] $e\n$stack');
-      final fallbackOrder = state.order ?? ref.read(activeOrderViewModelProvider).activeOrder;
+      final candidate = state.order ?? ref.read(activeOrderViewModelProvider).activeOrder;
+      // Only fall back to an order that IS the one being tracked; showing some other
+      // order (e.g. an old delivered one) here sent new orders to the rating page.
+      final fallbackOrder = (candidate != null &&
+              (_orderId.isEmpty || candidate.id == _orderId))
+          ? candidate
+          : null;
       if (fallbackOrder != null) {
         state = state.copyWith(order: fallbackOrder, isLoading: false, clearError: true);
       } else {

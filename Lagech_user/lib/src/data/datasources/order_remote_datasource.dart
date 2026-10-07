@@ -299,9 +299,9 @@ class OrderRemoteDataSource {
         }
         return match;
       }
-      if (listResult.orders.isNotEmpty) {
-        return listResult.orders.first;
-      }
+      // Never hand back an unrelated order for a specific id: a just-placed order
+      // that is not in the list yet used to resolve to the newest OLD order (often
+      // a delivered one), which sent the customer to the rating screen.
     } catch (e) {
       if (kDebugMode) debugPrint('[GET ORDER MODEL LIST FALLBACK FAILED] $e');
     }

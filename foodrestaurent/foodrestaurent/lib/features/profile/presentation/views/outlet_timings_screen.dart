@@ -73,9 +73,7 @@ class _OutletTimingsScreenState extends ConsumerState<OutletTimingsScreen> {
     } catch (e) {
       setState(() {
         _isLoading = false;
-        _loadError = e is ApiException
-            ? e.message
-            : 'Failed to load outlet timings.';
+        _loadError = apiErrorMessage(e, 'Failed to load outlet timings.');
       });
     }
   }
@@ -100,9 +98,7 @@ class _OutletTimingsScreenState extends ConsumerState<OutletTimingsScreen> {
         ).showSnackBar(const SnackBar(content: Text('Outlet timings saved.')));
       }
     } catch (e) {
-      final message = e is ApiException
-          ? e.message
-          : 'Failed to save. Please try again.';
+      final message = apiErrorMessage(e, 'Failed to save. Please try again.');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(message), backgroundColor: AppColors.error),

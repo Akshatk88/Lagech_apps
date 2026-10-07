@@ -56,7 +56,7 @@ class NewOrderActionReceiver : BroadcastReceiver() {
                 val launch = context.packageManager
                     .getLaunchIntentForPackage(context.packageName)
                     ?.apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                         putExtra(NewOrderNotifier.EXTRA_ORDER_ID, orderId)
                     }
                 if (launch != null) context.startActivity(launch)

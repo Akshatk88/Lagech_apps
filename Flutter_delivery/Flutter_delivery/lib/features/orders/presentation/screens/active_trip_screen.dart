@@ -16,6 +16,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:food_user_application/core/error/result.dart';
 import 'package:food_user_application/core/services/haptic_service.dart';
 import 'package:food_user_application/core/services/location_service.dart';
+import 'package:food_user_application/core/utils/rider_marker.dart';
 import 'package:food_user_application/core/utils/map_launcher.dart';
 import 'package:food_user_application/core/constants/app_constants.dart';
 import 'package:food_user_application/core/constants/map_styles.dart';
@@ -201,19 +202,11 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
         );
   }
 
-  Future<Uint8List> _getBytesFromAsset(String path, int width) async {
-    final data = await rootBundle.load(path);
-    final codec = await ui.instantiateImageCodec(data.buffer.asUint8List(), targetWidth: width);
-    final frame = await codec.getNextFrame();
-    final bytes = await frame.image.toByteData(format: ui.ImageByteFormat.png);
-    return bytes!.buffer.asUint8List();
-  }
-
   Future<void> _loadMarkerIcon() async {
     try {
-      final bytes = await _getBytesFromAsset('assets/image/bike.png', 80);
+      final icon = await RiderMarker.load();
       if (!mounted) return;
-      setState(() => _bikeMarkerIcon = BitmapDescriptor.fromBytes(bytes));
+      setState(() => _bikeMarkerIcon = icon);
     } catch (_) {
       // Falls back to the native blue dot if the asset fails to decode.
     }
@@ -649,8 +642,7 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
   Widget _buildMap(DeliveryOrder order) {
     final authState = ref.watch(authControllerProvider);
     final isBike = authState is AuthAuthenticated &&
-        (authState.user.vehicleType?.toLowerCase() == 'bike' ||
-            authState.user.vehicleType?.toLowerCase() == 'two_wheeler');
+        RiderMarker.usesBike(authState.user.vehicleType);
     final useCustomMarker = isBike && _bikeMarkerIcon != null;
     final pos = _currentPos ?? ref.read(locationServiceProvider).lastPosition;
     final initialTarget = pos != null
@@ -686,8 +678,9 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
             position: LatLng(pos.latitude, pos.longitude),
             icon: _bikeMarkerIcon!,
             anchor: const Offset(0.5, 0.5),
-            rotation: _currentHeading,
+            rotation: RiderMarker.rotationFor(_currentHeading),
             flat: true,
+            zIndexInt: 2,
           ),
       },
       polylines: {
@@ -1164,7 +1157,7 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
                   child: OutlinedButton.icon(
                     onPressed: () {
                       if (destLat != null && destLng != null) {
-                        MapLauncher.launchGoogleMaps(destLat, destLng);
+                        MapLauncher.launchGoogleMaps(destLat, destLng, context: context);
                       } else {
                         _showSnack('Location not available');
                       }

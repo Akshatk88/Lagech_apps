@@ -44,6 +44,12 @@ class PushDeepLink {
       type == 'payment_success' ||
       type == 'delivery_accepted';
 
+  /// A chat message from the delivery partner. Tapping it opens that order's chat.
+  bool get isChat {
+    final t = type.toLowerCase();
+    return t == 'chat_message' || t.contains('chat') || t == 'new_message';
+  }
+
   factory PushDeepLink.fromData(Map<String, dynamic> data) {
     return PushDeepLink(
       type: (data['type'] ?? '').toString(),
@@ -235,7 +241,7 @@ Notification Type: ${link.type}''');
             try {
               final Map<String, dynamic> data = jsonDecode(response.payload!);
               final link = PushDeepLink.fromData(data);
-              if (link.isOrderEvent && link.trackableOrderId != null) {
+              if ((link.isOrderEvent || link.isChat) && link.trackableOrderId != null) {
                 _log('Opening Order Tracking screen.');
                 _onDeepLink?.call(link);
               }
@@ -470,7 +476,7 @@ Notification Type: ${link.type}''');
     if (data.isEmpty) return;
     final link = PushDeepLink.fromData(Map<String, dynamic>.from(data));
     _log('Notification clicked.');
-    if (link.isOrderEvent && link.trackableOrderId != null) {
+    if ((link.isOrderEvent || link.isChat) && link.trackableOrderId != null) {
       _log('Opening Order Tracking screen.');
       _onDeepLink?.call(link);
     }

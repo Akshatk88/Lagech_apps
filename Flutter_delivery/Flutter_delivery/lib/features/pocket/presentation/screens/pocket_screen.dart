@@ -8,6 +8,7 @@ import 'package:food_user_application/features/main/presentation/screens/main_sc
 import 'package:food_user_application/features/wallet/data/wallet_repository.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 import '../../../../core/services/sound_service.dart';
+import 'package:food_user_application/core/presentation/widgets/controller_scope.dart';
 
 class PocketScreen extends ConsumerStatefulWidget {
   const PocketScreen({super.key});
@@ -106,12 +107,15 @@ class _PocketScreenState extends ConsumerState<PocketScreen> {
   Future<void> _showWithdrawDialog() async {
     final pocketBalance = (_wallet?['pocketBalance'] as num?)?.toDouble() ?? 0;
     final minWithdraw = (_cashLimit?['deliveryWithdrawalLimit'] as num?)?.toDouble() ?? 0;
-    final controller = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
+    // The controller lives inside the dialog (ControllerScope) and is disposed
+    // with it. Disposing it here, right after `await showDialog`, ran while the
+    // dialog was still fading out and crashed the app with the red
+    // `_dependents.isEmpty` assertion screen.
     final amount = await showDialog<double>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => ControllerScope(builder: (ctx, controller) => AlertDialog(
         title: const Text('Withdraw to bank'),
         content: Form(
           key: formKey,
@@ -149,10 +153,9 @@ class _PocketScreenState extends ConsumerState<PocketScreen> {
             child: const Text('Withdraw'),
           ),
         ],
-      ),
+      )),
     );
 
-    controller.dispose();
     if (amount == null) return;
 
     setState(() => _withdrawing = true);
@@ -174,12 +177,11 @@ class _PocketScreenState extends ConsumerState<PocketScreen> {
       _showSnack('No cash in hand to deposit');
       return;
     }
-    final controller = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
     final amount = await showDialog<double>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => ControllerScope(builder: (ctx, controller) => AlertDialog(
         title: const Text('Deposit cash to company'),
         content: Form(
           key: formKey,
@@ -215,10 +217,9 @@ class _PocketScreenState extends ConsumerState<PocketScreen> {
             child: const Text('Deposit'),
           ),
         ],
-      ),
+      )),
     );
 
-    controller.dispose();
     if (amount == null) return;
     await _startDeposit(amount);
   }

@@ -59,9 +59,7 @@ class DeliverySettingsScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => Center(
           child: Text(
-            error is ApiException
-                ? error.message
-                : 'Failed to load delivery settings.',
+            apiErrorMessage(error, 'Failed to load delivery settings.'),
           ),
         ),
         data: (restaurant) => SingleChildScrollView(
@@ -203,9 +201,7 @@ class DeliverySettingsScreen extends ConsumerWidget {
                         .updateAvailability(value);
                   } catch (e) {
                     if (context.mounted) {
-                      final message = e is ApiException
-                          ? e.message
-                          : 'Failed to update. Please try again.';
+                      final message = apiErrorMessage(e, 'Failed to update. Please try again.');
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(message),

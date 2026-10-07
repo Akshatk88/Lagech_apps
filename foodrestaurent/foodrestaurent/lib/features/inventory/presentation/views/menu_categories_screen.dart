@@ -69,9 +69,7 @@ class MenuCategoriesScreen extends ConsumerWidget {
               Padding(
                 padding: const EdgeInsets.all(24),
                 child: Text(
-                  error is ApiException
-                      ? error.message
-                      : 'Failed to load categories.',
+                  apiErrorMessage(error, 'Failed to load categories.'),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -407,9 +405,7 @@ class MenuCategoriesScreen extends ConsumerWidget {
       await ref.read(categoryControllerProvider.notifier).delete(category.id);
     } catch (e) {
       if (context.mounted) {
-        final message = e is ApiException
-            ? e.message
-            : 'Failed to delete category.';
+        final message = apiErrorMessage(e, 'Failed to delete category.');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(message), backgroundColor: AppColors.error),
         );
@@ -533,9 +529,7 @@ class _CreateCategoryBottomSheetState
         );
       }
     } catch (e) {
-      final message = e is ApiException
-          ? e.message
-          : 'Something went wrong. Please try again.';
+      final message = apiErrorMessage(e, 'Something went wrong. Please try again.');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(message), backgroundColor: AppColors.error),

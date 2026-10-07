@@ -780,6 +780,34 @@ class OrderModel {
     return null;
   }
 
+  static double? _flatCoord(dynamic v) {
+    if (v is num) return v.toDouble();
+    return double.tryParse(v?.toString() ?? '');
+  }
+
+  /// Restaurant address as one line: `address` when it is a string, otherwise
+  /// the pieces the server stores (line1, area, city, state, pincode).
+  static String _restaurantAddressOf(Map restaurant) {
+    final raw = restaurant['address'];
+    if (raw is String && raw.trim().isNotEmpty) return raw.trim();
+    final src = raw is Map ? raw : restaurant;
+    final parts = <String>[];
+    for (final key in const [
+      'formattedAddress',
+      'addressLine1',
+      'street',
+      'area',
+      'city',
+      'state',
+      'pincode',
+    ]) {
+      final v = src[key]?.toString().trim() ?? '';
+      if (v.isNotEmpty && !parts.contains(v)) parts.add(v);
+      if (key == 'formattedAddress' && parts.isNotEmpty) break;
+    }
+    return parts.join(', ');
+  }
+
   factory OrderModel.fromApi(Map<String, dynamic> rawJson) {
     // Unwrap envelope if present: { order: ... }, { data: { order: ... } }, { data: ... }
     final Map<String, dynamic> json;
@@ -821,7 +849,10 @@ class OrderModel {
     final deliveryRatingMap = (ratings['deliveryPartner'] as Map?)
         ?.cast<String, dynamic>();
 
-    final partner = dispatch['deliveryPartnerId'] ?? json['deliveryPartner'];
+    final partner = dispatch['deliveryPartnerId'] ??
+        dispatch['deliveryPartner'] ??
+        json['deliveryPartner'] ??
+        json['deliveryPartnerId'];
     final currentLocation = (deliveryState['currentLocation'] as Map?)
         ?.cast<String, dynamic>();
 
@@ -860,7 +891,7 @@ class OrderModel {
                 ? restaurantMap['image'] as String
                 : (restCovers.isNotEmpty ? restCovers.first : null));
       }()),
-      restaurantAddress: (restaurantMap['address'] ?? '').toString(),
+      restaurantAddress: _restaurantAddressOf(restaurantMap),
       restaurantRating: _money(restaurantMap['rating']),
       restaurantIsOpen: restaurantMap['isOpen'] == true || restaurantMap['isOpen']?.toString().toLowerCase() == 'true',
       restaurantIsVerified: restaurantMap['isVerified'] == true || restaurantMap['isVerified']?.toString().toLowerCase() == 'true',
@@ -931,17 +962,19 @@ class OrderModel {
       walletAmount: _money(payment['walletAmount'] ?? json['walletAmount']),
       deliveryPartner: partner is Map
           ? DeliveryPartner.fromApi(partner.cast<String, dynamic>())
-          : null,
+          // Server sent only the rider's id (not populated): the order still has a
+          // rider, so the rating sheet must ask for a delivery rating.
+          : (partner != null && partner.toString().trim().isNotEmpty
+              ? DeliveryPartner(
+                  id: partner.toString(),
+                  name: '',
+                  phone: '',
+                )
+              : null),
       riderLat: currentLocation?['lat'] != null ? _money(currentLocation!['lat']) : null,
       riderLng: currentLocation?['lng'] != null ? _money(currentLocation!['lng']) : null,
-      restaurantLat: _coord(
-        (restaurantMap['location'] as Map?)?['coordinates'],
-        1,
-      ),
-      restaurantLng: _coord(
-        (restaurantMap['location'] as Map?)?['coordinates'],
-        0,
-      ),
+      restaurantLat: _coord((restaurantMap['location'] as Map?)?['coordinates'], 1) ?? _flatCoord(restaurantMap['latitude'] ?? restaurantMap['lat']),
+      restaurantLng: _coord((restaurantMap['location'] as Map?)?['coordinates'], 0) ?? _flatCoord(restaurantMap['longitude'] ?? restaurantMap['lng']),
       dropLat: _coord((address['location'] as Map?)?['coordinates'], 1),
       dropLng: _coord((address['location'] as Map?)?['coordinates'], 0),
       roadDistanceKm: pricing['roadDistanceKm'] != null ? _money(pricing['roadDistanceKm']) : null,

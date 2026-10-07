@@ -44,9 +44,12 @@ class _FeedbackScreenState extends ConsumerState<FeedbackScreen> {
       }
     } catch (e) {
       if (mounted) {
-        final message = e is ApiException
-            ? e.message
-            : 'Failed to submit feedback. Please try again.';
+        // Dio wraps the server's message inside a DioException; a plain
+        // `e is ApiException` never matched, so the real reason was lost.
+        final message = apiErrorMessage(
+          e,
+          'Failed to submit feedback. Please try again.',
+        );
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(message), backgroundColor: AppColors.error),
         );

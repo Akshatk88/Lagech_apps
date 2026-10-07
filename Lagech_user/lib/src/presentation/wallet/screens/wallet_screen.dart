@@ -13,6 +13,7 @@ import '../../navigation/route_names.dart';
 import '../../../di/settings_providers.dart';
 import '../viewmodels/wallet_state.dart';
 import '../viewmodels/wallet_viewmodel.dart';
+import '../../common_widgets/controller_scope.dart';
 
 class WalletScreen extends ConsumerStatefulWidget {
   const WalletScreen({super.key});
@@ -496,10 +497,14 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     WalletViewModel viewModel,
     bool isDark,
   ) async {
-    final controller = TextEditingController(text: '${loyalty.points}');
+    // The controller is owned by the dialog and disposed with it. Disposing it
+    // right after `await showDialog` ran while the dialog was still fading out,
+    // and crashed with the red `_dependents.isEmpty` assertion screen.
     final points = await showDialog<int>(
       context: context,
-      builder: (dialogCtx) {
+      builder: (dialogCtx) => ControllerScope(
+        text: '${loyalty.points}',
+        builder: (_, controller) {
         String? error;
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
@@ -568,9 +573,9 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
             );
           },
         );
-      },
+        },
+      ),
     );
-    controller.dispose();
     if (points == null) return;
 
     final requestId = const Uuid().v4();

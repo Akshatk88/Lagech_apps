@@ -118,9 +118,7 @@ class _AddonFormSheetState extends ConsumerState<AddonFormSheet> {
       }
     } catch (e) {
       _showError(
-        e is ApiException
-            ? e.message
-            : 'Something went wrong. Please try again.',
+        apiErrorMessage(e, 'Something went wrong. Please try again.'),
       );
     } finally {
       if (mounted) setState(() => _isSaving = false);

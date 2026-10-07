@@ -77,10 +77,9 @@ class _SupportScreenState extends ConsumerState<SupportScreen> {
         );
       }
     } catch (e) {
+      if (!mounted) return;
       _showError(
-        e is ApiException
-            ? e.message
-            : 'Failed to submit ticket. Please try again.',
+        apiErrorMessage(e, 'Failed to submit ticket. Please try again.'),
       );
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
@@ -154,10 +153,17 @@ class _SupportScreenState extends ConsumerState<SupportScreen> {
                   child: CircularProgressIndicator(),
                 ),
               ),
-              error: (error, _) => Text(
-                error is ApiException
-                    ? error.message
-                    : 'Failed to load tickets.',
+              error: (error, _) => Row(
+                children: [
+                  Expanded(
+                    child: Text(apiErrorMessage(error, 'Failed to load tickets.')),
+                  ),
+                  TextButton(
+                    onPressed: () =>
+                        ref.read(supportControllerProvider.notifier).refresh(),
+                    child: const Text('Retry'),
+                  ),
+                ],
               ),
               data: (tickets) => _buildStatsRow(context, tickets),
             ),
@@ -253,7 +259,7 @@ class _SupportScreenState extends ConsumerState<SupportScreen> {
     List<SupportTicketModel> tickets,
   ) {
     final open = tickets.where((t) => t.status == 'open').length;
-    final inProgress = tickets.where((t) => t.status == 'in-progress').length;
+    final inProgress = tickets.where((t) => t.status == 'in_progress').length;
     final resolved = tickets.where((t) => t.status == 'resolved').length;
 
     return Row(
@@ -339,7 +345,7 @@ class _SupportScreenState extends ConsumerState<SupportScreen> {
   Widget _buildTicketCard(BuildContext context, SupportTicketModel ticket) {
     final statusColor = switch (ticket.status) {
       'resolved' => Colors.green,
-      'in-progress' => AppColors.primaryDark,
+      'in_progress' => AppColors.primaryDark,
       _ => AppColors.primaryLight,
     };
 
@@ -376,7 +382,7 @@ class _SupportScreenState extends ConsumerState<SupportScreen> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
-                  ticket.status,
+                  ticket.statusLabel,
                   style: TextStyle(
                     color: statusColor,
                     fontSize: 11,
@@ -396,9 +402,76 @@ class _SupportScreenState extends ConsumerState<SupportScreen> {
               ).colorScheme.onSurface.withValues(alpha: 0.6),
             ),
           ),
+          // The admin's answer, once there is one.
+          if (ticket.hasAdminResponse) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.primaryTint,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.primaryTintStrong),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.support_agent_rounded,
+                        size: 16,
+                        color: AppColors.primaryDark,
+                      ),
+                      const SizedBox(width: 6),
+                      const Text(
+                        'Reply from support',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primaryDark,
+                        ),
+                      ),
+                      if (ticket.respondedAt != null) ...[
+                        const Spacer(),
+                        Text(
+                          _formatReplyDate(ticket.respondedAt!),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withValues(alpha: 0.55),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    ticket.adminResponse,
+                    style: TextStyle(
+                      fontSize: 13,
+                      height: 1.35,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  String _formatReplyDate(DateTime when) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    final d = when.toLocal();
+    return '${d.day} ${months[d.month - 1]}';
   }
 
   Widget _buildDropdown(

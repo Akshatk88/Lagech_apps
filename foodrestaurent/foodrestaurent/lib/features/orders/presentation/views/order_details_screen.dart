@@ -108,9 +108,7 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      final message = e is ApiException
-          ? e.message
-          : 'Failed to update order. Please try again.';
+      final message = apiErrorMessage(e, 'Failed to update order. Please try again.');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message), backgroundColor: AppColors.error),
       );
@@ -178,9 +176,7 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      _error is ApiException
-                          ? (_error as ApiException).message
-                          : 'Failed to load order.',
+                      apiErrorMessage(_error!, 'Failed to load order.'),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 16),

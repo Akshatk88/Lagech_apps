@@ -1,5 +1,7 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:food_user_application/config/constants/app_constants.dart';
 import 'package:food_user_application/features/auth/domain/restaurant_model.dart';
 import 'package:food_user_application/features/restaurant_profile/data/restaurant_repository.dart';
 
@@ -58,11 +60,32 @@ class RestaurantProfileController extends AsyncNotifier<RestaurantModel> {
     state = AsyncValue.data(updated);
   }
 
-  /// Resets approval status to `pending` server-side — caller must warn the
-  /// owner before invoking this on an already-approved restaurant.
+  /// Uploads a new logo and shows it straight away.
+  ///
+  /// Two things used to make a successful change look like it had not happened:
+  ///  - Every logo is a `CachedNetworkImage` keyed by its URL. If the server
+  ///    stores the new file at the same URL the old picture stayed cached on
+  ///    screen, so both URLs are evicted before the profile is re-read.
+  ///  - Re-reading went through [refresh], which flips the state to `loading`
+  ///    first — a full-screen spinner on Outlet info and a blank logo on
+  ///    Orders/Explore. The profile is now swapped in place instead.
   Future<void> uploadProfileImage(XFile file) async {
-    await ref.read(restaurantRepositoryProvider).uploadProfileImage(file);
-    await refresh();
+    final repo = ref.read(restaurantRepositoryProvider);
+    final oldUrl = state.value?.profileImage ?? '';
+    final uploadedUrl = AppConstants.resolveMediaUrl(
+      await repo.uploadProfileImage(file),
+    );
+
+    for (final url in {oldUrl, uploadedUrl}) {
+      if (url.isEmpty) continue;
+      try {
+        await CachedNetworkImage.evictFromCache(url);
+      } catch (_) {
+        // Worst case the old picture lingers until the cache entry expires.
+      }
+    }
+
+    state = AsyncValue.data(await repo.getCurrent());
   }
 }
 

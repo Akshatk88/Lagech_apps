@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:food_user_application/core/error/result.dart';
@@ -33,6 +32,7 @@ import 'package:food_user_application/features/settings/application/business_set
 import 'package:food_user_application/features/support/data/support_repository.dart';
 import 'package:food_user_application/features/wallet/data/wallet_repository.dart';
 import 'package:food_user_application/core/services/fcm_service.dart';
+import 'package:food_user_application/core/utils/rider_marker.dart';
 import 'package:food_user_application/features/refer_earn/application/referral_controller.dart';
 import 'package:food_user_application/features/chat/presentation/screens/chat_screen.dart';
 import 'package:food_user_application/features/permissions/presentation/permission_setup_screen.dart';
@@ -68,6 +68,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
   String? _routeKey;
   Timer? _routeRefreshTimer;
   StreamSubscription<Map<String, dynamic>>? _fcmReceivedSub;
+  StreamSubscription<void>? _chatTapSub;
   int _unreadNotificationCount = 0;
 
   @override
@@ -158,6 +159,19 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
         _loadEarnings(); // Refresh wallet/earnings
       }
     });
+
+    // Tapping a chat notification: open that order's chat. The tapped order id is
+    // parked in FcmService, so a tap that launched the app from cold (before this
+    // screen existed) is picked up here too, on the first frame.
+    _chatTapSub = fcmService.onChatTap.listen((_) => _openPendingChat());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _openPendingChat());
+  }
+
+  void _openPendingChat() {
+    if (!mounted) return;
+    final orderId = ref.read(fcmServiceProvider).takePendingChatOrderId();
+    if (orderId == null) return;
+    context.push('/chat/$orderId');
   }
 
   void _showReferralBonusCelebration(String amount) {
@@ -198,17 +212,9 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
     );
   }
 
-  Future<Uint8List> _getBytesFromAsset(String path, int width) async {
-    ByteData data = await rootBundle.load(path);
-    ui.Codec codec = await ui.instantiateImageCodec(data.buffer.asUint8List(), targetWidth: width);
-    ui.FrameInfo fi = await codec.getNextFrame();
-    return (await fi.image.toByteData(format: ui.ImageByteFormat.png))!.buffer.asUint8List();
-  }
-
   Future<void> _loadMarkerIcon() async {
     try {
-      final Uint8List markerIcon = await _getBytesFromAsset('assets/image/bike.png', 80);
-      _bikeMarkerIcon = BitmapDescriptor.fromBytes(markerIcon);
+      _bikeMarkerIcon = await RiderMarker.load();
       if (mounted) setState(() {});
     } catch (e) {
       debugPrint('Failed to load map marker: $e');
@@ -249,6 +255,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
     _routeRefreshTimer?.cancel();
     _positionSub?.cancel();
     _fcmReceivedSub?.cancel();
+    _chatTapSub?.cancel();
     super.dispose();
   }
 
@@ -487,7 +494,17 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
           ),
           Align(
             alignment: Alignment.topCenter,
-            child: Container(
+            // The panel may grow with its content but stops above the floating
+            // bottom nav bar; past that it scrolls inside. Before, it ran down
+            // behind the nav bar, so with two or more active orders the last
+            // card's buttons could never be scrolled out from under it.
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(context).height -
+                    MediaQuery.paddingOf(context).bottom -
+                    100.h,
+              ),
+              child: Container(
               decoration: BoxDecoration(
                 color: isDarkMode ? const Color(0xE6161925) : Colors.white.withValues(alpha: 0.92),
                 borderRadius: BorderRadius.only(
@@ -527,6 +544,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                   ),
                 ),
               ),
+            ),
             ),
           ),
           if (_showReferEarn) _buildReferEarnFab(),
@@ -1131,9 +1149,9 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                 GestureDetector(
                   onTap: () {
                     if (navigateToRestaurant && order.restaurant.location != null) {
-                      MapLauncher.launchGoogleMaps(order.restaurant.location!.lat, order.restaurant.location!.lng);
+                      MapLauncher.launchGoogleMaps(order.restaurant.location!.lat, order.restaurant.location!.lng, context: context);
                     } else if (!navigateToRestaurant && order.deliveryAddress.location != null) {
-                      MapLauncher.launchGoogleMaps(order.deliveryAddress.location!.lat, order.deliveryAddress.location!.lng);
+                      MapLauncher.launchGoogleMaps(order.deliveryAddress.location!.lat, order.deliveryAddress.location!.lng, context: context);
                     } else {
                       _showSnack('Location not available');
                     }
@@ -1325,8 +1343,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
 
     final authState = ref.read(authControllerProvider);
     final bool isBike = authState is AuthAuthenticated &&
-                        (authState.user.vehicleType?.toLowerCase() == 'bike' ||
-                         authState.user.vehicleType?.toLowerCase() == 'two_wheeler');
+        RiderMarker.usesBike(authState.user.vehicleType);
     final bool useCustomMarker = isBike && _bikeMarkerIcon != null;
 
     return SizedBox.expand(
@@ -1345,7 +1362,9 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                   position: LatLng(pos.latitude, pos.longitude),
                   icon: _bikeMarkerIcon!,
                   anchor: const Offset(0.5, 0.5),
-                  rotation: pos.heading,
+                  rotation: RiderMarker.rotationFor(pos.heading),
+                  flat: true,
+                  zIndexInt: 2,
                 ),
               if (_routeDestination != null)
                 Marker(
@@ -1421,7 +1440,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                         final lat = navigateToRestaurant ? order.restaurant.location?.lat : order.deliveryAddress.location?.lat;
                         final lng = navigateToRestaurant ? order.restaurant.location?.lng : order.deliveryAddress.location?.lng;
                         if (lat != null && lng != null) {
-                          MapLauncher.launchGoogleMaps(lat, lng);
+                          MapLauncher.launchGoogleMaps(lat, lng, context: context);
                           return;
                         }
                       }

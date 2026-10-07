@@ -149,18 +149,22 @@ class AuthController extends Notifier<AuthState> {
     state = const AuthLoggedOut();
   }
 
+  /// Deletes the account. Throws if the server refuses.
+  ///
+  /// The user is signed out ONLY after the server confirms the delete. This used
+  /// to sign out in a `finally`, so a refused delete (e.g. the restaurant has
+  /// order history, or the network dropped) still wiped the session: the account
+  /// survived, the user believed it was gone, and the error never reached the
+  /// screen. The push token is also left alone until then — removing it first
+  /// would silence order alerts for an account that is in fact still live.
   Future<void> deleteAccount() async {
+    await _api.deleteAccount();
+
+    // Deleted: the server dropped the account's tokens with it.
     final tokenStorage = ref.read(tokenStorageProvider);
-    try {
-      await ref.read(fcmServiceProvider).removeTokenFromServer();
-    } catch (_) {}
-    try {
-      await _api.deleteAccount();
-    } finally {
-      await tokenStorage.clear();
-      resetSessionScopedProviders(ref);
-      state = const AuthLoggedOut();
-    }
+    await tokenStorage.clear();
+    resetSessionScopedProviders(ref);
+    state = const AuthLoggedOut();
   }
 }
 

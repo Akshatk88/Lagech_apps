@@ -8,13 +8,14 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/utils/haptics.dart';
-import '../../../core/services/review_service.dart';
 import '../../../data/models/order_model.dart';
 import '../../branding/app_colors.dart';
 import '../../common_widgets/app_refresh_indicator.dart';
 import '../../common_widgets/app_snackbar.dart';
 import '../../navigation/route_names.dart';
+import '../../../core/services/partner_contact_cache.dart';
 import '../viewmodels/orders_viewmodel.dart';
+import '../widgets/rate_order_sheet.dart';
 import '../widgets/previous_conversations_card.dart';
 
 class OrderDeliveredScreen extends ConsumerStatefulWidget {
@@ -28,7 +29,7 @@ class OrderDeliveredScreen extends ConsumerStatefulWidget {
 
 class _OrderDeliveredScreenState extends ConsumerState<OrderDeliveredScreen> {
   int _deliveryRating = 0;
-  bool _isSubmittingRating = false;
+  final bool _isSubmittingRating = false;
 
   @override
   void initState() {
@@ -40,35 +41,57 @@ class _OrderDeliveredScreenState extends ConsumerState<OrderDeliveredScreen> {
 
   Future<void> _submitRating(int rating, OrderModel order) async {
     if (_isSubmittingRating || rating == 0) return;
-    setState(() {
-      _deliveryRating = rating;
-      _isSubmittingRating = true;
-    });
-
-    Haptics.medium();
-    final err = await ref.read(ordersViewModelProvider.notifier).submitRating(
-          order.id,
-          restaurantRating: 5,
-          deliveryPartnerRating: rating,
-        );
-
-    if (mounted) {
-      setState(() => _isSubmittingRating = false);
-      if (err == null) {
-        AppSnackbar.success(context, 'Thank you for rating your delivery partner!');
-        ReviewService.requestReviewIfQualified(rating);
-      } else {
-        AppSnackbar.error(context, err);
-      }
+    // Opens the full rating sheet instead of silently submitting a fabricated
+    // 5-star restaurant rating.
+    Haptics.light();
+    if (order.hasRated) {
+      AppSnackbar.success(context, 'You have already rated this order.');
+      return;
+    }
+    setState(() => _deliveryRating = rating);
+    // The sheet handles the keyboard inset itself.
+    final done = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => RateOrderSheet(
+        order: order,
+        initialDeliveryRating: rating,
+      ),
+    );
+    if (!mounted) return;
+    if (done == true) {
+      ref.invalidate(orderDetailProvider(widget.orderId));
+      AppSnackbar.success(context, 'Thank you for your feedback!');
+    } else {
+      setState(() => _deliveryRating = 0);
     }
   }
 
-  Future<void> _dialPhone(String phone) async {
-    if (phone.isEmpty) return;
+  Future<void> _contactPartner(OrderModel order) async {
     Haptics.light();
-    final uri = Uri.parse('tel:$phone');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
+    var phone = order.deliveryPartner?.phone.trim() ?? '';
+    // Delivered orders come back without the rider's number; use the one saved
+    // while the order was being tracked.
+    if (phone.isEmpty) phone = await PartnerContactCache.phoneFor(order.id);
+    if (!mounted) return;
+    if (phone.isEmpty) {
+      AppSnackbar.error(
+        context,
+        'Delivery partner phone number is not available for this order.',
+      );
+      return;
+    }
+    var ok = false;
+    try {
+      ok = await launchUrl(
+        Uri(scheme: 'tel', path: phone.trim()),
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (_) {}
+    if (!ok && mounted) {
+      AppSnackbar.error(context, 'Could not open the phone dialer.');
     }
   }
 
@@ -155,7 +178,7 @@ class _OrderDeliveredScreenState extends ConsumerState<OrderDeliveredScreen> {
                               partnerName: partnerName,
                               deliveryRating: _deliveryRating > 0 ? _deliveryRating : order.deliveryRating.toInt(),
                               onRate: (rating) => _submitRating(rating, order),
-                              onCall: () => _dialPhone(order.deliveryPartner?.phone ?? ''),
+                              onCall: () => _contactPartner(order),
                             ),
                           ),
                         ),
@@ -727,6 +750,34 @@ class _DeliverySafetyCard extends StatelessWidget {
             ),
             onPressed: () {
               Haptics.light();
+              showModalBottomSheet<void>(
+                context: context,
+                showDragHandle: true,
+                builder: (ctx) => SafeArea(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(20.w, 4.h, 20.w, 20.h),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Delivery safety',
+                          style: TextStyle(
+                            fontSize: 17.sp,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        SizedBox(height: 10.h),
+                        const Text(
+                          'Your delivery partner follows hygiene and contactless '
+                          'practices. If anything felt unsafe, contact the delivery '
+                          'partner or reach support from the order help section.',
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
             },
             child: Text(
               'Know more',
@@ -819,7 +870,7 @@ class _ReferralBannerCard extends StatelessWidget {
                   SizedBox(width: 3.w),
                   Icon(
                     Icons.chevron_right_rounded,
-                    color: const Color(0xFF007A3D),
+                    color: AppColors.primary,
                     size: 18.sp,
                   ),
                 ],

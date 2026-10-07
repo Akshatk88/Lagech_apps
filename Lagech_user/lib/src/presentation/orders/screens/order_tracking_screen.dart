@@ -629,8 +629,11 @@ class _MapSection extends StatelessWidget {
                                   children: [
                                     Image.asset(
                                       'assets/images/bike.png',
+                                      // The picture is a tall 2:3 top-down bike;
+                                      // contain keeps it from being squashed.
                                       width: 32,
-                                      height: 32,
+                                      height: 40,
+                                      fit: BoxFit.contain,
                                       errorBuilder: (context, error, stackTrace) => Icon(
                                         Icons.two_wheeler_rounded,
                                         color: AppColors.primary,
@@ -643,7 +646,7 @@ class _MapSection extends StatelessWidget {
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            liveOrder.deliveryPartner?.name ?? 'Delivery Partner',
+                                            (liveOrder.deliveryPartner?.name.isNotEmpty == true ? liveOrder.deliveryPartner!.name : 'Delivery Partner'),
                                             style: TextStyle(
                                               fontSize: 14,
                                               fontWeight: FontWeight.bold,

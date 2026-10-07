@@ -85,9 +85,7 @@ class _BankDetailsScreenState extends ConsumerState<BankDetailsScreen> {
         context.pop();
       }
     } catch (e) {
-      final message = e is ApiException
-          ? e.message
-          : 'Something went wrong. Please try again.';
+      final message = apiErrorMessage(e, 'Something went wrong. Please try again.');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(message), backgroundColor: AppColors.error),
@@ -130,9 +128,7 @@ class _BankDetailsScreenState extends ConsumerState<BankDetailsScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => Center(
           child: Text(
-            error is ApiException
-                ? error.message
-                : 'Failed to load bank details.',
+            apiErrorMessage(error, 'Failed to load bank details.'),
           ),
         ),
         data: (restaurant) {

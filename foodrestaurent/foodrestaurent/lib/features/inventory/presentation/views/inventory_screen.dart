@@ -11,7 +11,6 @@ import 'package:food_user_application/features/menu_items/presentation/controlle
 import 'package:food_user_application/features/menu_items/presentation/widgets/food_item_form_sheet.dart';
 import 'package:food_user_application/features/restaurant_profile/presentation/controllers/restaurant_profile_controller.dart';
 import 'package:food_user_application/core/widgets/app_refresh_indicator.dart';
-import 'package:food_user_application/core/widgets/app_drawer.dart';
 
 enum _StockFilter { all, inStock, outOfStock }
 
@@ -90,7 +89,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
     return Scaffold(
       resizeToAvoidBottomInset: false,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      drawer: const AppDrawer(),
       appBar: _buildAppBar(context),
       floatingActionButton: Padding(
         // Lifts the FAB clear of the app's floating bottom nav bar, which
@@ -466,7 +464,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
       error: (error, _) => Padding(
         padding: const EdgeInsets.all(24),
         child: Text(
-          error is ApiException ? error.message : 'Failed to load menu.',
+          apiErrorMessage(error, 'Failed to load menu.'),
           textAlign: TextAlign.center,
         ),
       ),
@@ -741,7 +739,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
       error: (error, _) => Padding(
         padding: const EdgeInsets.all(24),
         child: Text(
-          error is ApiException ? error.message : 'Failed to load add-ons.',
+          apiErrorMessage(error, 'Failed to load add-ons.'),
           textAlign: TextAlign.center,
         ),
       ),
@@ -934,9 +932,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
   }
 
   void _showError(BuildContext context, Object error) {
-    final message = error is ApiException
-        ? error.message
-        : 'Something went wrong. Please try again.';
+    final message = apiErrorMessage(error, 'Something went wrong. Please try again.');
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: AppColors.error),
     );

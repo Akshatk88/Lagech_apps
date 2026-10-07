@@ -21,6 +21,7 @@ import 'package:food_user_application/features/orders/presentation/screens/activ
 import 'package:food_user_application/features/orders/presentation/screens/incoming_order_screen.dart';
 import 'package:food_user_application/core/presentation/widgets/no_network_overlay.dart';
 import 'package:food_user_application/core/services/network_controller.dart';
+import 'package:food_user_application/core/services/app_messenger.dart';
 import 'package:food_user_application/features/orders/presentation/screens/rate_customer_screen.dart';
 import 'package:food_user_application/features/settings/application/business_settings_controller.dart';
 
@@ -101,7 +102,13 @@ class _FoodDeliveryAppState extends ConsumerState<FoodDeliveryApp>
     final incoming = ref.read(incomingOrderControllerProvider.notifier);
     incoming.markResolved(orderId);
     ref.read(activeTripVisibilityControllerProvider.notifier).show();
-    await ref.read(ordersControllerProvider.notifier).acceptOrder(orderId);
+    final result =
+        await ref.read(ordersControllerProvider.notifier).acceptOrder(orderId);
+    // A refused accept (cash limit, order limit, order already taken) used to
+    // vanish silently and leave the order marked resolved, so the rider opened
+    // the app to nothing at all. This tells them why and lets the order surface
+    // again on a later re-offer.
+    incoming.reportAcceptResult(orderId, result);
   }
 
   /// Consumes launch order handoff from the native overlay or fallback notification,
@@ -170,6 +177,7 @@ class _FoodDeliveryAppState extends ConsumerState<FoodDeliveryApp>
       builder: (context, child) {
         return MaterialApp.router(
           title: 'Lagech Delivery',
+          scaffoldMessengerKey: appMessengerKey,
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,

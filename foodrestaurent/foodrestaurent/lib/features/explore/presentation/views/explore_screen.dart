@@ -8,7 +8,9 @@ import 'package:food_user_application/core/network/api_exception.dart';
 import 'package:food_user_application/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:food_user_application/features/restaurant_profile/presentation/controllers/restaurant_profile_controller.dart';
 import 'package:food_user_application/config/theme/theme_mode_provider.dart';
-import 'package:food_user_application/core/widgets/app_drawer.dart';
+
+/// True while an account-deletion request is in flight (see the delete card).
+bool _deletingAccount = false;
 
 class ExploreScreen extends ConsumerWidget {
   const ExploreScreen({super.key});
@@ -20,7 +22,6 @@ class ExploreScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
-      drawer: const AppDrawer(),
       appBar: _buildAppBar(context),
       body: Stack(
         children: [
@@ -130,6 +131,21 @@ class ExploreScreen extends ConsumerWidget {
                       iconColor: AppColors.primary,
                       width: _getCardWidth(context, 3),
                       onTap: () => _showAppearanceSheet(context),
+                    ),
+
+                    // Delivery on/off and the weekly schedule. This used to be
+                    // reachable from the side drawer's "Profile Settings".
+                    _buildVerticalCard(
+                      context: context,
+                      title: 'Restaurant status',
+                      subtitle: 'Delivery on/off &\nweekly schedule',
+                      icon: Icons.storefront_rounded,
+                      iconBgColor: isDark
+                          ? AppColors.primaryTintDarkStrong
+                          : AppColors.primaryTint,
+                      iconColor: AppColors.primary,
+                      width: _getCardWidth(context, 3),
+                      onTap: () => context.push('/restaurant-status'),
                     ),
                   ],
                 ),
@@ -1024,7 +1040,7 @@ class ExploreScreen extends ConsumerWidget {
                   child: const Text(
                     'Delete Account',
                     style: TextStyle(
-                      color: AppColors.primary,
+                      color: AppColors.errorDeep,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -1033,14 +1049,17 @@ class ExploreScreen extends ConsumerWidget {
             ),
           );
 
-          if (confirmed == true && context.mounted) {
+          // A second tap while the request is running would send it twice.
+          if (confirmed == true && context.mounted && !_deletingAccount) {
+            _deletingAccount = true;
             try {
               await ref.read(authControllerProvider.notifier).deleteAccount();
             } catch (e) {
               if (context.mounted) {
-                final message = e is ApiException
-                    ? e.message
-                    : 'Failed to delete account. Please try again.';
+                final message = apiErrorMessage(
+                  e,
+                  'Failed to delete account. Please try again.',
+                );
 
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -1049,6 +1068,8 @@ class ExploreScreen extends ConsumerWidget {
                   ),
                 );
               }
+            } finally {
+              _deletingAccount = false;
             }
           }
         },

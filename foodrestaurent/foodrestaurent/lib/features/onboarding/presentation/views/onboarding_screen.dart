@@ -449,7 +449,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       child: ElevatedButton.icon(
         onPressed: () async {
           await ref.read(tokenStorageProvider).setHasSeenOnboarding();
-          if (context.mounted) context.go('/login');
+          if (!mounted) return;
+          context.go('/login');
         },
         label: Text(
           'Get Started',

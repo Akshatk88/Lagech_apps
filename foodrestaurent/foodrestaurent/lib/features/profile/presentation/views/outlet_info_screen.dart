@@ -93,9 +93,7 @@ class OutletInfoScreen extends ConsumerWidget {
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Text(
-              error is ApiException
-                  ? error.message
-                  : 'Failed to load outlet info.',
+              apiErrorMessage(error, 'Failed to load outlet info.'),
               textAlign: TextAlign.center,
               style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
             ),
@@ -556,37 +554,9 @@ class OutletInfoScreen extends ConsumerWidget {
   ) {
     return GestureDetector(
       onTap: () async {
-        if (restaurant.isApproved) {
-          final confirmed = await showDialog<bool>(
-            context: context,
-            builder: (dialogContext) {
-              return AlertDialog(
-                title: const Text('Change restaurant logo?'),
-                content: const Text(
-                  'Your restaurant is currently approved. '
-                  'Changing the logo will send your profile '
-                  'back for admin review, and ordering will '
-                  'pause until re-approved.',
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(dialogContext, false),
-                    child: const Text('Cancel'),
-                  ),
-                  TextButton(
-                    onPressed: () => Navigator.pop(dialogContext, true),
-                    child: const Text('Continue'),
-                  ),
-                ],
-              );
-            },
-          );
-
-          if (confirmed != true) {
-            return;
-          }
-        }
-
+        // A logo change applies directly: no admin review and no pause in
+        // ordering, so there is nothing to warn about any more. (The server must
+        // not reset the approval status on a logo upload.)
         final file = await pickImageWithSourceSheet(context);
 
         if (file == null) {
@@ -677,6 +647,8 @@ class OutletInfoScreen extends ConsumerWidget {
           return;
         }
 
+        // The sheet above can outlive this screen; do not use its context after that.
+        if (!context.mounted) return;
         await _saveProfile(context, ref, result);
       },
 
@@ -735,6 +707,8 @@ class OutletInfoScreen extends ConsumerWidget {
           return;
         }
 
+        // The sheet above can outlive this screen; do not use its context after that.
+        if (!context.mounted) return;
         await _saveProfile(context, ref, result);
       },
 
@@ -953,6 +927,8 @@ class OutletInfoScreen extends ConsumerWidget {
           return;
         }
 
+        // The sheet above can outlive this screen; do not use its context after that.
+        if (!context.mounted) return;
         await _saveProfile(context, ref, result);
       },
 
@@ -1040,9 +1016,7 @@ class OutletInfoScreen extends ConsumerWidget {
   // ===========================================================================
 
   void _showError(BuildContext context, Object error) {
-    final message = error is ApiException
-        ? error.message
-        : 'Something went wrong. Please try again.';
+    final message = apiErrorMessage(error, 'Something went wrong. Please try again.');
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -1752,9 +1726,7 @@ class _ComplianceEditSheetState extends ConsumerState<_ComplianceEditSheet> {
         const SnackBar(content: Text('Compliance details saved.')),
       );
     } catch (e) {
-      final message = e is ApiException
-          ? e.message
-          : 'Something went wrong. Please try again.';
+      final message = apiErrorMessage(e, 'Something went wrong. Please try again.');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

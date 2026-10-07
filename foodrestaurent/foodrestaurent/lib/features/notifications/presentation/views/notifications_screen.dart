@@ -135,9 +135,7 @@ class NotificationsScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    final message = error is ApiException
-        ? error.message
-        : 'Failed to load notifications.';
+    final message = apiErrorMessage(error, 'Failed to load notifications.');
 
     return Center(
       child: Padding(

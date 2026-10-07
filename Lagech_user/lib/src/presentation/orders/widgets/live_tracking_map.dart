@@ -4,10 +4,23 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../core/utils/map_styles.dart';
 import '../../branding/app_colors.dart';
+
+/// Great-circle distance between two points, in metres.
+double _metersBetween(LatLng a, LatLng b) {
+  const earthRadius = 6371000.0;
+  final dLat = (b.latitude - a.latitude) * math.pi / 180;
+  final dLng = (b.longitude - a.longitude) * math.pi / 180;
+  final h = math.pow(math.sin(dLat / 2), 2) +
+      math.cos(a.latitude * math.pi / 180) *
+          math.cos(b.latitude * math.pi / 180) *
+          math.pow(math.sin(dLng / 2), 2);
+  return 2 * earthRadius * math.asin(math.min(1.0, math.sqrt(h)));
+}
 
 /// Compass bearing from [a] to [b], in degrees clockwise from north.
 ///
@@ -149,13 +162,22 @@ class _LiveTrackingMapState extends State<LiveTrackingMap>
   /// Direction the bike icon points, derived from its actual movement.
   double _bearing = 0;
 
+  /// True once the bike has actually moved far enough to give a trustworthy
+  /// bearing; until then the server's heading (or north) is used.
+  bool _hasBearing = false;
+
   /// Correction for the artwork's own orientation.
   ///
   /// Marker.rotation is measured clockwise from north and rotates the image as
-  /// drawn, so it only lines up if the art points up-screen. assets/images/bike.png
-  /// is drawn facing DOWN, which made the rider appear to ride in reverse: pointing
-  /// south while travelling north.
-  static const _iconHeadingOffset = 180.0;
+  /// drawn, so it only lines up if the art points up-screen. The current
+  /// assets/images/bike.png is a top-down photo with the FRONT of the bike at the
+  /// top, so no correction is needed. (The previous artwork faced down and needed
+  /// 180; leaving that in would now make the bike ride in reverse.)
+  static const _iconHeadingOffset = 0.0;
+
+  /// On-screen width of the bike in logical pixels; the picture is 2:3, so it
+  /// is about 40 x 60 dp.
+  static const _bikeWidthDp = 40.0;
 
   /// Restaurant and customer never move, so their markers are built once and
   /// reused. They were being reallocated on every animation frame along with the
@@ -334,9 +356,21 @@ class _LiveTrackingMapState extends State<LiveTrackingMap>
 
   Future<void> _loadCustomMarker() async {
     try {
-      final icon = await BitmapDescriptor.asset(
-        const ImageConfiguration(size: Size(48, 48)),
-        'assets/images/bike.png',
+      // Decoded to the screen's own density and handed over with that ratio, so
+      // the bike is the same physical size on every phone. The asset call this
+      // replaced squeezed the 2:3 picture into a 48 x 48 square.
+      final ratio =
+          ui.PlatformDispatcher.instance.implicitView?.devicePixelRatio ?? 2.0;
+      final data = await rootBundle.load('assets/images/bike.png');
+      final codec = await ui.instantiateImageCodec(
+        data.buffer.asUint8List(),
+        targetWidth: (_bikeWidthDp * ratio).round(),
+      );
+      final frame = await codec.getNextFrame();
+      final png = await frame.image.toByteData(format: ui.ImageByteFormat.png);
+      final icon = BitmapDescriptor.bytes(
+        png!.buffer.asUint8List(),
+        imagePixelRatio: ratio,
       );
       if (mounted) {
         setState(() {
@@ -366,14 +400,23 @@ class _LiveTrackingMapState extends State<LiveTrackingMap>
         _current = target;
         _from = target;
         _to = target;
+        // No movement to measure yet, so start from the heading the server sent.
+        _bearing = widget.heading;
         // Re-frame now that there is something real to frame.
         WidgetsBinding.instance.addPostFrameCallback((_) => _fitBounds());
       } else if (target != _to) {
         // Subsequent updates animate, so the marker glides instead of teleporting.
         _from = _current;
         _to = target;
-        // Point the bike along the leg it is about to travel.
-        _bearing = bearingBetween(_from, _to);
+        // Point the bike along the leg it is about to travel. GPS noise alone
+        // moves a parked rider a metre or two in random directions, which would
+        // spin the bike on the spot, so short hops keep the previous bearing.
+        if (_metersBetween(_from, _to) >= 3) {
+          _bearing = bearingBetween(_from, _to);
+          _hasBearing = true;
+        } else if (!_hasBearing) {
+          _bearing = widget.heading;
+        }
         _lastPaint = Duration.zero;
         _anim
           ..duration = _durationForNextLeg()
@@ -665,6 +708,8 @@ class _LiveTrackingMapState extends State<LiveTrackingMap>
           rotation: (_bearing + _iconHeadingOffset) % 360,
           anchor: const Offset(0.5, 0.5),
           flat: true,
+          // Above the restaurant and customer pins instead of hidden under them.
+          zIndexInt: 2,
           icon: _bikeIcon ?? BitmapDescriptor.defaultMarkerWithHue(HSLColor.fromColor(AppColors.primary).hue),
           infoWindow: const InfoWindow(title: 'Delivery partner'),
         ),

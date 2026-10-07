@@ -1,3 +1,5 @@
+import 'package:food_user_application/config/constants/app_constants.dart';
+
 /// Reads latitude/longitude out of a `location`-shaped map. The backend's
 /// `normalizeRestaurantLocation` always sets explicit `latitude`/`longitude`
 /// keys, but this falls back to the GeoJSON `coordinates: [lng, lat]` pair
@@ -150,7 +152,9 @@ class RestaurantModel {
       status: (json['status'] ?? 'pending').toString(),
       rejectionReason: (json['rejectionReason'] ?? '').toString(),
       isAcceptingOrders: json['isAcceptingOrders'] == true,
-      profileImage: extractImageUrl(json['profileImage']),
+      // Resolved here once so every logo display gets an absolute URL (a relative
+      // /uploads/... path rendered as a blank circle).
+      profileImage: AppConstants.resolveMediaUrl(extractImageUrl(json['profileImage'])),
       addressLine1: fromLocation(location, 'addressLine1'),
       addressLine2: fromLocation(location, 'addressLine2'),
       area: fromLocation(location, 'area'),

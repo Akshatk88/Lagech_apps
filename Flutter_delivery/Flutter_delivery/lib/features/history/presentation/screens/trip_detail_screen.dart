@@ -51,6 +51,22 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> {
   String get _time => _s('time');
   String get _date => _s('date');
 
+  /// The list hands over the raw server timestamp ("2026-10-06T17:45:29.225Z"),
+  /// which was printed as-is in the header. Shown as "6 Oct 2026" in local time;
+  /// anything that is not a timestamp (already readable text) is left alone.
+  String get _prettyDate {
+    final raw = _date;
+    if (raw.isEmpty) return '';
+    final parsed = DateTime.tryParse(raw);
+    if (parsed == null) return raw;
+    final d = parsed.toLocal();
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return '${d.day} ${months[d.month - 1]} ${d.year}';
+  }
+
   /// The Mongo `_id` (not the human-readable order code) is what
   /// `GET /orders/:id` expects — prefer it over `orderId` for the fetch.
   String get _fetchId => _s('_id', 'id', 'orderId');
@@ -120,8 +136,15 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> {
       backgroundColor: scaffoldColor,
       body: CustomScrollView(
         slivers: [
+          // The green header and the receipt card that overlaps it are ONE sliver.
+          // As two separate slivers the viewport paints the FIRST one on top, so
+          // the card pulled up over the header was drawn underneath it and its
+          // top (the restaurant name) was hidden behind the green. Inside a single
+          // Column the later child paints last, i.e. on top.
           SliverToBoxAdapter(
-            child: Container(
+            child: Column(
+              children: [
+            Container(
               padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 8.h, bottom: 44.h),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -167,7 +190,7 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> {
                   SizedBox(height: 4.h),
                   if (_time.isNotEmpty || _date.isNotEmpty)
                     Text(
-                      [_date, _time].where((e) => e.isNotEmpty).join(' · '),
+                      [_prettyDate, _time].where((e) => e.isNotEmpty).join(' · '),
                       style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 12.sp),
                     ),
                   SizedBox(height: 10.h),
@@ -186,9 +209,7 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> {
                 ],
               ),
             ),
-          ),
-          SliverToBoxAdapter(
-            child: Transform.translate(
+            Transform.translate(
               offset: Offset(0, -28.h),
               child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16.w),
@@ -275,6 +296,8 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> {
                   ],
                 ),
               ),
+            ),
+              ],
             ),
           ),
         ],

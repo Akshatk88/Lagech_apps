@@ -193,8 +193,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   String _messageFor(Object e) {
-    if (e is ApiException) return e.message;
-    return 'Something went wrong. Please try again.';
+    return apiErrorMessage(e, 'Something went wrong. Please try again.');
   }
 
   @override

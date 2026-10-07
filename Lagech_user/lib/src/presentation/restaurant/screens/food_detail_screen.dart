@@ -1032,7 +1032,7 @@ class _FoodDetailScreenState extends ConsumerState<FoodDetailScreen>
                           ref,
                           widget.food.restaurantId,
                         );
-                        if (!allowed || !mounted) return;
+                        if (!allowed || !mounted || !context.mounted) return;
 
                         Haptics.light();
                         // Fly-to-cart animation whose flight target is this

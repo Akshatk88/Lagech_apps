@@ -3,12 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/constants/app_constants.dart';
 import '../../../../core/error/result.dart';
 import '../../../auth/application/auth_controller.dart';
 import '../../../auth/application/auth_state.dart';
 import '../../../auth/data/models/delivery_partner.dart';
 import '../../data/profile_repository.dart';
+import '../widgets/editable_profile_avatar.dart';
 
 class DriverDetailsScreen extends ConsumerWidget {
   const DriverDetailsScreen({super.key});
@@ -172,16 +172,7 @@ class DriverDetailsScreen extends ConsumerWidget {
         children: [
           Row(
             children: [
-              CircleAvatar(
-                radius: 30.r,
-                backgroundColor: Colors.grey[200],
-                backgroundImage: user?.profilePhoto != null && user!.profilePhoto!.isNotEmpty
-                    ? NetworkImage(AppConstants.resolveMediaUrl(user.profilePhoto))
-                    : null,
-                child: user?.profilePhoto == null || user!.profilePhoto!.isEmpty
-                    ? Icon(Icons.person, color: Colors.grey[500])
-                    : null,
-              ),
+              EditableProfileAvatar(photoUrl: user?.profilePhoto),
               SizedBox(width: 16.w),
               Expanded(
                 child: Column(

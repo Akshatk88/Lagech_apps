@@ -108,9 +108,9 @@ class RestaurantRepository {
     return (data['url'] ?? '').toString();
   }
 
-  /// Uploading a new logo resets the restaurant's approval status to
-  /// `pending` server-side — callers must warn the owner before calling this
-  /// on an already-approved restaurant.
+  /// Uploads a new logo and returns its URL. The change is meant to apply
+  /// directly (no admin approval) — if the server ever puts the profile back
+  /// into review on this call, that is a server-side regression to fix there.
   Future<String> uploadProfileImage(XFile file) async {
     final formData = FormData.fromMap({'file': await xFileToMultipart(file)});
     final response = await _dio.post(

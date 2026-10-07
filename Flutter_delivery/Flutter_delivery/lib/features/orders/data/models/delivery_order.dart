@@ -47,6 +47,43 @@ class GeoPoint {
     if (lat == null || lng == null) return null;
     return GeoPoint(lat: lat, lng: lng);
   }
+
+  /// A point from separate latitude / longitude values (numbers or numeric
+  /// strings). Null for anything missing, out of range, or exactly (0, 0) — a
+  /// "no location" placeholder that would otherwise send a rider into the ocean.
+  static GeoPoint? fromLatLng(dynamic lat, dynamic lng) {
+    double? n(dynamic v) => v is num ? v.toDouble() : double.tryParse('$v');
+    final la = n(lat);
+    final lo = n(lng);
+    if (la == null || lo == null) return null;
+    if (!la.isFinite || !lo.isFinite || la.abs() > 90 || lo.abs() > 180) return null;
+    if (la == 0 && lo == 0) return null;
+    return GeoPoint(lat: la, lng: lo);
+  }
+
+  /// Reads a location out of whichever shape the server used.
+  ///
+  /// The restaurant arrives as a flat row (`latitude` / `longitude` next to
+  /// `restaurantName`), while the delivery address arrives as a GeoJSON
+  /// `location: { coordinates: [lng, lat] }`. Only the GeoJSON form was parsed,
+  /// so the restaurant never had a location: the Map button answered
+  /// "Location not available" and there was nothing to navigate to.
+  static GeoPoint? fromAny(Map<String, dynamic> json) {
+    final location = json['location'];
+    if (location is Map<String, dynamic>) {
+      final fromList = fromCoordinates(location['coordinates']);
+      if (fromList != null) return fromList;
+      final fromMap = fromLatLng(
+        location['latitude'] ?? location['lat'],
+        location['longitude'] ?? location['lng'] ?? location['lon'],
+      );
+      if (fromMap != null) return fromMap;
+    }
+    return fromLatLng(
+      json['latitude'] ?? json['lat'] ?? json['addrLat'],
+      json['longitude'] ?? json['lng'] ?? json['lon'] ?? json['addrLng'],
+    );
+  }
 }
 
 class RestaurantInfo {
@@ -138,9 +175,7 @@ class RestaurantInfo {
       coverImages: _stringList(json['coverImages']),
       galleryImages: _stringList(json['galleryImages']),
       menuImages: _stringList(json['menuImages']),
-      location: GeoPoint.fromCoordinates(
-        (json['location'] as Map<String, dynamic>?)?['coordinates'],
-      ),
+      location: GeoPoint.fromAny(json),
     );
   }
 }
@@ -175,9 +210,7 @@ class DeliveryAddress {
       city: json['city'] as String?,
       state: json['state'] as String?,
       phone: json['phone'] as String?,
-      location: GeoPoint.fromCoordinates(
-        (json['location'] as Map<String, dynamic>?)?['coordinates'],
-      ),
+      location: GeoPoint.fromAny(json),
     );
   }
 }
@@ -375,9 +408,11 @@ class DeliveryOrder {
       restaurant: RestaurantInfo(
         name: data['restaurantName'] as String? ?? '',
         addressLine1: data['restaurantAddress'] as String?,
+        location: GeoPoint.fromLatLng(data['pickupLat'], data['pickupLng']),
       ),
       deliveryAddress: DeliveryAddress(
         street: data['customerAddress'] as String? ?? '',
+        location: GeoPoint.fromLatLng(data['dropLat'], data['dropLng']),
       ),
       items: parseItems(data['items']),
       customerName: data['customerName'] as String? ?? '',

@@ -18,6 +18,8 @@ import 'di/push_providers.dart';
 import 'platform/notifications/push_service.dart';
 import 'presentation/auth/viewmodels/auth_viewmodel.dart';
 import 'presentation/navigation/home_first_back_button_dispatcher.dart';
+import 'presentation/navigation/route_names.dart';
+import 'presentation/chat/screens/chat_screen.dart' show ChatArgs;
 import 'di/location_providers.dart';
 import 'di/settings_providers.dart';
 
@@ -90,10 +92,23 @@ class _FoodUserApplicationState extends ConsumerState<FoodUserApplication> {
     );
   }
 
-  /// Routes an order push to the tracking screen.
+  /// Routes an order push to the tracking screen, and a chat push to that
+  /// order's chat with the delivery partner.
   void _handleDeepLink(PushDeepLink link) {
     final orderId = link.trackableOrderId;
-    if (!link.isOrderEvent || orderId == null || orderId.isEmpty) return;
+    if (orderId == null || orderId.isEmpty) return;
+
+    if (link.isChat) {
+      // `peerId` is optional: with just the order the server resolves the
+      // counterpart (the order's delivery partner).
+      ref.read(routerProvider).push(
+            RouteNames.chat,
+            extra: ChatArgs(orderId: orderId, peerName: 'Delivery Partner'),
+          );
+      return;
+    }
+
+    if (!link.isOrderEvent) return;
     // Route is declared as /orders/track/:id — a path param, not a query.
     ref.read(routerProvider).push('/orders/track/$orderId');
   }
