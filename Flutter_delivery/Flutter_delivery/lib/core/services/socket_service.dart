@@ -29,6 +29,8 @@ class SocketService {
       StreamController<Map<String, dynamic>>.broadcast();
   final _chatTypingController =
       StreamController<Map<String, dynamic>>.broadcast();
+  final _paymentReceivedController =
+      StreamController<Map<String, dynamic>>.broadcast();
   final _connectionController = StreamController<bool>.broadcast();
 
   Stream<Map<String, dynamic>> get onNewOrderAvailable =>
@@ -46,6 +48,10 @@ class SocketService {
       _chatMessageController.stream;
   Stream<Map<String, dynamic>> get onChatTyping =>
       _chatTypingController.stream;
+  /// `payment_received`: the customer paid the door QR —
+  /// `{ orderId, orderCode, method, amount, paymentId, paid, collectCash, message }`.
+  Stream<Map<String, dynamic>> get onPaymentReceived =>
+      _paymentReceivedController.stream;
   Stream<bool> get onConnectionChange => _connectionController.stream;
 
   bool get isConnected => _socket?.connected ?? false;
@@ -100,6 +106,10 @@ class SocketService {
     socket.on(
       'chat:typing',
       (data) => _chatTypingController.add(_asMap(data)),
+    );
+    socket.on(
+      'payment_received',
+      (data) => _paymentReceivedController.add(_asMap(data)),
     );
 
     socket.connect();
@@ -161,6 +171,7 @@ class SocketService {
     _locationUpdateController.close();
     _chatMessageController.close();
     _chatTypingController.close();
+    _paymentReceivedController.close();
     _connectionController.close();
   }
 

@@ -25,7 +25,6 @@ class DeliveryPartner {
     this.bankIfscCode,
     this.bankName,
     this.upiId,
-    this.upiQrCode,
     this.availabilityStatus,
     this.lastLat,
     this.lastLng,
@@ -60,7 +59,6 @@ class DeliveryPartner {
   final String? bankIfscCode;
   final String? bankName;
   final String? upiId;
-  final String? upiQrCode;
   final String? availabilityStatus;
   final double? lastLat;
   final double? lastLng;
@@ -102,7 +100,6 @@ class DeliveryPartner {
       bankIfscCode: json['bankIfscCode'] as String?,
       bankName: json['bankName'] as String?,
       upiId: json['upiId'] as String?,
-      upiQrCode: json['upiQrCode'] as String?,
       availabilityStatus: json['availabilityStatus'] as String?,
       lastLat: json['lastLat'] != null ? double.tryParse(json['lastLat'].toString()) : null,
       lastLng: json['lastLng'] != null ? double.tryParse(json['lastLng'].toString()) : null,
@@ -142,7 +139,6 @@ class DeliveryPartner {
       bankIfscCode: bankIfscCode,
       bankName: bankName,
       upiId: upiId,
-      upiQrCode: upiQrCode,
       availabilityStatus: availabilityStatus ?? this.availabilityStatus,
       lastLat: lastLat,
       lastLng: lastLng,

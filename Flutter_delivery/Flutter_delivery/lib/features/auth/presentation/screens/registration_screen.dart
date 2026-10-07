@@ -54,7 +54,6 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
   File? _aadharPhoto;
   File? _panPhoto;
   File? _licensePhoto;
-  File? _upiQrCode;
 
   bool _isSubmitting = false;
   String? _errorText;
@@ -295,13 +294,6 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
           _licensePhoto!.path,
           filename: 'driving_license_photo.jpg',
         ),
-
-        // Optional UPI QR.
-        if (_upiQrCode != null)
-          'upiQrCode': await MultipartFile.fromFile(
-            _upiQrCode!.path,
-            filename: 'upi_qr_code.jpg',
-          ),
       });
 
       // --------------------------------------------------------
@@ -576,12 +568,6 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
                 'Driving license photo',
                 _licensePhoto,
                 () => _pickImage((file) => _licensePhoto = file),
-              ),
-
-              _docPickerRow(
-                'UPI QR code (optional)',
-                _upiQrCode,
-                () => _pickImage((file) => _upiQrCode = file),
               ),
 
               // ==================================================

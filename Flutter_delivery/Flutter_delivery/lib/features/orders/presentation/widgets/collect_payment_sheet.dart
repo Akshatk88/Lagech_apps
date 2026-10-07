@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:food_user_application/core/constants/app_constants.dart';
 import 'package:food_user_application/core/error/result.dart';
-import 'package:food_user_application/features/auth/application/auth_controller.dart';
-import 'package:food_user_application/features/auth/application/auth_state.dart';
 import 'package:food_user_application/features/orders/data/models/delivery_order.dart';
 import 'package:food_user_application/features/orders/data/orders_repository.dart';
+import 'package:food_user_application/features/orders/presentation/screens/customer_qr_payment_screen.dart';
 
+/// Collect a pay-at-delivery order at the door: the rider takes cash, or the
+/// customer scans a Razorpay QR (the money goes to the company's account,
+/// never to the rider). Pops `true` once the order is paid or cash is
+/// confirmed, and the caller moves on to completing the delivery.
 class CollectPaymentSheet extends ConsumerStatefulWidget {
   const CollectPaymentSheet({super.key, required this.order});
 
@@ -20,33 +21,42 @@ class CollectPaymentSheet extends ConsumerStatefulWidget {
 
 class _CollectPaymentSheetState extends ConsumerState<CollectPaymentSheet> {
   bool _collecting = false;
-  bool _showQr = false;
-  bool _completed = false;
   String? _error;
 
-  /// Both "Collect Cash Instead" and "Payment Received" (after showing the
-  /// driver's own QR) hit the same cash-collection API — the backend marks a
-  /// cash order paid automatically once delivery completes, regardless of how
-  /// the money was physically handed over, so there's no separate "QR paid"
-  /// endpoint to call here.
-  Future<void> _confirmCollected() async {
+  /// Cash: confirm the amount with the rider, then switch the order to cash
+  /// (`POST collect/cash`). The backend marks it paid when the delivery is
+  /// completed.
+  Future<void> _collectCash() async {
+    final amount = widget.order.cashToCollect;
+    final confirmed = await confirmCashReceived(context, amount);
+    if (confirmed != true || !mounted) return;
+
     setState(() {
       _collecting = true;
       _error = null;
     });
     final result = await ref.read(ordersRepositoryProvider).collectCash(widget.order.id);
     if (!mounted) return;
-    await result.when(
-      success: (_) async {
-        setState(() => _completed = true);
-        await Future.delayed(const Duration(milliseconds: 700));
-        if (mounted) Navigator.of(context).pop(true);
-      },
-      failure: (error) async => setState(() {
+    result.when(
+      success: (_) => Navigator.of(context).pop(true),
+      failure: (error) => setState(() {
         _error = error.message;
         _collecting = false;
       }),
     );
+  }
+
+  /// QR: full-screen QR for the customer. `true` = paid (or the rider switched
+  /// to cash and confirmed it there).
+  Future<void> _customerPaysByQr() async {
+    setState(() => _error = null);
+    final done = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => CustomerQrPaymentScreen(order: widget.order),
+      ),
+    );
+    if (done == true && mounted) Navigator.of(context).pop(true);
   }
 
   @override
@@ -56,8 +66,6 @@ class _CollectPaymentSheetState extends ConsumerState<CollectPaymentSheet> {
     final textColor = isDarkMode ? Colors.white : const Color(0xFF1E1E1E);
     final subTextColor = isDarkMode ? Colors.grey[400] : Colors.grey[600];
     final order = widget.order;
-    final authState = ref.watch(authControllerProvider);
-    final upiQrCode = authState is AuthAuthenticated ? authState.user.upiQrCode : null;
 
     return SafeArea(
       child: Container(
@@ -96,109 +104,62 @@ class _CollectPaymentSheetState extends ConsumerState<CollectPaymentSheet> {
               ),
             ],
             SizedBox(height: 16.h),
-            if (_completed)
-              Padding(
-                padding: EdgeInsets.symmetric(vertical: 24.h),
-                child: Column(
-                  children: [
-                    Icon(Icons.check_circle, color: Colors.green, size: 48.sp),
-                    SizedBox(height: 12.h),
-                    Text(
-                      'Delivery Completed',
-                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15.sp, color: textColor),
-                    ),
-                  ],
-                ),
-              )
-            else ...[
-              if (_showQr) ...[
-                if (upiQrCode != null && upiQrCode.isNotEmpty)
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(16.r),
-                    child: CachedNetworkImage(
-                      imageUrl: AppConstants.resolveMediaUrl(upiQrCode),
-                      width: 200.w,
-                      height: 200.w,
-                      fit: BoxFit.contain,
-                      memCacheWidth: 400,
-                      memCacheHeight: 400,
-                      placeholder: (_, _) => SizedBox(
-                        width: 200.w,
-                        height: 200.w,
-                        child: const Center(child: CircularProgressIndicator()),
-                      ),
-                      errorWidget: (context, url, error) => Icon(Icons.broken_image, size: 50.sp, color: Colors.grey),
-                    ),
-                  )
-                else
-                  Padding(
-                    padding: EdgeInsets.symmetric(vertical: 12.h),
-                    child: Text(
-                      'No UPI QR code uploaded on your profile yet.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 12.sp, color: subTextColor),
-                    ),
-                  ),
-                SizedBox(height: 12.h),
-                Text(
-                  'Ask the customer to scan this QR to pay',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 12.sp, color: subTextColor),
-                ),
-                SizedBox(height: 16.h),
-                ElevatedButton.icon(
-                  onPressed: _collecting ? null : _confirmCollected,
-                  icon: _collecting
-                      ? SizedBox(
-                          width: 16.w,
-                          height: 16.w,
-                          child: const CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Icon(Icons.check_circle_outline_rounded),
-                  label: const Text('Payment Received'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: theme.primaryColor,
-                    foregroundColor: Colors.white,
-                    minimumSize: Size(double.infinity, 48.h),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.r)),
-                  ),
-                ),
-              ] else
-                ElevatedButton.icon(
-                  onPressed: () => setState(() => _showQr = true),
-                  icon: const Icon(Icons.qr_code_rounded),
-                  label: const Text('Show QR to Customer'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: theme.primaryColor,
-                    foregroundColor: Colors.white,
-                    minimumSize: Size(double.infinity, 48.h),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.r)),
-                  ),
-                ),
-              if (_error != null) ...[
-                SizedBox(height: 8.h),
-                Text(_error!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
-              ],
-              SizedBox(height: 12.h),
-              OutlinedButton.icon(
-                onPressed: _collecting ? null : _confirmCollected,
-                icon: _collecting
-                    ? SizedBox(
-                        width: 16.w,
-                        height: 16.w,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: theme.primaryColor),
-                      )
-                    : const Icon(Icons.money_rounded),
-                label: const Text('Collect Cash Instead'),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: Size(double.infinity, 48.h),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.r)),
-                ),
+            ElevatedButton.icon(
+              onPressed: _collecting ? null : _customerPaysByQr,
+              icon: const Icon(Icons.qr_code_2_rounded),
+              label: const Text('Customer pays by QR'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: theme.primaryColor,
+                foregroundColor: Colors.white,
+                minimumSize: Size(double.infinity, 48.h),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.r)),
               ),
+            ),
+            SizedBox(height: 12.h),
+            OutlinedButton.icon(
+              onPressed: _collecting ? null : _collectCash,
+              icon: _collecting
+                  ? SizedBox(
+                      width: 16.w,
+                      height: 16.w,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: theme.primaryColor),
+                    )
+                  : const Icon(Icons.money_rounded),
+              label: Text('Collect cash ₹${order.cashToCollect.toStringAsFixed(0)}'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: Size(double.infinity, 48.h),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.r)),
+              ),
+            ),
+            if (_error != null) ...[
+              SizedBox(height: 8.h),
+              Text(_error!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
             ],
           ],
         ),
       ),
     );
   }
+}
+
+/// "Have you received ₹X in cash?" — shared by the sheet and the QR screen's
+/// "Switch to cash".
+Future<bool?> confirmCashReceived(BuildContext context, double amount) {
+  return showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Collect cash'),
+      content: Text('Collect ₹${amount.toStringAsFixed(0)} in cash from the customer. Have you received it?'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Not yet'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: const Text('Cash received'),
+        ),
+      ],
+    ),
+  );
 }

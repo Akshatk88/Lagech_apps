@@ -18,6 +18,7 @@ class OrdersController extends Notifier<OrdersState> {
   StreamSubscription? _orderDeassignedSub;
   StreamSubscription? _orderStatusSub;
   StreamSubscription? _orderReadySub;
+  StreamSubscription? _paymentReceivedSub;
   StreamSubscription? _connectionSub;
 
   // Socket events (new_order/order_claimed/order_deassigned) and the 15s
@@ -58,6 +59,9 @@ class OrdersController extends Notifier<OrdersState> {
       (_) => refreshCurrent(),
     );
     _orderReadySub = socket.onOrderReady.listen((_) => refreshCurrent());
+    // The customer paid the door QR (possibly after the rider switched to
+    // cash): re-read so the order shows as paid and no cash is asked for.
+    _paymentReceivedSub = socket.onPaymentReceived.listen((_) => refreshCurrent());
     // Resume live-location sharing for every active order after a reconnect.
     _connectionSub = socket.onConnectionChange.listen((connected) {
       if (!connected) return;
@@ -73,6 +77,7 @@ class OrdersController extends Notifier<OrdersState> {
       _orderDeassignedSub?.cancel();
       _orderStatusSub?.cancel();
       _orderReadySub?.cancel();
+      _paymentReceivedSub?.cancel();
       _connectionSub?.cancel();
     });
 

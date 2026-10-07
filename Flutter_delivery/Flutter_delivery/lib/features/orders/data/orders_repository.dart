@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/error/result.dart';
 import '../../../core/network/api_endpoints.dart';
 import '../../../core/network/dio_client.dart';
+import 'models/collect_payment.dart';
 import 'models/delivery_order.dart';
 
 class OrdersRepository {
@@ -188,6 +189,35 @@ class OrdersRepository {
           'durationMins': 0,
         });
       }
+      return Result.failure(_mapError(e));
+    }
+  }
+
+  /// `POST /orders/:id/collect/qr`: a Razorpay QR for what the customer owes
+  /// at the door (an open one is handed back rather than a second raised).
+  Future<Result<CollectQr, AppError>> createCollectQr(String orderId) async {
+    try {
+      final res = await _dio.post(ApiEndpoints.collectQr(orderId));
+      final data = res.data['data'];
+      if (data is! Map<String, dynamic>) {
+        return Result.failure(NetworkError('Could not create the QR. Please try again.'));
+      }
+      return Result.success(CollectQr.fromJson(data));
+    } on DioException catch (e) {
+      return Result.failure(_mapError(e));
+    }
+  }
+
+  /// `GET /orders/:id/payment-status`. Safe to poll every few seconds.
+  Future<Result<CollectPaymentStatus, AppError>> getPaymentStatus(String orderId) async {
+    try {
+      final res = await _dio.get(ApiEndpoints.paymentStatus(orderId));
+      final data = res.data['data'];
+      if (data is! Map<String, dynamic>) {
+        return Result.failure(NetworkError('Could not read the payment status.'));
+      }
+      return Result.success(CollectPaymentStatus.fromJson(data));
+    } on DioException catch (e) {
       return Result.failure(_mapError(e));
     }
   }
