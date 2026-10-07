@@ -103,8 +103,20 @@ class _CouponSheetBodyState extends ConsumerState<_CouponSheetBody> {
     final pricing = checkoutState.pricing;
     final appliedCode =
         (pricing?.hasCouponApplied ?? false) ? checkoutState.couponCode : null;
-    final coupons = ref.watch(couponsViewModelProvider);
-    final cartSubtotal = ref.watch(cartViewModelProvider).subtotal;
+    final cart = ref.watch(cartViewModelProvider);
+    final cartSubtotal = cart.subtotal;
+    // The restaurant's own offers plus the platform-wide ones, so the sheet
+    // suggests every coupon the customer can try (the server still decides
+    // eligibility when one is applied).
+    final restaurantOffers = ref
+            .watch(restaurantOffersProvider(cart.restaurantId ?? ''))
+            .value ??
+        const <CouponModel>[];
+    final globalOffers = ref.watch(couponsViewModelProvider);
+    final seen = <String>{};
+    final coupons = [...restaurantOffers, ...globalOffers]
+        .where((c) => c.code.isNotEmpty && seen.add(c.code.toUpperCase()))
+        .toList();
 
     // Mirrors FoodDetailSheet's proven DraggableScrollableSheet structure.
     //
@@ -225,7 +237,7 @@ class _CouponSheetBodyState extends ConsumerState<_CouponSheetBody> {
                           padding: const EdgeInsets.symmetric(vertical: 24),
                           child: Center(
                             child: Text(
-                              'No eligible coupon found.',
+                              'No coupons available right now.',
                               style: TextStyle(color: secondaryColor),
                             ),
                           ),
@@ -320,7 +332,7 @@ class _CouponSheetBodyState extends ConsumerState<_CouponSheetBody> {
                     Padding(
                       padding: const EdgeInsets.only(top: 4),
                       child: Text(
-                        'Min order ₹${c.minSpend.toStringAsFixed(0)}',
+                        'Add ₹${(c.minSpend - cartSubtotal).ceil()} more to use (min order ₹${c.minSpend.toStringAsFixed(0)})',
                         style: const TextStyle(color: Colors.redAccent, fontSize: 11),
                       ),
                     ),

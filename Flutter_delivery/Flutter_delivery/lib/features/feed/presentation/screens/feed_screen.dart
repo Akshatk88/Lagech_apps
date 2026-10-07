@@ -502,7 +502,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
               constraints: BoxConstraints(
                 maxHeight: MediaQuery.sizeOf(context).height -
                     MediaQuery.paddingOf(context).bottom -
-                    100.h,
+                    120.h,
               ),
               child: Container(
               decoration: BoxDecoration(
@@ -522,7 +522,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
               child: SafeArea(
                 bottom: false,
                 child: SingleChildScrollView(
-                  padding: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 16.h),
+                  padding: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 28.h),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [

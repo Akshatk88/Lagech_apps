@@ -11,6 +11,7 @@ import '../../branding/app_colors.dart';
 import '../../common_widgets/app_snackbar.dart';
 import '../../navigation/route_names.dart';
 import '../../../di/settings_providers.dart';
+import '../../auth/viewmodels/auth_viewmodel.dart';
 import '../viewmodels/wallet_state.dart';
 import '../viewmodels/wallet_viewmodel.dart';
 import '../../common_widgets/controller_scope.dart';
@@ -39,6 +40,12 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final authState = ref.watch(authViewModelProvider);
+    // A guest has no wallet: ask them to log in instead of showing a load error.
+    if (authState.value == null && !authState.isLoading) {
+      return _buildLoginRequired(context, isDark);
+    }
+
     final walletState = ref.watch(walletViewModelProvider);
     final viewModel = ref.read(walletViewModelProvider.notifier);
 
@@ -960,6 +967,77 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
           ),
         );
       },
+    );
+  }
+
+  /// Shown to a signed-out user in place of the wallet.
+  Widget _buildLoginRequired(BuildContext context, bool isDark) {
+    final textColor = isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight;
+    final secondaryColor = isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
+    return Scaffold(
+      backgroundColor: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
+      appBar: AppBar(
+        backgroundColor: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+        elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back_ios_new_rounded, color: textColor, size: 20),
+          onPressed: () {
+            Haptics.light();
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/profile');
+            }
+          },
+        ),
+        title: Text(
+          'LAGECH Wallet',
+          style: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.account_balance_wallet_outlined, color: AppColors.primary, size: 56),
+                const SizedBox(height: 16),
+                Text(
+                  'Login to see your wallet',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Please log in first to view your balance, add money and see your transactions.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 13, color: secondaryColor),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () {
+                      Haptics.medium();
+                      context.push(RouteNames.login);
+                    },
+                    child: const Text(
+                      'GO TO LOGIN',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 

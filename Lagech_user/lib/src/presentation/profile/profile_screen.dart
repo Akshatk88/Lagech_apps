@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/utils/haptics.dart';
@@ -9,7 +8,6 @@ import '../branding/app_colors.dart';
 import '../common_widgets/app_snackbar.dart';
 import '../../data/models/user_model.dart';
 import '../auth/viewmodels/auth_viewmodel.dart';
-import '../coupons/viewmodels/coupons_viewmodel.dart';
 import '../wallet/viewmodels/wallet_viewmodel.dart';
 import '../../core/utils/localizations.dart';
 import '../branding/theme_provider.dart';
@@ -42,7 +40,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final user = ref.watch(authViewModelProvider).value;
     final isLoggedIn = user != null;
 
-    final coupons = ref.watch(couponsViewModelProvider);
     final walletState = isLoggedIn ? ref.watch(walletViewModelProvider) : null;
     final walletBalance = walletState?.wallet.balance ?? 0.0;
     final isVegOnly = ref.watch(vegFilterProvider);
@@ -95,15 +92,24 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           const SizedBox(height: 16),
 
 
-          // 3. Quick Action Row: Lagech Money & Your coupons (Screenshot 4)
-          _buildQuickActionRow(
-            walletBalance,
-            coupons.length,
-            isDark,
-            textColor,
+          // 3. Lagech Money, in the same compact style as the other tiles
+          _buildNavTile(
+            icon: Icons.account_balance_wallet_outlined,
+            title: 'Lagech Money',
+            trailing: Text(
+              '₹${walletBalance.toStringAsFixed(0)}',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: isDark ? AppColors.textSecondaryDark : const Color(0xFF6B7280),
+              ),
+            ),
+            onTap: () {
+              Haptics.light();
+              context.push(RouteNames.wallet);
+            },
+            isDark: isDark,
           ),
-
-          const SizedBox(height: 16),
 
           // 4. Action Tiles (Screenshot 4)
           // Tile 1: Your cart
@@ -254,18 +260,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             isDark: isDark,
           ),
 
-          // Section: Coupons
-          _buildSectionHeader('Coupons', isDark: isDark),
-          _buildNavTile(
-            icon: Icons.percent_rounded,
-            title: 'Redeem Gold coupon',
-            onTap: () {
-              Haptics.light();
-              _showCouponsModal();
-            },
-            isDark: isDark,
-          ),
-
           // Section: Earnings (Screenshot 1)
           _buildSectionHeader('Earnings', isDark: isDark),
           _buildEarningsNavTile(
@@ -316,16 +310,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             },
             isDark: isDark,
           ),
-          _buildNavTile(
-            icon: Icons.accessibility_new_rounded,
-            title: 'Accessibility',
-            onTap: () {
-              Haptics.light();
-              _showAccessibilitySheet(context);
-            },
-            isDark: isDark,
-          ),
-
           const SizedBox(height: 16),
 
           // Session actions
@@ -403,131 +387,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ],
     );
   }
-
-  /// Quick Action Row: Lagech Money & Your coupons (Screenshot 4)
-  Widget _buildQuickActionRow(
-    double walletBalance,
-    int couponCount,
-    bool isDark,
-    Color textColor,
-  ) {
-    return Row(
-      children: [
-        // Left: Lagech Money
-        Expanded(
-          child: InkWell(
-            onTap: () {
-              Haptics.light();
-              context.push(RouteNames.wallet);
-            },
-            borderRadius: BorderRadius.circular(14),
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.surfaceDark : Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: isDark ? AppColors.borderDark : const Color(0xFFE5E7EB),
-                  width: 1,
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE8F5E9),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.account_balance_wallet_outlined,
-                      color: Color(0xFF008A45),
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Lagech Money',
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.bold,
-                      color: textColor,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '₹${walletBalance.toStringAsFixed(0)}',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: Color(0xFF6B7280),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        // Right: Your coupons
-        Expanded(
-          child: InkWell(
-            onTap: () {
-              Haptics.light();
-              _showCouponsModal();
-            },
-            borderRadius: BorderRadius.circular(14),
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.surfaceDark : Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: isDark ? AppColors.borderDark : const Color(0xFFE5E7EB),
-                  width: 1,
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFF3E0),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.local_offer_outlined,
-                      color: Color(0xFFEA580C),
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Your coupons',
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.bold,
-                      color: textColor,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    couponCount > 0 ? '$couponCount available' : 'View all',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: Color(0xFF6B7280),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   /// Section Header with Green Accent Line (Screenshot 5)
   Widget _buildSectionHeader(String title, {bool isDark = false}) {
     return Padding(
@@ -1077,50 +936,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  void _showAccessibilitySheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      useRootNavigator: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        final isDark = Theme.of(ctx).brightness == Brightness.dark;
-        return Container(
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.surfaceDark : Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      margin: const EdgeInsets.only(bottom: 20),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFD1D5DB),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  const Text('Accessibility Options', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 12),
-                  const Text('LAGECH supports high contrast readability, screen reader voiceovers, and dynamic font resizing natively configured from your device settings.', style: TextStyle(fontSize: 14, height: 1.5, color: Color(0xFF4B5563))),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  /// Log Out Button
   Widget _buildLogoutButton(Color cardColor, bool isDark) {
     return InkWell(
       onTap: () {
@@ -1353,143 +1168,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   // ==========================================
   // DYNAMIC INTERACTIVE MODALS & BOTTOM SHEETS
   // ==========================================
-
-  void _showCouponsModal() {
-    showModalBottomSheet(
-      context: context,
-      useRootNavigator: true,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        final isDark = Theme.of(ctx).brightness == Brightness.dark;
-        final coupons = ref.watch(couponsViewModelProvider);
-
-        return Container(
-          height: MediaQuery.of(ctx).size.height * 0.65,
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.surfaceDark : Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      margin: const EdgeInsets.only(bottom: 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFD1D5DB),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Available Coupons 🏷️',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.pop(ctx),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Expanded(
-                    child: ListView.builder(
-                      itemCount: coupons.length,
-                      itemBuilder: (context, i) {
-                        final c = coupons[i];
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(14),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 6,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.primaryAlpha(0.12),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    c.code,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.primary,
-                                      letterSpacing: 1,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        c.discountText,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        c.description,
-                                        style: const TextStyle(
-                                          fontSize: 11.5,
-                                          color: Colors.grey,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                TextButton(
-                                  onPressed: () {
-                                    Haptics.light();
-                                    Clipboard.setData(ClipboardData(text: c.code));
-                                    Navigator.pop(ctx);
-                                    AppSnackbar.success(
-                                      context,
-                                      'Coupon code ${c.code} copied!',
-                                    );
-                                  },
-                                  child: Text(
-                                    'COPY',
-                                    style: TextStyle(
-                                      color: AppColors.primary,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
 
   void _showAppearanceModal() {
     showModalBottomSheet(
