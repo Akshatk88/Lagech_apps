@@ -29,6 +29,7 @@ import '../orders/screens/order_details_screen.dart';
 import '../orders/screens/order_tracking_screen.dart';
 import '../orders/screens/order_success_screen.dart';
 import '../orders/screens/order_delivered_screen.dart';
+import '../orders/screens/order_invoice_screen.dart';
 import '../orders/screens/order_help_requests_screen.dart';
 import '../referral/screens/referral_screen.dart';
 import '../referral/screens/referral_ticket_result_screen.dart';
@@ -264,6 +265,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final id = state.pathParameters['id'] ?? '';
           return OrderDeliveredScreen(orderId: id);
+        },
+      ),
+      GoRoute(
+        path: RouteNames.orderInvoice,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) {
+          final id = state.pathParameters['id'] ?? '';
+          return OrderInvoiceScreen(orderId: id);
         },
       ),
       GoRoute(

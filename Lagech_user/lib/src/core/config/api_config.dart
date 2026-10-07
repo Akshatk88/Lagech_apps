@@ -117,6 +117,8 @@ class ApiPaths {
   // ---- Refund requests & order issue reports (Bearer USER) ----
   static String orderRefundRequest(String id) => '/food/user/orders/$id/refund-request';
   static String orderIssues(String id) => '/food/user/orders/$id/issues';
+  /// The order's bill (customer copy): JSON `{ invoice }`, or `?format=html`.
+  static String orderInvoice(String id) => '/food/user/orders/$id/invoice';
   static const String refundRequests = '/food/user/refund-requests';
   static const String orderIssueReports = '/food/user/order-issues';
   static const String refundReasons = '/food/public/refund-reasons';

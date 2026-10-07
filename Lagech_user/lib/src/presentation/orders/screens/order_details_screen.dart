@@ -190,6 +190,21 @@ class OrderDetailsScreen extends ConsumerWidget {
 
                   const SizedBox(height: 16),
 
+                  // The bill, for any placed order (one still waiting on its
+                  // online payment has none yet).
+                  if (order.orderStatus.toLowerCase() != 'pending_payment') ...[
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: _InvoiceCard(
+                        onTap: () {
+                          Haptics.light();
+                          context.push('/orders/invoice/${Uri.encodeComponent(order.id)}');
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
                   // Request a refund / report an issue, as the server allows.
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -344,6 +359,79 @@ class _CookingRequestCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+
+/// Opens the order's bill ("Download invoice").
+class _InvoiceCard extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _InvoiceCard({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Material(
+      color: isDark ? AppColors.surfaceDark : Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDark ? AppColors.borderDark : const Color(0xFFE5E7EB),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.receipt_long_rounded, size: 22, color: AppColors.primary),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Invoice',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: isDark ? Colors.white : const Color(0xFF1D2939),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'View and download your bill',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : AppColors.textSecondaryLight,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                'DOWNLOAD',
+                style: TextStyle(
+                  color: AppColors.primary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: AppColors.primary),
+            ],
+          ),
+        ),
       ),
     );
   }

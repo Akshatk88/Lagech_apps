@@ -123,6 +123,21 @@ class ApiClient {
   Future<T> delete<T>(String path, {Object? body, bool auth = true}) =>
       _send<T>(() => _dio.delete(path, data: body, options: _opts(auth)));
 
+  /// A GET whose success body is plain text (e.g. a printable HTML page)
+  /// rather than the JSON envelope. Auth, refresh-on-401 and error mapping
+  /// are the same as [get]; an error body is still the JSON envelope.
+  Future<String> getText(String path, {Map<String, dynamic>? query}) => _send<String>(
+        () => _dio.get(
+          path,
+          queryParameters: _clean(query),
+          options: Options(
+            extra: {'skipAuth': false},
+            responseType: ResponseType.plain,
+            headers: {'Accept': 'text/html,application/json'},
+          ),
+        ),
+      );
+
   Options _opts(bool auth, {Duration? cacheTtl}) =>
       Options(extra: {'skipAuth': !auth, 'cacheTtl': ?cacheTtl});
 
@@ -181,7 +196,15 @@ class ApiClient {
   /// success/auth envelopes use `message`, validation rejections use `error`
   /// (e.g. "OTP must be exactly 4 digits"). Read both or you lose the useful half.
   String? _messageOf(Response response) {
-    final body = response.data;
+    var body = response.data;
+    // A plain-text request ([getText]) gets its error envelope as a string.
+    if (body is String && body.trimLeft().startsWith('{')) {
+      try {
+        body = jsonDecode(body);
+      } catch (_) {
+        return null;
+      }
+    }
     if (body is! Map) return null;
     for (final key in const ['message', 'error']) {
       final value = body[key];

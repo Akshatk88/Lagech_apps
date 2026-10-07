@@ -309,6 +309,17 @@ class OrderRemoteDataSource {
     throw const NotFoundFailure('Order not found');
   }
 
+  /// The order's bill as a printable HTML page (customer copy).
+  ///
+  /// `GET /food/user/orders/:orderId/invoice?format=html`; [size] is `a4` or
+  /// `thermal` (an 80 mm receipt). Orders still waiting on their online
+  /// payment have no bill (404).
+  Future<String> getInvoiceHtml(String orderId, {String size = 'a4'}) =>
+      _client.getText(
+        ApiPaths.orderInvoice(orderId),
+        query: {'format': 'html', 'size': size},
+      );
+
   /// Live route for the tracking map: `GET /food/orders/:orderId/route`.
   ///
   /// Returns `{ polyline, distanceKm, durationMins, target, origin, destination }`.
