@@ -53,6 +53,9 @@ class ActiveOrderViewModel extends Notifier<ActiveOrderState> {
     if (user != null) {
       unawaited(Future.microtask(fetchActiveOrder));
       _socketSub ??= ref.read(socketServiceProvider).orderEvents.listen((message) {
+        // A rider position ping changes nothing about the order. Re-reading the whole
+        // orders list (50 rows) for every ping flooded the API and froze the app.
+        if (message.event == OrderSocketEvent.riderMoved) return;
         if (kDebugMode) debugPrint('[TRACKING] Socket Event Received: ${message.event}');
         unawaited(fetchActiveOrder());
       });
@@ -64,7 +67,19 @@ class ActiveOrderViewModel extends Notifier<ActiveOrderState> {
     return const ActiveOrderState();
   }
 
-  Future<void> fetchActiveOrder({bool isRefresh = false}) async {
+  Future<void>? _fetchInFlight;
+
+  /// Concurrent callers share the request already running instead of starting
+  /// their own: many widgets and every socket event call this.
+  Future<void> fetchActiveOrder({bool isRefresh = false}) {
+    final running = _fetchInFlight;
+    if (running != null) return running;
+    final run = _fetchActiveOrderNow().whenComplete(() => _fetchInFlight = null);
+    _fetchInFlight = run;
+    return run;
+  }
+
+  Future<void> _fetchActiveOrderNow() async {
     try {
       if (kDebugMode) debugPrint('[HOME] Loading active order');
       if (kDebugMode) debugPrint('[HOME] Orders API called');

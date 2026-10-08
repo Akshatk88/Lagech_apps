@@ -85,6 +85,10 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                 : 'Order has been cancelled.';
             AppSnackbar.error(context, reason, duration: const Duration(seconds: 4));
           } else if (order.isDelivered || order.orderStatus == 'completed') {
+            // Review and rating come last. The server only marks an order delivered
+            // after the rider has verified the customer's handover OTP, so the status
+            // alone is the right signal (the customer's copy of the order does not
+            // reliably carry the "verified" flag).
             if (_navigatedToDelivered) return;
             _navigatedToDelivered = true;
             AppSnackbar.success(

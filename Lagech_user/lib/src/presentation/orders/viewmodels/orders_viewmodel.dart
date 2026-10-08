@@ -8,6 +8,7 @@ import '../../../data/models/order_model.dart';
 import '../../../core/services/partner_contact_cache.dart';
 import '../../../di/order_providers.dart';
 import '../../../di/socket_providers.dart';
+import '../../../platform/realtime/socket_service.dart';
 import '../../auth/viewmodels/auth_viewmodel.dart';
 
 void _orderLog(String message) {
@@ -113,6 +114,9 @@ class OrdersViewModel extends Notifier<OrdersState> {
 
     // Real-time socket events for status changes (placed, accepted, delivered, cancelled, etc.)
     _socketSub ??= ref.read(socketServiceProvider).orderEvents.listen((message) {
+      // Rider position pings are not order changes; refreshing the list for each
+      // one hammered the API while a delivery was on the move.
+      if (message.event == OrderSocketEvent.riderMoved) return;
       _orderLog('Socket order event received: ${message.event} -> refreshing order list');
       unawaited(refresh(isRefresh: true));
     });
@@ -125,7 +129,18 @@ class OrdersViewModel extends Notifier<OrdersState> {
     return const OrdersState(isLoading: true);
   }
 
-  Future<void> refresh({bool isRefresh = false}) async {
+  Future<void>? _refreshInFlight;
+
+  /// One list request at a time; overlapping callers share it.
+  Future<void> refresh({bool isRefresh = false}) {
+    final running = _refreshInFlight;
+    if (running != null) return running;
+    final run = _refreshNow(isRefresh: isRefresh).whenComplete(() => _refreshInFlight = null);
+    _refreshInFlight = run;
+    return run;
+  }
+
+  Future<void> _refreshNow({bool isRefresh = false}) async {
     if (!isRefresh) {
       state = state.copyWith(isLoading: true, clearError: true);
     } else {

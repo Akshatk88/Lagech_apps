@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -29,14 +30,26 @@ class OrderDeliveredScreen extends ConsumerStatefulWidget {
 
 class _OrderDeliveredScreenState extends ConsumerState<OrderDeliveredScreen> {
   int _deliveryRating = 0;
+  int _recheckCount = 0;
+  Timer? _recheckTimer;
   final bool _isSubmittingRating = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // This provider is shared with the order-success screen still sitting under
+      // tracking in the stack, so it can hold the copy from when the order was
+      // placed (not delivered). Read it again instead of trusting that.
+      ref.invalidate(orderDetailProvider(widget.orderId));
       ref.read(ordersViewModelProvider.notifier).refresh(isRefresh: true);
     });
+  }
+
+  @override
+  void dispose() {
+    _recheckTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _submitRating(int rating, OrderModel order) async {
@@ -135,6 +148,42 @@ class _OrderDeliveredScreenState extends ConsumerState<OrderDeliveredScreen> {
           ),
         ),
         data: (order) {
+          // Review and rating belong at the very end. An order that is not delivered
+          // yet gets a plain notice instead of a "Delivered" page. It must NOT
+          // navigate on its own: redirecting to tracking while tracking redirects
+          // here made the two screens bounce between each other forever.
+          if (!order.isDelivered && order.orderStatus != 'completed') {
+            if (_recheckTimer == null && _recheckCount < 10) {
+              _recheckCount++;
+              _recheckTimer = Timer(const Duration(seconds: 2), () {
+                _recheckTimer = null;
+                if (mounted) ref.invalidate(orderDetailProvider(widget.orderId));
+              });
+            }
+            return Scaffold(
+              backgroundColor: scaffoldBg,
+              appBar: AppBar(
+                backgroundColor: AppColors.primary,
+                elevation: 0,
+                leading: IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+                  onPressed: () => context.backOr(),
+                ),
+              ),
+              body: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    _recheckCount < 10
+                        ? 'Confirming your delivery...'
+                        : 'This order has not been delivered yet.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: isDark ? Colors.white : AppColors.textPrimaryLight),
+                  ),
+                ),
+              ),
+            );
+          }
           final deliveredTime = order.deliveredAt ?? order.createdAt;
           final timeStr = deliveredTime != null ? DateFormat('hh:mm a').format(deliveredTime.toLocal()) : '';
           final totalItems = order.items.fold<int>(0, (sum, i) => sum + i.quantity);

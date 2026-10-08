@@ -37,6 +37,7 @@ import 'package:food_user_application/features/refer_earn/application/referral_c
 import 'package:food_user_application/features/chat/presentation/screens/chat_screen.dart';
 import 'package:food_user_application/features/permissions/presentation/permission_setup_screen.dart';
 import 'package:go_router/go_router.dart';
+import 'package:food_user_application/features/orders/presentation/widgets/restaurant_status_chip.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class FeedScreen extends ConsumerStatefulWidget {
@@ -50,6 +51,8 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
     with SingleTickerProviderStateMixin {
   bool _isCurrentOrderVisible = true;
   bool _showReferEarn = true;
+  // The top panel scrolls when several orders make it taller than the screen.
+  final ScrollController _panelScroll = ScrollController();
   // Per order: one delivery's pending call never disables another's buttons.
   final Set<String> _actionLoadingIds = {};
 
@@ -256,6 +259,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
     _positionSub?.cancel();
     _fcmReceivedSub?.cancel();
     _chatTapSub?.cancel();
+    _panelScroll.dispose();
     super.dispose();
   }
 
@@ -521,7 +525,11 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
               ),
               child: SafeArea(
                 bottom: false,
-                child: SingleChildScrollView(
+                child: Scrollbar(
+                  controller: _panelScroll,
+                  child: SingleChildScrollView(
+                  controller: _panelScroll,
+                  physics: const ClampingScrollPhysics(),
                   padding: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 28.h),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -542,6 +550,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                       ],
                     ],
                   ),
+                ),
                 ),
               ),
             ),
@@ -986,6 +995,86 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
     );
   }
 
+  /// Order id, what is in the bag and a way into the full details screen.
+  /// The details screen existed but nothing ever opened it, so the rider could
+  /// not see the items, notes or amounts of an order he had accepted.
+  Widget _buildOrderSummaryStrip(
+    ThemeData theme,
+    Color textColor,
+    Color? subTextColor,
+    DeliveryOrder order,
+  ) {
+    final itemCount = order.items.fold<int>(0, (sum, i) => sum + i.quantity);
+    final itemsText = order.items.map((i) => '${i.quantity} × ${i.name}').join(', ');
+    final note = (order.deliveryInstructions ?? '').trim().isNotEmpty
+        ? order.deliveryInstructions!.trim()
+        : (order.cookingNote ?? '').trim();
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(14.r),
+      onTap: () {
+        HapticService.light();
+        ref.read(ordersControllerProvider.notifier).selectOrder(order.id);
+        context.push('/order-details');
+      },
+      child: Container(
+        width: double.infinity,
+        padding: EdgeInsets.all(12.r),
+        decoration: BoxDecoration(
+          color: theme.primaryColor.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(14.r),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (order.isBeforePickup) ...[
+                    RestaurantStatusChip(order: order),
+                    SizedBox(height: 6.h),
+                  ],
+                  Text(
+                    '#${order.orderCode}  •  $itemCount ${itemCount == 1 ? 'item' : 'items'}',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12.sp, color: textColor),
+                  ),
+                  if (itemsText.isNotEmpty) ...[
+                    SizedBox(height: 4.h),
+                    Text(
+                      itemsText,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 12.sp, color: subTextColor),
+                    ),
+                  ],
+                  if (note.isNotEmpty) ...[
+                    SizedBox(height: 4.h),
+                    Text(
+                      'Note: $note',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 11.5.sp, fontStyle: FontStyle.italic, color: subTextColor),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            SizedBox(width: 8.w),
+            Text(
+              'Details ›',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 12.sp,
+                color: theme.primaryColor,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildCurrentOrderCard(
     ThemeData theme,
     bool isDarkMode,
@@ -1109,6 +1198,8 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
               ],
             ),
           ),
+          SizedBox(height: 12.h),
+          _buildOrderSummaryStrip(theme, textColor, subTextColor, order),
           SizedBox(height: 12.h),
           _buildLocationSharingStatus(),
           SizedBox(height: 12.h),

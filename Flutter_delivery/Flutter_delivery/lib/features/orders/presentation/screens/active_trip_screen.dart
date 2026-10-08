@@ -15,6 +15,7 @@ import 'package:confetti/confetti.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:food_user_application/core/error/result.dart';
 import 'package:food_user_application/core/services/haptic_service.dart';
+import 'package:food_user_application/features/orders/presentation/widgets/restaurant_status_chip.dart';
 import 'package:food_user_application/core/services/location_service.dart';
 import 'package:food_user_application/core/utils/rider_marker.dart';
 import 'package:food_user_application/core/utils/map_launcher.dart';
@@ -959,6 +960,100 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
     );
   }
 
+  /// What the rider is carrying: order id, items, amount to take, customer and notes.
+  /// This screen used to show only the pickup or drop point, so the order itself
+  /// (items, COD amount, instructions) was not visible anywhere after accepting.
+  Widget _buildOrderDetailsBlock(
+    ThemeData theme,
+    bool isDarkMode,
+    Color textColor,
+    Color? subTextColor,
+    DeliveryOrder order,
+    bool showEarning,
+  ) {
+    final itemCount = order.items.fold<int>(0, (sum, i) => sum + i.quantity);
+    const maxLines = 4;
+    final shown = order.items.take(maxLines).toList();
+    final extra = order.items.length - shown.length;
+    final payment = order.isCashOnDelivery
+        ? 'Collect ₹${order.cashToCollect.toStringAsFixed(0)} (COD)'
+        : 'Paid online ₹${order.total.toStringAsFixed(0)}';
+    final note = (order.deliveryInstructions ?? '').trim().isNotEmpty
+        ? order.deliveryInstructions!.trim()
+        : (order.cookingNote ?? '').trim();
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(14.r),
+      decoration: BoxDecoration(
+        color: theme.primaryColor.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(16.r),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (order.isBeforePickup) ...[
+            Align(alignment: Alignment.centerLeft, child: RestaurantStatusChip(order: order)),
+            SizedBox(height: 10.h),
+          ],
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '#${order.orderCode}  •  $itemCount ${itemCount == 1 ? 'item' : 'items'}',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.sp, color: textColor),
+                ),
+              ),
+              Text(
+                payment,
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12.sp, color: theme.primaryColor),
+              ),
+            ],
+          ),
+          if (shown.isNotEmpty) SizedBox(height: 8.h),
+          for (final item in shown)
+            Padding(
+              padding: EdgeInsets.only(bottom: 3.h),
+              child: Text(
+                '${item.quantity} × ${item.name}${(item.variantName ?? '').isNotEmpty ? ' (${item.variantName})' : ''}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12.5.sp, color: subTextColor),
+              ),
+            ),
+          if (extra > 0)
+            Text(
+              '+ $extra more',
+              style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w700, color: theme.primaryColor),
+            ),
+          SizedBox(height: 8.h),
+          Text(
+            'Customer: ${order.customerName}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 12.5.sp, fontWeight: FontWeight.w600, color: textColor),
+          ),
+          if (note.isNotEmpty) ...[
+            SizedBox(height: 4.h),
+            Text(
+              'Note: $note',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12.sp, fontStyle: FontStyle.italic, color: subTextColor),
+            ),
+          ],
+          if (showEarning && order.riderEarning > 0) ...[
+            SizedBox(height: 4.h),
+            Text(
+              'Your earning ₹${order.riderEarning.toStringAsFixed(0)}',
+              style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w700, color: Colors.green[700]),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildBottomCard(
     ThemeData theme,
     bool isDarkMode,
@@ -995,7 +1090,12 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
             BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 30, offset: const Offset(0, -5)),
           ],
         ),
-        child: Column(
+        // Items, notes and a second order can make this taller than the screen:
+        // cap it and let it scroll rather than overflow or cover the whole map.
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.62),
+          child: SingleChildScrollView(
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Row(
@@ -1138,6 +1238,8 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
             SizedBox(height: 20.h),
             Divider(height: 1, color: isDarkMode ? Colors.white12 : Colors.grey[200]),
             SizedBox(height: 20.h),
+            _buildOrderDetailsBlock(theme, isDarkMode, textColor, subTextColor, order, showEarning),
+            SizedBox(height: 16.h),
             Row(
               children: [
                 Expanded(
@@ -1240,6 +1342,8 @@ class _ActiveTripScaffoldState extends ConsumerState<_ActiveTripScaffold> {
               ],
             ),
           ],
+        ),
+          ),
         ),
       ),
     );

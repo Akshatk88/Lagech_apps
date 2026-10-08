@@ -63,7 +63,11 @@ class _FoodDeliveryAppState extends ConsumerState<FoodDeliveryApp>
     });
 
     Future.microtask(() {
-      ref.read(fcmServiceProvider).initialize();
+      unawaited(
+        ref.read(fcmServiceProvider).initialize().catchError((Object e) {
+          debugPrint('[FCM] initialize failed: $e');
+        }),
+      );
       // Admin business settings (show earning, cancel permission, ...):
       // cached copy applies immediately, a failed fetch keeps it.
       unawaited(ref.read(businessSettingsControllerProvider.notifier).load());

@@ -490,7 +490,10 @@ class FcmService {
       await androidPlugin?.createNotificationChannel(_incomingOrdersChannelV3);
     }
 
-    await ensureAndroidAlertPermissions();
+    // Listeners and the cold-start tap are wired BEFORE any permission screen.
+    // The overlay permission opens system Settings and used to be awaited right
+    // here, so until the rider granted every permission nothing below ran: no
+    // foreground alert, no tap handling, no token refresh.
 
     // Cold start via the full-screen-intent notification (lock screen /
     // killed app) — onDidReceiveNotificationResponse above isn't guaranteed
@@ -512,6 +515,14 @@ class FcmService {
     if (initialMessage != null) _handleNotificationOpen(initialMessage);
 
     FirebaseMessaging.instance.onTokenRefresh.listen(_saveToken);
+
+    // Last, and never awaited: missing permissions must not hold back anything
+    // above. Notifications keep working whatever the rider declines.
+    unawaited(
+      ensureAndroidAlertPermissions().catchError((Object e) {
+        debugPrint('[FCM] alert permission check failed: $e');
+      }),
+    );
   }
 
   /// Re-checked on every cold start AND every app resume (see main.dart's
