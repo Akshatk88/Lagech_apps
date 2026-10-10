@@ -58,6 +58,28 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  Future<ApiResponse<AuthSession>> firebaseLogin({
+    required String idToken,
+    String? name,
+    String? referralCode,
+    String? fcmToken,
+  }) async {
+    return _guard(() async {
+      final session = await _remote.firebaseLogin(
+        idToken: idToken,
+        name: name,
+        referralCode: referralCode,
+        fcmToken: fcmToken,
+      );
+      await _tokens.save(
+        accessToken: session.accessToken,
+        refreshToken: session.refreshToken,
+      );
+      return ApiResponse.success(session, 'Login successful');
+    });
+  }
+
+  @override
   Future<ApiResponse<UserModel>> getProfile() =>
       _guard(() async => ApiResponse.success(await _remote.getProfile()));
 

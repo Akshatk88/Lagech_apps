@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/utils/validators.dart';
 import '../../../core/utils/haptics.dart';
+import '../../../di/settings_providers.dart';
+import '../../../platform/auth/firebase_phone_auth.dart';
 import '../../common_widgets/app_snackbar.dart';
 import '../../navigation/route_names.dart';
 import '../viewmodels/auth_viewmodel.dart';
@@ -145,6 +147,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
     try {
       // --------------------------------------------------------
+      // FIREBASE PHONE AUTH (default; the admin can switch to SMS)
+      // --------------------------------------------------------
+
+      if (ref.read(businessSettingsProvider).useFirebaseOtp) {
+        await _sendFirebaseCode(phone);
+        return;
+      }
+
+      // --------------------------------------------------------
       // REQUEST OTP
       // --------------------------------------------------------
 
@@ -228,6 +239,35 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         });
       }
     }
+  }
+
+  /// Firebase sends the 6-digit code. On Android the number may be verified
+  /// without the user typing anything; the OTP screen signs in either way.
+  Future<void> _sendFirebaseCode(String phone) async {
+    final verification = FirebasePhoneVerification(phone);
+    final result = await verification.send();
+
+    if (!mounted) return;
+
+    if (result.status == FirebaseCodeStatus.failed) {
+      _showError(result.message ?? 'Could not send OTP. Please try again.');
+      Haptics.error();
+      return;
+    }
+
+    Haptics.medium();
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => OtpScreen(
+          phoneNumber: phone,
+          name: null,
+          fromPath: _getRedirectTarget(),
+          firebase: verification,
+          autoCredential: result.credential,
+        ),
+      ),
+    );
   }
 
   // ============================================================

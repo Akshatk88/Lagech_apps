@@ -21,6 +21,7 @@ class BusinessSettings {
     this.vegNonVegToggle = true,
     this.newCustomerDiscount,
     this.tips = TipSettings.off,
+    this.otpProvider = 'firebase',
   });
 
   /// Defaults used until (or unless) the settings load.
@@ -76,6 +77,12 @@ class BusinessSettings {
   /// `tips` — rider tips at checkout. Off unless the server says so.
   final TipSettings tips;
 
+  /// `login.otpProvider` — `firebase` (Firebase Phone Authentication, the
+  /// default, also when the server does not say) or `sms` (our SMS OTP).
+  final String otpProvider;
+
+  bool get useFirebaseOtp => otpProvider != 'sms';
+
   /// The message to show while checkout is closed for maintenance.
   String get maintenanceText => maintenanceMessage.trim().isNotEmpty
       ? maintenanceMessage.trim()
@@ -115,6 +122,7 @@ class BusinessSettings {
       tips: json['tips'] is Map
           ? TipSettings.fromApi((json['tips'] as Map).cast<String, dynamic>())
           : TipSettings.off,
+      otpProvider: section('login')['otpProvider'] == 'sms' ? 'sms' : 'firebase',
     );
   }
 }

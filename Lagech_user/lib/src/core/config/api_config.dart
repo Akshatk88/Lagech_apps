@@ -44,6 +44,7 @@ class ApiPaths {
   // ---- Auth ----
   static const String requestOtp = '/food/auth/user/request-otp';
   static const String verifyOtp = '/food/auth/user/verify-otp';
+  static const String firebaseLogin = '/food/auth/user/firebase-login';
   static const String refreshToken = '/food/auth/refresh-token';
   static const String logout = '/food/auth/logout';
   static const String me = '/food/auth/me';

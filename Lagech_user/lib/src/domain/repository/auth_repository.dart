@@ -22,6 +22,15 @@ abstract class AuthRepository {
     String? fcmToken,
   });
 
+  /// Signs in with a Firebase phone-auth ID token, persists the token pair,
+  /// and returns the session (same as [verifyOtp]).
+  Future<ApiResponse<AuthSession>> firebaseLogin({
+    required String idToken,
+    String? name,
+    String? referralCode,
+    String? fcmToken,
+  });
+
   /// Current user for the stored token, or an error if there's no session.
   Future<ApiResponse<UserModel>> getProfile();
 

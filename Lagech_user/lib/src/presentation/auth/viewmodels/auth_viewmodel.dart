@@ -122,6 +122,54 @@ class AuthViewModel extends AsyncNotifier<UserModel?> {
     return null;
   }
 
+  /// Step 2 (Firebase phone auth) — exchange the Firebase ID token for our
+  /// session. Single-flight like [verifyOtp], so an auto-retrieved code and a
+  /// manual tap cannot both sign in.
+  Future<AuthSession?> firebaseLogin({
+    required String idToken,
+    String? name,
+    String? referralCode,
+    String? fcmToken,
+  }) {
+    final inFlight = _verifyInFlight;
+    if (inFlight != null) {
+      _authLog('Verify already in progress — reusing the in-flight request');
+      return inFlight;
+    }
+    final future = _doFirebaseLogin(
+      idToken: idToken,
+      name: name,
+      referralCode: referralCode,
+      fcmToken: fcmToken,
+    ).whenComplete(() => _verifyInFlight = null);
+    _verifyInFlight = future;
+    return future;
+  }
+
+  Future<AuthSession?> _doFirebaseLogin({
+    required String idToken,
+    String? name,
+    String? referralCode,
+    String? fcmToken,
+  }) async {
+    lastError = null;
+    _authLog('Signing in with Firebase phone verification...');
+    final result = await _repository.firebaseLogin(
+      idToken: idToken,
+      name: name,
+      referralCode: referralCode,
+      fcmToken: fcmToken,
+    );
+    if (result.isSuccess && result.data != null) {
+      _authLog('Firebase login successful');
+      state = AsyncValue.data(result.data!.user);
+      return result.data;
+    }
+    _authLog('Firebase login failed: ${result.message}');
+    lastError = result.message;
+    return null;
+  }
+
   /// Step 3 — profile completion / later edits. Optimistically keeps the
   /// current user on screen and updates Riverpod state.
   ///

@@ -52,6 +52,30 @@ class AuthRemoteDataSource {
     return AuthSession.fromJson(data);
   }
 
+  /// `POST /food/auth/user/firebase-login` — signs in with the Firebase ID
+  /// token from Firebase Phone Authentication. Same response as verify-otp.
+  Future<AuthSession> firebaseLogin({
+    required String idToken,
+    String? name,
+    String? referralCode,
+    String? fcmToken,
+  }) async {
+    final data = await _client.post<Map<String, dynamic>>(
+      ApiPaths.firebaseLogin,
+      body: {
+        'idToken': idToken,
+        if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
+        if (referralCode != null && referralCode.isNotEmpty) 'ref': referralCode,
+        if (fcmToken != null && fcmToken.isNotEmpty) ...{
+          'fcmToken': fcmToken,
+          'platform': 'mobile',
+        },
+      },
+      auth: false,
+    );
+    return AuthSession.fromJson(data);
+  }
+
   /// `GET /food/user/profile` → `{ user }`
   Future<UserModel> getProfile() async {
     final data = await _client.get<Map<String, dynamic>>(ApiPaths.profile);

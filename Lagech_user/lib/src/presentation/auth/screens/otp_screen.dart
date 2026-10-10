@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart'
+    show FirebaseAuthException, PhoneAuthCredential;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +9,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/utils/haptics.dart';
+import '../../../data/models/auth_session.dart';
+import '../../../platform/auth/firebase_phone_auth.dart';
 import '../../branding/app_colors.dart';
 import '../../common_widgets/app_snackbar.dart';
 import '../../navigation/route_names.dart';
@@ -24,12 +28,22 @@ class OtpScreen extends ConsumerStatefulWidget {
   final String? name;
   final String? fromPath;
 
+  /// Set when the code comes from Firebase Phone Authentication (6 digits):
+  /// Firebase checks the code and the app signs in with the Firebase ID
+  /// token. Null for our own SMS OTP (4 digits).
+  final FirebasePhoneVerification? firebase;
+
+  /// Android verified the number by itself before the screen opened.
+  final PhoneAuthCredential? autoCredential;
+
   const OtpScreen({
     super.key,
     required this.phoneNumber,
     this.devOtp,
     this.name,
     this.fromPath,
+    this.firebase,
+    this.autoCredential,
   });
 
   @override
@@ -41,12 +55,19 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
   // CONTROLLERS
   // ===========================================================================
 
-  final List<TextEditingController> _controllers = List.generate(
-    4,
+  /// Firebase codes are 6 digits; our SMS OTP is 4.
+  int get _otpLength =>
+      widget.firebase != null ? FirebasePhoneVerification.codeLength : 4;
+
+  late final List<TextEditingController> _controllers = List.generate(
+    _otpLength,
     (_) => TextEditingController(),
   );
 
-  final List<FocusNode> _focusNodes = List.generate(4, (_) => FocusNode());
+  late final List<FocusNode> _focusNodes = List.generate(
+    _otpLength,
+    (_) => FocusNode(),
+  );
 
   Timer? _timer;
 
@@ -72,11 +93,33 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     // DEV OTP AUTO FILL (only when backend sends it — never hardcode in prod)
     // -------------------------------------------------------------------------
 
-    final code = widget.devOtp;
+    final code = widget.firebase == null ? widget.devOtp : null;
 
-    if (code != null && code.length == 4) {
-      for (int i = 0; i < 4; i++) {
+    if (code != null && code.length == _otpLength) {
+      for (int i = 0; i < _otpLength; i++) {
         _controllers[i].text = code[i];
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // FIREBASE: auto-retrieved code (Android) and late failures
+    // -------------------------------------------------------------------------
+
+    final firebase = widget.firebase;
+    if (firebase != null) {
+      firebase.onAutoVerified = (credential) {
+        if (mounted) _signInWithFirebase(credential);
+      };
+      firebase.onFailed = (message) {
+        if (mounted && !_isVerifying) {
+          _showSnackBar(AppSnackbarType.error, message);
+        }
+      };
+      final auto = widget.autoCredential;
+      if (auto != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _signInWithFirebase(auto);
+        });
       }
     }
 
@@ -98,6 +141,9 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+
+    widget.firebase?.onAutoVerified = null;
+    widget.firebase?.onFailed = null;
 
     for (final controller in _controllers) {
       controller.dispose();
@@ -153,13 +199,13 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
       Haptics.light();
 
       // Move to next box
-      if (index < 3) {
+      if (index < _otpLength - 1) {
         _focusNodes[index + 1].requestFocus();
       } else {
         // Last box
         _focusNodes[index].unfocus();
 
-        if (_enteredOtp.length == 4 && !_isVerifying) {
+        if (_enteredOtp.length == _otpLength && !_isVerifying) {
           _verifyOtp();
         }
       }
@@ -184,9 +230,25 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
 
     final enteredOtp = _enteredOtp;
 
-    if (enteredOtp.length < 4) {
-      _showSnackBar(AppSnackbarType.warning, 'Please enter the 4-digit code');
+    if (enteredOtp.length < _otpLength) {
+      _showSnackBar(
+        AppSnackbarType.warning,
+        'Please enter the $_otpLength-digit code',
+      );
 
+      return;
+    }
+
+    final firebase = widget.firebase;
+    if (firebase != null) {
+      final PhoneAuthCredential credential;
+      try {
+        credential = firebase.credentialFor(enteredOtp);
+      } on FirebaseAuthException catch (e) {
+        _showSnackBar(AppSnackbarType.error, describeFirebaseAuthError(e));
+        return;
+      }
+      await _signInWithFirebase(credential);
       return;
     }
 
@@ -197,7 +259,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     Haptics.medium();
 
     if (kDebugMode) {
-      debugPrint('[AUTH] OTP entered: $enteredOtp');
+      debugPrint('[AUTH] OTP entered');
     }
 
     final notifier = ref.read(authViewModelProvider.notifier);
@@ -221,24 +283,91 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     // -------------------------------------------------------------------------
 
     if (session == null) {
-      _showSnackBar(
-        AppSnackbarType.error,
-        notifier.lastError ?? 'Invalid OTP. Please try again.',
-      );
-
-      Haptics.error();
-
-      for (final controller in _controllers) {
-        controller.clear();
-      }
-
-      setState(() {});
-
-      _focusNodes[0].requestFocus();
-
+      _onVerifyFailed(notifier.lastError ?? 'Invalid OTP. Please try again.');
       return;
     }
 
+    _completeLogin(session);
+  }
+
+  // ===========================================================================
+  // FIREBASE SIGN-IN
+  // ===========================================================================
+
+  /// Firebase checked the code (or Android verified the number by itself);
+  /// the Firebase ID token is exchanged for our session at
+  /// `/food/auth/user/firebase-login`, and the Firebase session is signed out
+  /// straight away — the app runs on our JWT.
+  Future<void> _signInWithFirebase(PhoneAuthCredential credential) async {
+    if (_isVerifying) return;
+
+    final smsCode = credential.smsCode;
+    if (smsCode != null && smsCode.length == _otpLength) {
+      for (int i = 0; i < _otpLength; i++) {
+        _controllers[i].text = smsCode[i];
+      }
+    }
+
+    setState(() {
+      _isVerifying = true;
+    });
+
+    Haptics.medium();
+
+    final String idToken;
+    try {
+      idToken = await FirebasePhoneVerification.idTokenFor(credential);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isVerifying = false;
+      });
+      _onVerifyFailed(describeFirebaseAuthError(e));
+      return;
+    }
+
+    if (!mounted) return;
+
+    final notifier = ref.read(authViewModelProvider.notifier);
+    final fcmToken = ref.read(pushServiceProvider).token;
+
+    final session = await notifier.firebaseLogin(
+      idToken: idToken,
+      name: widget.name,
+      fcmToken: fcmToken,
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      _isVerifying = false;
+    });
+
+    if (session == null) {
+      _onVerifyFailed(
+        notifier.lastError ?? 'Could not sign in. Please try again.',
+      );
+      return;
+    }
+
+    _completeLogin(session);
+  }
+
+  void _onVerifyFailed(String message) {
+    _showSnackBar(AppSnackbarType.error, message);
+
+    Haptics.error();
+
+    for (final controller in _controllers) {
+      controller.clear();
+    }
+
+    setState(() {});
+
+    _focusNodes[0].requestFocus();
+  }
+
+  void _completeLogin(AuthSession session) {
     // -------------------------------------------------------------------------
     // OTP SUCCESS
     // -------------------------------------------------------------------------
@@ -284,6 +413,28 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     if (_resendCountdown > 0) return;
 
     Haptics.light();
+
+    final firebase = widget.firebase;
+    if (firebase != null) {
+      final sent = await firebase.send(resend: true);
+      if (!mounted) return;
+      switch (sent.status) {
+        case FirebaseCodeStatus.failed:
+          _showSnackBar(
+            AppSnackbarType.error,
+            sent.message ?? 'Could not resend OTP.',
+          );
+        case FirebaseCodeStatus.autoVerified:
+          await _signInWithFirebase(sent.credential!);
+        case FirebaseCodeStatus.sent:
+          _startResendTimer();
+          _showSnackBar(
+            AppSnackbarType.success,
+            'New OTP code sent to +91 ${widget.phoneNumber}',
+          );
+      }
+      return;
+    }
 
     final result = await ref
         .read(authViewModelProvider.notifier)
@@ -510,7 +661,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                       // SUBTITLE
                       // =======================================================
                       Text(
-                        'Enter the 4-digit code sent to',
+                        'Enter the $_otpLength-digit code sent to',
                         textAlign: TextAlign.center,
 
                         style: TextStyle(
@@ -545,7 +696,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
 
-                        children: List.generate(4, (index) {
+                        children: List.generate(_otpLength, (index) {
                           return _buildOtpBox(index, isDark);
                         }),
                       ),
@@ -759,8 +910,9 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 150),
 
-      width: 52,
-      height: 52,
+      // Six boxes have to fit the same card as four.
+      width: _otpLength > 4 ? 40 : 52,
+      height: _otpLength > 4 ? 46 : 52,
 
       decoration: BoxDecoration(
         // ---------------------------------------------------------------------
@@ -796,7 +948,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
 
           keyboardType: TextInputType.number,
 
-          textInputAction: index == 3
+          textInputAction: index == _otpLength - 1
               ? TextInputAction.done
               : TextInputAction.next,
 
@@ -855,7 +1007,9 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
           // SUBMIT
           // ===================================================================
           onSubmitted: (_) {
-            if (index == 3 && _enteredOtp.length == 4 && !_isVerifying) {
+            if (index == _otpLength - 1 &&
+                _enteredOtp.length == _otpLength &&
+                !_isVerifying) {
               _verifyOtp();
             }
           },
