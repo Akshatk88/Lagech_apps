@@ -1,11 +1,14 @@
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart'
+    show FirebaseAuthException, PhoneAuthCredential;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:food_user_application/config/theme/app_colors.dart';
 import 'package:food_user_application/core/network/api_exception.dart';
+import 'package:food_user_application/core/services/firebase_phone_auth.dart';
 import 'package:food_user_application/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:food_user_application/features/auth/presentation/controllers/auth_state.dart';
 import 'package:food_user_application/features/business_settings/data/business_settings_repository.dart';
@@ -31,7 +34,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Timer? _resendTimer;
   int _resendSeconds = 45;
 
-  static const _otpLength = 4;
+  /// Set while the code comes from Firebase Phone Authentication.
+  FirebasePhoneVerification? _firebase;
+
+  /// Firebase codes are 6 digits; our SMS OTP is 4.
+  int get _otpLength =>
+      _firebase != null ? FirebasePhoneVerification.codeLength : 4;
 
   @override
   void initState() {
@@ -63,7 +71,26 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     _otpFocusNode.dispose();
     _otpController.dispose();
     _resendTimer?.cancel();
+    _detachFirebase();
     super.dispose();
+  }
+
+  void _detachFirebase() {
+    _firebase?.onAutoVerified = null;
+    _firebase?.onFailed = null;
+  }
+
+  /// `login.otpProvider` from the public Business Settings; Firebase unless
+  /// the admin chose SMS (also when the settings cannot be fetched).
+  Future<bool> _useFirebaseOtp() async {
+    try {
+      final settings = await ref
+          .read(restaurantBusinessSettingsProvider.future)
+          .timeout(const Duration(seconds: 5));
+      return settings.useFirebaseOtp;
+    } catch (_) {
+      return true;
+    }
   }
 
   String get _phone => _mobileController.text.trim();
@@ -79,10 +106,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _isSubmitting = true;
       _errorText = null;
     });
+    if (await _useFirebaseOtp()) {
+      await _sendFirebaseCode();
+      return;
+    }
+    if (!mounted) return;
     try {
       await ref.read(authControllerProvider.notifier).requestOtp(_phone);
       if (!mounted) return;
       setState(() {
+        _detachFirebase();
+        _firebase = null;
         _showOtp = true;
         _otpController.text = '1234';
       });
@@ -95,8 +129,97 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
+  /// Firebase sends a 6-digit code. On Android the number may be verified
+  /// without typing anything, which signs in straight away.
+  Future<void> _sendFirebaseCode() async {
+    if (!mounted) return;
+    _detachFirebase();
+    final verification = FirebasePhoneVerification(_phone);
+    final result = await verification.send();
+    if (!mounted) return;
+    if (result.status == FirebaseCodeStatus.failed) {
+      setState(() {
+        _isSubmitting = false;
+        _errorText = result.message;
+      });
+      return;
+    }
+    verification.onAutoVerified = (credential) {
+      if (mounted) _signInWithFirebase(credential);
+    };
+    verification.onFailed = (message) {
+      if (mounted && !_isSubmitting) setState(() => _errorText = message);
+    };
+    setState(() {
+      _firebase = verification;
+      _isSubmitting = false;
+      _showOtp = true;
+      _otpController.clear();
+    });
+    _startTimer();
+    final auto = result.credential;
+    if (auto != null) {
+      await _signInWithFirebase(auto);
+    } else {
+      _otpFocusNode.requestFocus();
+    }
+  }
+
+  /// Firebase checked the code (or Android verified the number by itself):
+  /// the Firebase ID token is exchanged for our session, and the Firebase
+  /// session is signed out straight away — the app runs on our JWT.
+  Future<void> _signInWithFirebase(PhoneAuthCredential credential) async {
+    if (_isSubmitting) return;
+    final smsCode = credential.smsCode;
+    setState(() {
+      _isSubmitting = true;
+      _errorText = null;
+      if (smsCode != null && smsCode.length == _otpLength) {
+        _otpController.text = smsCode;
+      }
+    });
+    try {
+      final idToken = await FirebasePhoneVerification.idTokenFor(credential);
+      await ref
+          .read(authControllerProvider.notifier)
+          .firebaseLogin(phone: _phone, idToken: idToken);
+      if (!mounted) return;
+      await _routeAfterAuth();
+    } on FirebaseAuthException catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorText = describeFirebaseAuthError(e);
+          _otpController.clear();
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _errorText = _messageFor(e));
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
   Future<void> _onResendPressed() async {
     if (_resendSeconds > 0 || _isSubmitting) return;
+    final firebase = _firebase;
+    if (firebase != null) {
+      setState(() {
+        _isSubmitting = true;
+        _errorText = null;
+      });
+      final result = await firebase.send(resend: true);
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+      switch (result.status) {
+        case FirebaseCodeStatus.failed:
+          setState(() => _errorText = result.message);
+        case FirebaseCodeStatus.autoVerified:
+          await _signInWithFirebase(result.credential!);
+        case FirebaseCodeStatus.sent:
+          _startTimer();
+      }
+      return;
+    }
     setState(() {
       _isSubmitting = true;
       _errorText = null;
@@ -112,7 +235,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   void _onBackPressed() {
+    _detachFirebase();
     setState(() {
+      _firebase = null;
       _showOtp = false;
       _errorText = null;
       _otpController.clear();
@@ -122,6 +247,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Future<void> _onVerifyPressed() async {
     if (_otpController.text.length != _otpLength) {
       setState(() => _errorText = 'Enter the $_otpLength-digit code');
+      return;
+    }
+    final firebase = _firebase;
+    if (firebase != null) {
+      final PhoneAuthCredential credential;
+      try {
+        credential = firebase.credentialFor(_otpController.text);
+      } on FirebaseAuthException catch (e) {
+        setState(() => _errorText = describeFirebaseAuthError(e));
+        return;
+      }
+      await _signInWithFirebase(credential);
       return;
     }
     setState(() {
@@ -511,8 +648,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 return GestureDetector(
                   onTap: () => _otpFocusNode.requestFocus(),
                   child: Container(
-                    width: 60,
-                    height: 60,
+                    // Six boxes have to fit the same row as four.
+                    width: _otpLength > 4 ? 46 : 60,
+                    height: _otpLength > 4 ? 52 : 60,
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12),

@@ -36,6 +36,25 @@ class AuthApi {
     return Map<String, dynamic>.from(response.data as Map);
   }
 
+  /// `POST /food/auth/restaurant/firebase-login` — the Firebase ID token from
+  /// Firebase Phone Authentication instead of our OTP. Same response as
+  /// verify-otp.
+  Future<Map<String, dynamic>> firebaseLogin({
+    required String idToken,
+    String? fcmToken,
+    String platform = 'mobile',
+  }) async {
+    final response = await _dio.post(
+      '/food/auth/restaurant/firebase-login',
+      data: {
+        'idToken': idToken,
+        if (fcmToken != null && fcmToken.isNotEmpty) 'fcmToken': fcmToken,
+        'platform': platform,
+      },
+    );
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
   Future<Map<String, dynamic>> getCurrentRestaurant() async {
     final response = await _dio.get('/food/restaurant/current');
     return Map<String, dynamic>.from(response.data as Map);

@@ -56,7 +56,27 @@ class AuthController extends Notifier<AuthState> {
     state = AuthOtpSent(phone);
   }
 
-  Future<void> verifyOtp({required String phone, required String otp}) async {
+  Future<void> verifyOtp({required String phone, required String otp}) =>
+      _login(
+        phone: phone,
+        call: (fcmToken) =>
+            _api.verifyOtp(phone: phone, otp: otp, fcmToken: fcmToken),
+      );
+
+  /// Firebase Phone Authentication: [idToken] is the Firebase ID token of the
+  /// verified number. Everything after the call is the same as [verifyOtp].
+  Future<void> firebaseLogin({
+    required String phone,
+    required String idToken,
+  }) => _login(
+    phone: phone,
+    call: (fcmToken) => _api.firebaseLogin(idToken: idToken, fcmToken: fcmToken),
+  );
+
+  Future<void> _login({
+    required String phone,
+    required Future<Map<String, dynamic>> Function(String? fcmToken) call,
+  }) async {
     String? fcmToken;
     try {
       fcmToken = await ref.read(fcmServiceProvider).currentToken();
@@ -66,7 +86,7 @@ class AuthController extends Notifier<AuthState> {
 
     Map<String, dynamic> result;
     try {
-      result = await _api.verifyOtp(phone: phone, otp: otp, fcmToken: fcmToken);
+      result = await call(fcmToken);
     } on DioException catch (e) {
       final message = e.error is ApiException
           ? (e.error as ApiException).message
@@ -84,7 +104,10 @@ class AuthController extends Notifier<AuthState> {
     }
 
     if (result['needsRegistration'] == true) {
-      state = AuthNeedsRegistration(phone);
+      final verifiedPhone = result['phone']?.toString();
+      state = AuthNeedsRegistration(
+        verifiedPhone != null && verifiedPhone.isNotEmpty ? verifiedPhone : phone,
+      );
       return;
     }
 

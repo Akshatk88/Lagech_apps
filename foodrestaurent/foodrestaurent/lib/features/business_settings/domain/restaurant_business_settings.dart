@@ -9,6 +9,7 @@ class RestaurantBusinessSettings {
     this.confirmedByDeliveryman = false,
     this.subscriptionModel = true,
     this.selfRegistration = true,
+    this.otpProvider = 'firebase',
   });
 
   /// Used until the settings load, and whenever they can't be fetched. Both
@@ -45,6 +46,10 @@ class RestaurantBusinessSettings {
           ? business['subscriptionModel'] as bool
           : fallback.subscriptionModel,
       selfRegistration: flag('selfRegistration', fallback.selfRegistration),
+      otpProvider: json['login'] is Map &&
+              (json['login'] as Map)['otpProvider'] == 'sms'
+          ? 'sms'
+          : 'firebase',
     );
   }
 
@@ -74,4 +79,10 @@ class RestaurantBusinessSettings {
 
   /// `restaurant.selfRegistration` — new restaurants may sign up from the app.
   final bool selfRegistration;
+
+  /// `login.otpProvider` — `firebase` (Firebase Phone Authentication, the
+  /// default, also when the server does not say) or `sms` (our SMS OTP).
+  final String otpProvider;
+
+  bool get useFirebaseOtp => otpProvider != 'sms';
 }
