@@ -1,4 +1,4 @@
-package com.lagech.vendor
+package com.lagech.restaurant
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -38,8 +38,8 @@ object NewOrderNotifier {
     private const val CONFIRMED_CHANNEL_ID = "order_confirmed_v1"
     private const val CONFIRMED_CHANNEL_NAME = "Confirmed orders"
 
-    const val ACTION_ACCEPT = "com.lagech.vendor.NEW_ORDER_ACCEPT"
-    const val ACTION_REJECT = "com.lagech.vendor.NEW_ORDER_REJECT"
+    const val ACTION_ACCEPT = "com.lagech.restaurant.NEW_ORDER_ACCEPT"
+    const val ACTION_REJECT = "com.lagech.restaurant.NEW_ORDER_REJECT"
     const val EXTRA_ORDER_ID = "orderId"
 
     /** Maps all aliases (MongoId, readable orderNumber, displayId) to the canonical order ID */

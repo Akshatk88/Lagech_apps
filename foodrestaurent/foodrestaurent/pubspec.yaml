@@ -2,7 +2,7 @@ name: food_user_application
 description: "A new Flutter project."
 publish_to: 'none'
 
-version: 3.2.2+7
+version: 1.1.1+1
 
 environment:
   sdk: ^3.11.4

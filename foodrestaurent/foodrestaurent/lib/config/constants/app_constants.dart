@@ -53,6 +53,6 @@ class AppConstants {
 
   static const String stripPublishKey = '';
 
-  static String packageName = 'com.lagech.vendor';
+  static String packageName = 'com.lagech.restaurant';
   static String signKey = '';
 }

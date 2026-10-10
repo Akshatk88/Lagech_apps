@@ -1,4 +1,4 @@
-package com.lagech.vendor
+package com.lagech.restaurant
 
 import android.content.Intent
 import android.util.Log

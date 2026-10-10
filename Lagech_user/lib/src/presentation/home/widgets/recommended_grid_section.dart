@@ -92,7 +92,7 @@ class _RecommendedGridSectionState extends State<RecommendedGridSection> {
 
           // Horizontal Slidable Pages of 6 Cards (2 rows x 3 columns)
           SizedBox(
-            height: 290.h,
+            height: 302.h,
             child: PageView.builder(
               controller: _pageController,
               physics: const BouncingScrollPhysics(),

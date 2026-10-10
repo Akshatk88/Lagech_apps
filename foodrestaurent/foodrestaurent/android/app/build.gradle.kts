@@ -20,7 +20,7 @@ plugins {
 }
 
 android {
-    namespace = "com.lagech.vendor"
+    namespace = "com.lagech.restaurant"
     compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
@@ -35,7 +35,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.lagech.vendor"
+        applicationId = "com.lagech.restaurant"
 
         minSdk = if (flutter.minSdkVersion < 21) {
             21

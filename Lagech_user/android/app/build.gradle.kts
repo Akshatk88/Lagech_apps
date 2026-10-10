@@ -10,6 +10,7 @@ if (keystorePropertiesFile.exists()) {
 
 plugins {
     id("com.android.application")
+    id("org.jetbrains.kotlin.android")
     id("dev.flutter.flutter-gradle-plugin")
     id("com.google.gms.google-services")
 }
@@ -42,22 +43,22 @@ android {
         isCoreLibraryDesugaringEnabled = true
     }
 
-    kotlin {
-        compilerOptions {
-            jvmTarget.set(
-                org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
-            )
-        }
-    }
-
     signingConfigs {
         if (keystorePropertiesFile.exists()) {
             create("release") {
                 keyAlias = keystoreProperties["keyAlias"] as String?
                 keyPassword = keystoreProperties["keyPassword"] as String?
 
-                storeFile = keystoreProperties["storeFile"]?.let {
-                    rootProject.file(it)
+                storeFile = keystoreProperties.getProperty("storeFile")?.let { path ->
+                    val f1 = file(path)
+                    val f2 = rootProject.file(path)
+                    val f3 = file(path.removePrefix("app/"))
+                    when {
+                        f1.exists() -> f1
+                        f2.exists() -> f2
+                        f3.exists() -> f3
+                        else -> f2
+                    }
                 }
 
                 storePassword = keystoreProperties["storePassword"] as String?

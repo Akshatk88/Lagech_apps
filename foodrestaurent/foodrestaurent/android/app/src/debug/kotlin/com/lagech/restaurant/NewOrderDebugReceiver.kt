@@ -1,4 +1,4 @@
-package com.lagech.vendor
+package com.lagech.restaurant
 
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -18,9 +18,9 @@ import android.content.Intent
  * to test them deterministically: hunting for the buttons in the notification shade
  * depends on whether the heads-up is still expanded, which it usually is not.
  *
- *   adb shell am broadcast -n com.lagech.vendor/.NewOrderDebugReceiver \
+ *   adb shell am broadcast -n com.lagech.restaurant/.NewOrderDebugReceiver \
  *       -e orderId TEST1 -e total 349
- *   adb shell am broadcast -n com.lagech.vendor/.NewOrderDebugReceiver \
+ *   adb shell am broadcast -n com.lagech.restaurant/.NewOrderDebugReceiver \
  *       -e orderId TEST1 -e do accept
  */
 class NewOrderDebugReceiver : BroadcastReceiver() {

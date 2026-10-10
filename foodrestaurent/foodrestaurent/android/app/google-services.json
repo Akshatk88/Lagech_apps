@@ -74,6 +74,35 @@
     },
     {
       "client_info": {
+        "mobilesdk_app_id": "1:853137767775:android:b03f507fa6f8bd4499caea",
+        "android_client_info": {
+          "package_name": "com.lagech.restaurant"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "853137767775-qrrm0l52obt842li3n3rr9cpr6khcvb4.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC4U6VCFm5e6QBfapSOmShoEg7lMGAfsak"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "853137767775-qrrm0l52obt842li3n3rr9cpr6khcvb4.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:853137767775:android:f6bb83f241cf619d99caea",
         "android_client_info": {
           "package_name": "com.lagech.vendor"
