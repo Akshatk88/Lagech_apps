@@ -25,6 +25,7 @@ class AuthInterceptor extends Interceptor {
   static const _noAuthPaths = <String>[
     ApiEndpoints.requestOtp,
     ApiEndpoints.verifyOtp,
+    ApiEndpoints.firebaseLogin,
     ApiEndpoints.refreshToken,
     ApiEndpoints.register,
   ];

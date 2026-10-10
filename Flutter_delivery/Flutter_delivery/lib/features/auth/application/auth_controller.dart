@@ -10,6 +10,7 @@ import '../../../core/services/socket_service.dart';
 import '../../../core/storage/token_storage.dart';
 import '../../settings/application/business_settings_controller.dart';
 import '../data/auth_repository.dart';
+import '../data/models/auth_verify_result.dart';
 import '../data/models/delivery_partner.dart';
 import 'auth_state.dart';
 
@@ -85,6 +86,28 @@ class AuthController extends Notifier<AuthState> {
       otp: otp,
       fcmToken: fcmToken,
     );
+    return _applyVerifyResult(phone, result);
+  }
+
+  /// Firebase Phone Authentication: [idToken] is the Firebase ID token of the
+  /// verified number. The response and everything after it are the same as
+  /// [verifyOtp].
+  Future<AuthState> firebaseLogin({
+    required String phone,
+    required String idToken,
+  }) async {
+    final fcmToken = await _tokenStorage.getFcmToken();
+    final result = await _repository.firebaseLogin(
+      idToken: idToken,
+      fcmToken: fcmToken,
+    );
+    return _applyVerifyResult(phone, result);
+  }
+
+  Future<AuthState> _applyVerifyResult(
+    String phone,
+    Result<AuthVerifyResult, AppError> result,
+  ) async {
     // A new number goes to the sign-up form only while riders may sign up
     // themselves. Settings are refreshed first; if that fails the last known
     // value (or the default: open) applies, as before.

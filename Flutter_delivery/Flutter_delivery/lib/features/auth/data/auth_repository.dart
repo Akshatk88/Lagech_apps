@@ -57,6 +57,36 @@ class AuthRepository {
     }
   }
 
+  /// `POST /food/auth/delivery/firebase-login` — the Firebase ID token from
+  /// Firebase Phone Authentication instead of our OTP. Same response as
+  /// verify-otp.
+  Future<Result<AuthVerifyResult, AppError>> firebaseLogin({
+    required String idToken,
+    String? fcmToken,
+  }) async {
+    try {
+      final res = await _dio.post(
+        ApiEndpoints.firebaseLogin,
+        data: {
+          'idToken': idToken,
+          if (fcmToken != null && fcmToken.isNotEmpty) 'fcmToken': fcmToken,
+          'platform': 'mobile',
+        },
+      );
+      final data = res.data['data'] as Map<String, dynamic>;
+      final result = AuthVerifyResult.fromJson(data);
+      if (result.isLoggedIn) {
+        await _tokenStorage.saveTokens(
+          accessToken: result.accessToken!,
+          refreshToken: result.refreshToken!,
+        );
+      }
+      return Result.success(result);
+    } on DioException catch (e) {
+      return Result.failure(_mapError(e));
+    }
+  }
+
   Future<Result<DeliveryPartner, AppError>> getMe() async {
     try {
       final res = await _dio.get(ApiEndpoints.me);

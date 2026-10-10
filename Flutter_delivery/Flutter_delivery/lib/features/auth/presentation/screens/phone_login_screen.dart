@@ -4,8 +4,11 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/error/result.dart';
+import '../../../../core/services/firebase_phone_auth.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../settings/application/business_settings_controller.dart';
 import '../../application/auth_controller.dart';
+import 'otp_verify_screen.dart';
 import '../widgets/auth_widgets.dart';
 
 class PhoneLoginScreen extends ConsumerStatefulWidget {
@@ -35,6 +38,13 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
     });
 
     final phone = _phoneController.text.trim();
+
+    if (await _useFirebaseOtp()) {
+      await _sendFirebaseCode(phone);
+      return;
+    }
+    if (!mounted) return;
+
     final result = await ref
         .read(authControllerProvider.notifier)
         .requestOtp(phone);
@@ -45,6 +55,40 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
     result.when(
       success: (_) => context.push('/otp-verify', extra: phone),
       failure: (error) => setState(() => _errorText = error.message),
+    );
+  }
+
+  /// `login.otpProvider` from the public Business Settings (refreshed here,
+  /// falling back to the last known value): Firebase unless the admin chose
+  /// SMS.
+  Future<bool> _useFirebaseOtp() async {
+    try {
+      await ref
+          .read(businessSettingsControllerProvider.notifier)
+          .load()
+          .timeout(const Duration(seconds: 5));
+    } catch (_) {}
+    return ref.read(businessSettingsControllerProvider).useFirebaseOtp;
+  }
+
+  /// Firebase sends a 6-digit code. On Android the number may be verified
+  /// without typing anything; the OTP screen signs in either way.
+  Future<void> _sendFirebaseCode(String phone) async {
+    final verification = FirebasePhoneVerification(phone);
+    final result = await verification.send();
+    if (!mounted) return;
+    setState(() => _isSubmitting = false);
+    if (result.status == FirebaseCodeStatus.failed) {
+      setState(() => _errorText = result.message);
+      return;
+    }
+    context.push(
+      '/otp-verify',
+      extra: FirebaseOtpArgs(
+        phone: phone,
+        verification: verification,
+        autoCredential: result.credential,
+      ),
     );
   }
 

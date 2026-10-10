@@ -79,8 +79,17 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/otp-verify',
-        builder: (context, state) =>
-            OtpVerifyScreen(phone: state.extra as String? ?? ''),
+        builder: (context, state) {
+          final extra = state.extra;
+          if (extra is FirebaseOtpArgs) {
+            return OtpVerifyScreen(
+              phone: extra.phone,
+              firebase: extra.verification,
+              autoCredential: extra.autoCredential,
+            );
+          }
+          return OtpVerifyScreen(phone: extra as String? ?? '');
+        },
       ),
       GoRoute(
         path: '/register',

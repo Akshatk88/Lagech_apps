@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart'
+    show FirebaseAuthException, PhoneAuthCredential;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,25 +9,55 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/error/result.dart';
+import '../../../../core/services/firebase_phone_auth.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../application/auth_controller.dart';
 import '../../application/auth_state.dart';
 import '../widgets/auth_widgets.dart';
 
-class OtpVerifyScreen extends ConsumerStatefulWidget {
-  const OtpVerifyScreen({super.key, required this.phone});
+/// What the phone login screen hands to `/otp-verify` when the code comes
+/// from Firebase Phone Authentication.
+class FirebaseOtpArgs {
+  const FirebaseOtpArgs({
+    required this.phone,
+    required this.verification,
+    this.autoCredential,
+  });
 
   final String phone;
+  final FirebasePhoneVerification verification;
+
+  /// Android verified the number by itself before the screen opened.
+  final PhoneAuthCredential? autoCredential;
+}
+
+class OtpVerifyScreen extends ConsumerStatefulWidget {
+  const OtpVerifyScreen({
+    super.key,
+    required this.phone,
+    this.firebase,
+    this.autoCredential,
+  });
+
+  final String phone;
+
+  /// Set when Firebase sent the (6-digit) code; null for our SMS OTP.
+  final FirebasePhoneVerification? firebase;
+  final PhoneAuthCredential? autoCredential;
 
   @override
   ConsumerState<OtpVerifyScreen> createState() => _OtpVerifyScreenState();
 }
 
 class _OtpVerifyScreenState extends ConsumerState<OtpVerifyScreen> {
-  static const _otpLength = 4;
+  /// Firebase codes are 6 digits; our SMS OTP is 4.
+  int get _otpLength =>
+      widget.firebase != null ? FirebasePhoneVerification.codeLength : 4;
   late final List<TextEditingController> _controllers = List.generate(
     _otpLength,
-    (index) => TextEditingController(text: '${index + 1}'),
+    (index) => TextEditingController(
+      text: widget.firebase != null ? '' : '${index + 1}',
+    ),
   );
   late final List<FocusNode> _focusNodes = List.generate(
     _otpLength,
@@ -42,12 +74,28 @@ class _OtpVerifyScreenState extends ConsumerState<OtpVerifyScreen> {
   void initState() {
     super.initState();
     _startResendTimer();
+    final firebase = widget.firebase;
+    if (firebase != null) {
+      firebase.onAutoVerified = (credential) {
+        if (mounted) _signInWithFirebase(credential);
+      };
+      firebase.onFailed = (message) {
+        if (mounted && !_isSubmitting) setState(() => _errorText = message);
+      };
+      final auto = widget.autoCredential;
+      if (auto != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _signInWithFirebase(auto);
+        });
+      }
+    }
   }
 
   @override
   void dispose() {
     _timer?.cancel();
-    _timer?.cancel();
+    widget.firebase?.onAutoVerified = null;
+    widget.firebase?.onFailed = null;
     for (final c in _controllers) {
       c.dispose();
     }
@@ -77,6 +125,21 @@ class _OtpVerifyScreenState extends ConsumerState<OtpVerifyScreen> {
       _isResending = true;
       _errorText = null;
     });
+    final firebase = widget.firebase;
+    if (firebase != null) {
+      final sent = await firebase.send(resend: true);
+      if (!mounted) return;
+      setState(() => _isResending = false);
+      switch (sent.status) {
+        case FirebaseCodeStatus.failed:
+          setState(() => _errorText = sent.message);
+        case FirebaseCodeStatus.autoVerified:
+          await _signInWithFirebase(sent.credential!);
+        case FirebaseCodeStatus.sent:
+          _startResendTimer();
+      }
+      return;
+    }
     final result = await ref
         .read(authControllerProvider.notifier)
         .requestOtp(widget.phone);
@@ -93,6 +156,18 @@ class _OtpVerifyScreenState extends ConsumerState<OtpVerifyScreen> {
       setState(() => _errorText = 'Enter the complete OTP');
       return;
     }
+    final firebase = widget.firebase;
+    if (firebase != null) {
+      final PhoneAuthCredential credential;
+      try {
+        credential = firebase.credentialFor(_otp);
+      } on FirebaseAuthException catch (e) {
+        setState(() => _errorText = describeFirebaseAuthError(e));
+        return;
+      }
+      await _signInWithFirebase(credential);
+      return;
+    }
     setState(() {
       _isSubmitting = true;
       _errorText = null;
@@ -104,7 +179,50 @@ class _OtpVerifyScreenState extends ConsumerState<OtpVerifyScreen> {
 
     if (!mounted) return;
     setState(() => _isSubmitting = false);
+    _routeFor(result);
+  }
 
+  /// Firebase checked the code (or Android verified the number by itself):
+  /// the Firebase ID token is exchanged for our session, and the Firebase
+  /// session is signed out straight away — the app runs on our JWT.
+  Future<void> _signInWithFirebase(PhoneAuthCredential credential) async {
+    if (_isSubmitting) return;
+    final smsCode = credential.smsCode;
+    setState(() {
+      _isSubmitting = true;
+      _errorText = null;
+      if (smsCode != null && smsCode.length == _otpLength) {
+        for (var i = 0; i < _otpLength; i++) {
+          _controllers[i].text = smsCode[i];
+        }
+      }
+    });
+
+    final String idToken;
+    try {
+      idToken = await FirebasePhoneVerification.idTokenFor(credential);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _errorText = describeFirebaseAuthError(e);
+        for (final c in _controllers) {
+          c.clear();
+        }
+      });
+      return;
+    }
+
+    final result = await ref
+        .read(authControllerProvider.notifier)
+        .firebaseLogin(phone: widget.phone, idToken: idToken);
+
+    if (!mounted) return;
+    setState(() => _isSubmitting = false);
+    _routeFor(result);
+  }
+
+  void _routeFor(AuthState result) {
     if (result is AuthFailure) {
       setState(() => _errorText = result.message);
     } else if (result is AuthAuthenticated) {
@@ -180,10 +298,14 @@ class _OtpVerifyScreenState extends ConsumerState<OtpVerifyScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: List.generate(_otpLength, (index) {
+                  // Six boxes have to fit the same row as four.
+                  final compact = _otpLength > 4;
                   return Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 8.w),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: compact ? 4.w : 8.w,
+                    ),
                     child: SizedBox(
-                      width: 56.w,
+                      width: compact ? 42.w : 56.w,
                       height: 64.h,
                       child: TextField(
                         controller: _controllers[index],
