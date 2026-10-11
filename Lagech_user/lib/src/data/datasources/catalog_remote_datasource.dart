@@ -88,6 +88,10 @@ class CatalogRemoteDataSource {
   /// Filtered to the customer's zone like the other listings (zoneId, else
   /// lat/lng). A point outside every zone answers `outOfService: true` with no
   /// banners, which this returns as an empty list.
+  ///
+  /// Two admin sections feed this carousel: "Home promotion" banners (what
+  /// admins upload today) come first, then the hero banners. Reading only the
+  /// hero list left every new upload invisible in the app.
   Future<List<PromoBannerModel>> getPromoBanners({
     String? zoneId,
     double? lat,
@@ -100,11 +104,47 @@ class CatalogRemoteDataSource {
       cacheTtl: _cacheTtl,
     );
     if (data['outOfService'] == true) return const [];
-    return ((data['banners'] as List?) ?? const [])
-        .whereType<Map>()
+    final heroRaw = ((data['banners'] as List?) ?? const []).whereType<Map>();
+
+    // The hero endpoint resolves lat/lng to a zone; its banners carry it.
+    final zone = zoneId ??
+        heroRaw.map((b) => b['zoneId']?.toString()).firstWhere(
+              (z) => z != null && z.isNotEmpty,
+              orElse: () => null,
+            );
+
+    final promo = await _getHomePromotionBanners(zone);
+    final hero = heroRaw
         .map((b) => PromoBannerModel.fromApi(b.cast<String, dynamic>()))
-        .where((b) => b.imageUrl.isNotEmpty)
-        .toList();
+        .where((b) => b.imageUrl.isNotEmpty);
+    return [...promo, ...hero];
+  }
+
+  /// `GET /food/hero-banners/home-promotion/public` → `{ banners }`.
+  ///
+  /// Fetched without `zoneId` and filtered here: the backend's zone filter is
+  /// an exact match, so it drops banners the admin left on "all zones"
+  /// (`zoneId: null`). A failure yields no promo banners rather than hiding
+  /// the hero ones too.
+  Future<List<PromoBannerModel>> _getHomePromotionBanners(String? zone) async {
+    try {
+      final data = await _client.get<Map<String, dynamic>>(
+        ApiPaths.promoBanners,
+        auth: false,
+        cacheTtl: _cacheTtl,
+      );
+      return ((data['banners'] as List?) ?? const [])
+          .whereType<Map>()
+          .where((b) {
+            final z = b['zoneId']?.toString() ?? '';
+            return z.isEmpty || z == zone;
+          })
+          .map((b) => PromoBannerModel.fromApi(b.cast<String, dynamic>()))
+          .where((b) => b.imageUrl.isNotEmpty)
+          .toList();
+    } catch (_) {
+      return const [];
+    }
   }
 
   /// Campaigns running now (`{ basic, food }`), flattened.
