@@ -108,6 +108,10 @@ class _HomeHeaderBannerState extends ConsumerState<HomeHeaderBanner> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final promoAsync = ref.watch(promoBannersProvider);
     final banners = promoAsync.asData?.value ?? const [];
+    // Loaded, and the admin has no banner switched on: a plain red header with
+    // no artwork and no empty banner gap. The built-in picture is only a
+    // placeholder while loading or if the request fails.
+    final noBanners = promoAsync.hasValue && banners.isEmpty;
 
     _syncTimer(banners.length);
 
@@ -121,7 +125,9 @@ class _HomeHeaderBannerState extends ConsumerState<HomeHeaderBanner> {
         children: [
           // 1. Dynamic Full-bleed Background Banner Carousel extending all the way to the top
           Positioned.fill(
-            child: banners.isEmpty
+            child: noBanners
+                ? const SizedBox.shrink()
+                : banners.isEmpty
                 ? _buildFallbackBanner(context, isDark)
                 : NotificationListener<ScrollNotification>(
                     onNotification: (n) {
@@ -192,7 +198,7 @@ class _HomeHeaderBannerState extends ConsumerState<HomeHeaderBanner> {
                 // Wrapped in IgnorePointer so any tap/drag in this space passes directly
                 // through to the banner PageView & GestureDetector underneath!
                 IgnorePointer(
-                  child: SizedBox(height: 168.h),
+                  child: SizedBox(height: noBanners ? 12.h : 168.h),
                 ),
 
                 // Overlaid indicator dots at the bottom of the banner
