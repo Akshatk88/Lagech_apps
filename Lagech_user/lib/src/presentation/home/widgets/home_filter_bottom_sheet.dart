@@ -182,7 +182,8 @@ class RestaurantFilterCriteria {
         break;
     }
 
-    return list;
+    // Whatever the sort, closed restaurants go last.
+    return list.openFirst();
   }
 
   static int _parseMinutes(String text) {

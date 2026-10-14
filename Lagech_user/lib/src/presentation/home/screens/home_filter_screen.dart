@@ -131,6 +131,8 @@ class HomeFilterScreen extends ConsumerWidget {
                 matched = matched.take(10).toList();
               }
             }
+            // Closed restaurants go last, after the rating order above.
+            matched = matched.openFirst();
 
             if (matched.isEmpty) {
               return _buildEmptyState(

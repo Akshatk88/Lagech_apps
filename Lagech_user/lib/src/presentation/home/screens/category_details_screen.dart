@@ -437,7 +437,7 @@ class _CategoryDetailsScreenState extends ConsumerState<CategoryDetailsScreen> {
       final placed = apiRestaurants.where((r) => r.displayPosition != null).toList()
         ..sort((a, b) => a.displayPosition!.compareTo(b.displayPosition!));
       final rest = apiRestaurants.where((r) => r.displayPosition == null).toList();
-      return [...placed, ..._buildCategoryRecommendedList(rest)];
+      return [...placed, ..._buildCategoryRecommendedList(rest)].openFirst();
     }
 
     // 1. Explicitly identify restaurants to push to the back ("hotel galaxy", "nandish bakers")
@@ -494,7 +494,8 @@ class _CategoryDetailsScreenState extends ConsumerState<CategoryDetailsScreen> {
       });
     }
 
-    return [...priorityFront, ...sortedOthers, ...pushToBack];
+    // Whatever the order above, closed restaurants go last.
+    return [...priorityFront, ...sortedOthers, ...pushToBack].openFirst();
   }
 
   @override
@@ -593,6 +594,8 @@ class _CategoryDetailsScreenState extends ConsumerState<CategoryDetailsScreen> {
                               }
                               if (deliveringList.isEmpty) deliveringList = recommendedList;
                             }
+                            // A suggestion may re-sort (by rating); closed ones still go last.
+                            deliveringList = deliveringList.openFirst();
 
                             return Column(
                               crossAxisAlignment: CrossAxisAlignment.start,

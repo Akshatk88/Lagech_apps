@@ -66,7 +66,8 @@ class Top10Screen extends ConsumerWidget {
                     });
 
                     // Limit to Top 10
-                    final top10List = sorted.take(10).toList();
+                    // The ten best rated, with any closed ones at the bottom.
+                    final top10List = sorted.take(10).toList().openFirst();
 
                     if (top10List.isEmpty) {
                       return SliverToBoxAdapter(

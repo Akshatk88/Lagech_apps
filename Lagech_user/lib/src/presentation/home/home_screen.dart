@@ -456,7 +456,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 if (displayList.isEmpty) return const SizedBox.shrink();
 
                                 final reorderedRecommended = useAdminPicked
-                                    ? displayList
+                                    ? displayList.openFirst()
                                     : _reorderRecommendedList(displayList);
 
                                 return Column(
@@ -485,7 +485,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             if (homeState.featuredRestaurants.isNotEmpty) ...[
                               RecommendedGridSection(
                                 key: ValueKey('featured-${homeState.featuredRestaurants.length}'),
-                                restaurants: homeState.featuredRestaurants,
+                                restaurants: homeState.featuredRestaurants.openFirst(),
                                 title: 'FEATURED RESTAURANTS',
                                 onRestaurantTap: (rest) {
                                   context.push(RouteNames.restaurantDetail, extra: rest);
@@ -759,7 +759,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       final placed = restaurants.where((r) => r.displayPosition != null).toList()
         ..sort((a, b) => a.displayPosition!.compareTo(b.displayPosition!));
       final rest = restaurants.where((r) => r.displayPosition == null).toList();
-      return [...placed, ..._reorderRecommendedList(rest)];
+      return [...placed, ..._reorderRecommendedList(rest)].openFirst();
     }
 
     // 1. Explicitly identify restaurants to push to the back ("hotel galaxy", "nandish bakers")
@@ -816,7 +816,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       });
     }
 
-    return [...priorityFront, ...sortedOthers, ...pushToBack];
+    // Whatever the order above, closed restaurants go last.
+    return [...priorityFront, ...sortedOthers, ...pushToBack].openFirst();
   }
 
   List<RestaurantModel> _filterRestaurants(
