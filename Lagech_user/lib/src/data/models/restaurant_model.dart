@@ -778,3 +778,15 @@ class RestaurantModel {
     return (n != null && n > 0) ? n : null;
   }
 }
+
+extension RestaurantListOrdering on List<RestaurantModel> {
+  /// Open restaurants first, closed ones after, each group in its current
+  /// order — closed stores sink to the bottom, as in the old 6amMart app. The
+  /// backend already sends lists this way; this keeps it so after a screen
+  /// re-sorts on its own. A partition, not `sort`, because Dart's sort is not
+  /// stable.
+  List<RestaurantModel> openFirst() => [
+        ...where((r) => r.isOpen),
+        ...where((r) => !r.isOpen),
+      ];
+}
